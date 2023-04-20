@@ -60,7 +60,7 @@ bool CvAssertDlg(const char* expr, const char* szFile, unsigned int uiLine, bool
 
 #ifdef CVASSERT_ENABLE 
 
-#define CvAssertMsg(expr, msg) CvAssertMsg(expr, msg, __FILE__, __LINE__)
+#define CvAssertMsg(expr, msg, szFile, uiLine)                                                             \
 {                                                                                           \
     static bool bIgnoreAlways = false;                                                      \
     if (!bIgnoreAlways && !(expr))                                                          \
@@ -76,7 +76,7 @@ bool CvAssertDlg(const char* expr, const char* szFile, unsigned int uiLine, bool
     }                                                                                       \
 }
 
-#define CvAssertFmt(expr, fmt, ...) CvAssertFmt(expr, fmt, __FILE__, __LINE__, __VA_ARGS__)
+#define CvAssertFmt(expr, fmt, szFile, uiLine, ...)                                                         \
 {                                                                                           \
     static bool bIgnoreAlways = false;                                                      \
     if (!bIgnoreAlways && !(expr))                                                          \
@@ -94,7 +94,7 @@ bool CvAssertDlg(const char* expr, const char* szFile, unsigned int uiLine, bool
     }                                                                                       \
 }
 
-#define CvAssert(expr) CvAssertMsg(expr, "", __FILE__, __LINE__)
+#define CvAssert(expr, szFile, uiLine) CvAssertMsg(expr, "", szFile, uiLine)
 
 // An assert that only happens in the when CVASSERT_ENABLE is true AND it is a debug build
 #ifdef _DEBUG
