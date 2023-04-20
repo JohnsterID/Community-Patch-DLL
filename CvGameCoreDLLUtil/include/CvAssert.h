@@ -12,9 +12,36 @@
 #ifndef _CVASSERT_H
 #define _CVASSERT_H
 #pragma once
+
+#include <string>
 #include <set>
 
-bool CvAssertDlg(const char* expr, const char* szFile, unsigned int uiLine, bool& bIgnoreAlways, const char* msg);
+#ifndef _WIN32
+#include <cstdio>
+#endif
+
+bool CvAssertDlg(const char* expr, const char* szFile, unsigned int uiLine, bool& bIgnoreAlways, const char* msg) {
+#ifdef _WIN32
+    int nRet = MessageBoxA(NULL, msg, "Assertion Failed", MB_ICONERROR | MB_ABORTRETRYIGNORE | MB_SETFOREGROUND);
+#else
+    printf("%s\n%s\n%s\n", msg, "Abort (A)", "Ignore (I)");
+    char response[16];
+    fgets(response, 16, stdin);
+    int nRet = (response[0] == 'a' || response[0] == 'A') ? 1 : 2;
+#endif
+
+    switch (nRet) {
+    case 1:
+        return true;
+    case 2:
+        return false;
+    case 3:
+        bIgnoreAlways = true;
+        return false;
+    default:
+        return false;
+    }
+}
 
 // Set breakpoint creation macros
 #if defined (_WIN32)
@@ -27,36 +54,47 @@ bool CvAssertDlg(const char* expr, const char* szFile, unsigned int uiLine, bool
 // _DEBUG.  Sometimes, however, it's useful to enable asserts in release builds, and you can do that
 // simply by changing the following lines to define CVASSERT_ENABLE or using project settings to override
 #if !defined(FINAL_RELEASE) || defined(VPDEBUG)
-#define		CVASSERT_ENABLE
-#endif	// FINAL_RELEASE
+#define  CVASSERT_ENABLE
+#endif  // FINAL_RELEASE
 
 
 #ifdef CVASSERT_ENABLE 
 
-#define CvAssertMsg(expr, msg)																\
-{																							\
-	static bool bIgnoreAlways = false;														\
-	if( !bIgnoreAlways && !(expr) )								                							\
-	{																						\
-		if(CvAssertDlg(#expr, __FILE__, __LINE__, bIgnoreAlways, msg))						\
-			{ CVASSERT_BREAKPOINT; }														\
-	}																						\
+#define CvAssertMsg(expr, msg) CvAssertMsg(expr, msg, __FILE__, __LINE__)
+{                                                                                           \
+    static bool bIgnoreAlways = false;                                                      \
+    if (!bIgnoreAlways && !(expr))                                                          \
+    {                                                                                       \
+        std::string assertMsg = #expr;                                                       \
+        std::string fileMsg = szFile;                                                        \
+        unsigned int lineMsg = uiLine;                                                       \
+        std::string message = (msg != NULL) ? msg : "";                                      \
+        if (CvAssertDlg(assertMsg.c_str(), fileMsg.c_str(), lineMsg, bIgnoreAlways, message.c_str()))  \
+        {                                                                                   \
+            CVASSERT_BREAKPOINT;                                                            \
+        }                                                                                   \
+    }                                                                                       \
 }
 
-#define CvAssertFmt(expr, fmt, ...)															\
-{																							\
-	static bool bIgnoreAlways = false;														\
-	if( !bIgnoreAlways && !(expr) )															\
-	{																						\
-		CvString str;																		\
-		CvString::format(str, fmt, __VA_ARGS__);											\
-		if(CvAssertDlg(#expr, __FILE__, __LINE__,											\
-			bIgnoreAlways, str.c_str()))													\
-				{ CVASSERT_BREAKPOINT; }													\
-	}																						\
+#define CvAssertFmt(expr, fmt, ...) CvAssertFmt(expr, fmt, __FILE__, __LINE__, __VA_ARGS__)
+{                                                                                           \
+    static bool bIgnoreAlways = false;                                                      \
+    if (!bIgnoreAlways && !(expr))                                                          \
+    {                                                                                       \
+        char str[1024];                                                                     \
+        sprintf(str, fmt, __VA_ARGS__);                                                     \
+        std::string assertMsg = #expr;                                                       \
+        std::string fileMsg = szFile;                                                        \
+        unsigned int lineMsg = uiLine;                                                       \
+        std::string message = str;                                                           \
+        if (CvAssertDlg(assertMsg.c_str(), fileMsg.c_str(), lineMsg, bIgnoreAlways, message.c_str()))  \
+        {                                                                                   \
+            CVASSERT_BREAKPOINT;                                                            \
+        }                                                                                   \
+    }                                                                                       \
 }
 
-#define CvAssert( expr ) CvAssertMsg(expr, "")
+#define CvAssert(expr) CvAssertMsg(expr, "", __FILE__, __LINE__)
 
 // An assert that only happens in the when CVASSERT_ENABLE is true AND it is a debug build
 #ifdef _DEBUG
