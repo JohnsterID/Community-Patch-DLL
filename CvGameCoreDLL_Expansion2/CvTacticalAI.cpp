@@ -454,6 +454,9 @@ void CvTacticalAI::FindTacticalTargets()
 					{
 						CvUnit* pUnit = pLoopPlot->getUnitByIndex(iUnitLoop);
 
+						if (!pUnit)
+							continue;
+
 						//barbarians do not attack civilians before the first city was founded.
 						if (!m_pPlayer->isBarbarian() || GET_PLAYER(pUnit->getOwner()).GetNumCitiesFounded() > 0)
 						{
@@ -2125,6 +2128,10 @@ void CvTacticalAI::PlotReinforcementMoves(CvTacticalDominanceZone* pTargetZone)
 		for (int i = 0; i < pPlot->getNumUnits(); i++)
 		{
 			CvUnit* pUnit = pPlot->getUnitByIndex(i);
+
+			if (!pUnit)
+				continue;
+
 			if (pUnit->getOwner()==m_pPlayer->GetID() && pUnit->canUseForTacticalAI())
 			{
 				CvTacticalDominanceZone* pUnitZone = GetTacticalAnalysisMap()->GetZoneByPlot(pUnit->plot());
@@ -5802,7 +5809,8 @@ bool CvTacticalAI::IsHighPriorityCivilianTarget(CvTacticalTarget* pTarget)
 						{
 							if((pLoopPlot->defenseModifier(m_pPlayer->getTeam(), false, false) > 10) && pLoopPlot->getNumUnits() > 0)
 							{
-								if(pLoopPlot->getUnitByIndex(0)->getOwner() == m_pPlayer->GetID())
+								CvUnit* pLoopUnit = pLoopPlot->getUnitByIndex(0);
+								if(pLoopUnit && pLoopUnit->getOwner() == m_pPlayer->GetID())
 								{
 									bRtnValue = false;
 								}
@@ -5862,7 +5870,8 @@ bool CvTacticalAI::IsMediumPriorityCivilianTarget(CvTacticalTarget* pTarget)
 					{
 						if((pLoopPlot->defenseModifier(m_pPlayer->getTeam(), false, false) > 15) && pLoopPlot->getNumUnits() > 0)
 						{
-							if(pLoopPlot->getUnitByIndex(0)->getOwner() == m_pPlayer->GetID())
+							CvUnit* pLoopUnit = pLoopPlot->getUnitByIndex(0);
+							if(pLoopUnit && pLoopUnit->getOwner() == m_pPlayer->GetID())
 							{
 								bRtnValue = false;
 							}
@@ -8032,6 +8041,9 @@ CvTacticalPlot::CvTacticalPlot(const CvPlot* plot, PlayerTypes ePlayer, const ve
 	for (int i = 0; i < pPlot->getNumUnits(); i++)
 	{
 		CvUnit* pPlotUnit = pPlot->getUnitByIndex(i);
+
+		if (!pPlotUnit)
+			continue;
 
 		//ignore zombies
 		if (pPlotUnit->isDelayedDeath())
