@@ -5703,7 +5703,7 @@ CvPlot* CvTacticalAI::FindNearbyTarget(CvUnit* pUnit, int iMaxTurns, bool bOffen
 	}
 
 	//second round. default sort order is descending
-	std::sort(candidates.begin(), candidates.end());
+	std::stable_sort(candidates.begin(), candidates.end());
 	std::reverse(candidates.begin(), candidates.end());
 
 	for (size_t i=0; i<candidates.size(); i++)
@@ -6132,7 +6132,7 @@ bool TacticalAIHelpers::PerformOpportunityAttack(CvUnit* pUnit, bool bAllowMovem
 	if (meleeTargets.empty())
 		return false;
 
-	std::sort(meleeTargets.begin(), meleeTargets.end());
+	std::stable_sort(meleeTargets.begin(), meleeTargets.end());
 
 	//we will never do attacks with negative scores!
 	if (meleeTargets.back().score < iScoreThreshold)
@@ -8572,7 +8572,7 @@ void CvTacticalPosition::getPreferredAssignmentsForUnit(const SUnitStats& unit, 
 	gPossibleMoves.insert(gPossibleMoves.begin(), STacticalAssignment(unit.iPlotIndex, unit.iPlotIndex, unit.iUnitID, 0, unit.eStrategy, 0, A_BLOCKED));
 
 	//need to return in sorted order. note that we don't filter out bad (negative moves) they just are unlikely to get picked
-	std::sort(gPossibleMoves.begin(),gPossibleMoves.end());
+	std::stable_sort(gPossibleMoves.begin(),gPossibleMoves.end());
 
 	//don't return more than requested
 	if (gPossibleMoves.size() > (size_t)nMaxCount)
