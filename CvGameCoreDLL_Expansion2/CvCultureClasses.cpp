@@ -3109,6 +3109,17 @@ void CvPlayerCulture::MoveWorkIntoSlot (CvGreatWorkInMyEmpire kWork, int iCityID
 				{
 					pToCity->GetCityBuildings()->SetBuildingGreatWork(eToBuildingClass, iSlot, kWork.m_iGreatWorkIndex);
 					pFromCity->GetCityBuildings()->SetBuildingGreatWork(eFromBuildingClass, iFromSlot, iFromWork);
+
+					gDLL->sendMoveGreatWorks(
+						m_pPlayer->GetID(),
+						pToCity->GetID(),
+						eToBuildingClass,
+						iSlot,
+						pFromCity->GetID(),
+						eFromBuildingClass,
+						iFromSlot
+					);
+
 #if defined(MOD_BALANCE_CORE)
 					return true;
 #endif
