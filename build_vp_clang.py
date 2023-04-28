@@ -79,6 +79,7 @@ PREDEFS = {
 CL_SUPPRESS = [
     'invalid-offsetof',
     'tautological-constant-out-of-range-compare',
+    'enum-constexpr-conversion',
     'comment',
 ]
 PCH_CPP = 'CvGameCoreDLL_Expansion2\\_precompile.cpp'

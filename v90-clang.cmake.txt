@@ -1,0 +1,260 @@
+set(CMAKE_C_COMPILER "clang")
+set(CMAKE_CXX_COMPILER "clang++")
+set(VS_2008_VARS_BAT "$ENV{VS90COMNTOOLS}/vsvars32.bat")
+execute_process(COMMAND "${VS_2008_VARS_BAT}")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -I\"${VS90COMNTOOLS}/../IDE\" -I\"${VS90COMNTOOLS}/../VC/include\" -I\"${VS90COMNTOOLS}/../VC/atlmfc/include\"")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -L\"${VS90COMNTOOLS}/../VC/lib\" -L\"${VS90COMNTOOLS}/../VC/atlmfc/lib\"")
+set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} /LIBPATH:\"${VS90COMNTOOLS}/../VC/lib\" /LIBPATH:\"${VS90COMNTOOLS}/../VC/atlmfc/lib\"")
+set(CMAKE_BUILD_TYPE Debug CACHE STRING "Build type")
+set(CONFIGURATION_TYPES Release Debug)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG ${CMAKE_CURRENT_SOURCE_DIR}/clang-output/Debug)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE ${CMAKE_CURRENT_SOURCE_DIR}/clang-output/Release)
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY_DEBUG ${CMAKE_CURRENT_SOURCE_DIR}/clang-output/Debug)
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY_RELEASE ${CMAKE_CURRENT_SOURCE_DIR}/clang-output/Release)
+set(PCH_H CvGameCoreDLLPCH.h)
+set(PCH CvGameCoreDLLPCH.pch)
+set(INCLUDE_DIRS
+    CvGameCoreDLL_Expansion2
+    CvWorldBuilderMap/include
+    CvGameCoreDLLUtil/include
+    CvLocalization/include
+    CvGameDatabase/include
+    FirePlace/include
+    FirePlace/include/FireWorks
+    ThirdPartyLibs/Lua51/include
+)
+include_directories(${INCLUDE_DIRS})
+set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} /MACHINE:X86 /DLL /DEBUG /LTCG /DYNAMICBASE /NXCOMPAT /SUBSYSTEM:WINDOWS /MANIFEST:EMBED /DEF:\"${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvGameCoreDLL.def\"")
+add_compile_definitions(
+    FXS_IS_DLL
+    _WINDOWS
+    _USRDLL
+    EXTERNAL_PAUSING
+    STACKWALKER
+    CVGAMECOREDLL_EXPORTS
+    FINAL_RELEASE
+    _CRT_SECURE_NO_WARNINGS
+    _WINDLL
+)
+if (CMAKE_BUILD_TYPE STREQUAL "Release")
+    add_compile_definitions(STRONG_ASSUMPTIONS NDEBUG)
+    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -Ox -Ob2 -flto")
+else()
+    add_compile_definitions(VPDEBUG)
+    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -Od")
+endif()
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-invalid-offsetof -Wno-tautological-constant-out-of-range-compare -Wno-enum-constexpr-conversion -Wno-comment")
+
+# Compile _precompile.cpp as a standalone object file
+set(PCH_OBJ ${CMAKE_CURRENT_BINARY_DIR}/precompile.obj)
+add_compile_options(/Yc"${PCH_H}")
+add_library(pch_obj OBJECT CvGameCoreDLL_Expansion2/_precompile.cpp)
+set_target_properties(pch_obj PROPERTIES
+    COMPILE_OPTIONS /Yu"${PCH_H}"
+    INCLUDE_DIRECTORIES "${INCLUDE_DIRS}"
+)
+add_library(pch ${PCH_OBJ})
+set_target_properties(pch PROPERTIES
+    LINK_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} /OUT:\"${CMAKE_CURRENT_BINARY_DIR}/${PCH}\""
+)
+
+set(SOURCES
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/Lua/CvLuaArea.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/Lua/CvLuaArgsHandle.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/Lua/CvLuaCity.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/Lua/CvLuaDeal.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/Lua/CvLuaEnums.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/Lua/CvLuaFractal.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/Lua/CvLuaGame.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/Lua/CvLuaGameInfo.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/Lua/CvLuaLeague.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/Lua/CvLuaMap.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/Lua/CvLuaPlayer.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/Lua/CvLuaPlot.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/Lua/CvLuaSupport.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/Lua/CvLuaTeam.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/Lua/CvLuaTeamTech.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/Lua/CvLuaUnit.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/stackwalker/StackWalker.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CustomMods.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvAchievementInfo.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvAchievementUnlocker.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvAdvisorCounsel.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvAdvisorRecommender.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvAIOperation.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvArea.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvArmyAI.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvAStar.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvAStarNode.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvBarbarians.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvBeliefClasses.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvBuilderTaskingAI.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvBuildingClasses.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvBuildingProductionAI.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvCity.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvCityAI.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvCityCitizens.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvCityConnections.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvCityManager.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvCitySpecializationAI.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvCityStrategyAI.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvContractClasses.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvCorporationClasses.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvCultureClasses.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvDangerPlots.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvDatabaseUtility.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvDealAI.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvDealClasses.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvDiplomacyAI.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvDiplomacyRequests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvDiplomacyRequests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvDistanceMap.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvDllBuildInfo.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvDllBuildingInfo.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvDllCity.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvDllCivilizationInfo.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvDllColorInfo.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvDllCombatInfo.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvDllContext.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvDllDatabaseUtility.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvDllDeal.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvDllDealAI.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvDllDiplomacyAI.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvDllDlcPackageInfo.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvDllEraInfo.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvDllFeatureInfo.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvDllGame.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvDllGameAsynch.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvDllGameDeals.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvDllGameOptionInfo.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvDllGameSpeedInfo.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvDllHandicapInfo.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvDllImprovementInfo.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvDllInterfaceModeInfo.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvDllLeaderheadInfo.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvDllMap.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvDllMinorCivInfo.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvDllMissionData.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvDllMissionInfo.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvDllNetInitInfo.cpp',
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvDllNetLoadGameInfo.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvDllNetMessageExt.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvDllNetMessageHandler.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvDllNetworkSyncronization.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvDllPathFinderUpdate.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvDllPlayer.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvDllPlayerColorInfo.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvDllPlayerOptionInfo.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvDllPlot.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvDllPolicyInfo.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvDllPreGame.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvDllPromotionInfo.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvDllRandom.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvDllResourceInfo.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvDllScriptSystemUtility.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvDllTeam.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvDllTechInfo.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvDllTerrainInfo.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvDllUnit.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvDllUnitCombatClassInfo.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvDllUnitInfo.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvDllVictoryInfo.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvDllWorldBuilderMapLoader.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvDllWorldInfo.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvEconomicAI.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvEmphasisClasses.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvEspionageClasses.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvEventLog.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvFlavorManager.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvFractal.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvGame.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvGameCoreDLL.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvGameCoreEnumSerialization.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvGameCoreStructs.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvGameCoreUtils.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvGameQueries.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvGameTextMgr.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvGlobals.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvGoodyHuts.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvGrandStrategyAI.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvGreatPersonInfo.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvHomelandAI.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvImprovementClasses.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvInfos.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvInfosSerializationHelper.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvInternalGameCoreUtils.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvLoggerCSV.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvMap.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvMapGenerator.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvMilitaryAI.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvMinorCivAI.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvNotificationClasses.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvNotifications.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvPlayer.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvPlayerAI.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvPlayerManager.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvPlot.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvPlotInfo.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvPlotManager.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvPolicyAI.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvPolicyClasses.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvPopupInfoSerialization.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvPreGame.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvProcessProductionAI.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvProjectClasses.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvProjectProductionAI.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvPromotionClasses.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvRandom.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvReligionClasses.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvReplayInfo.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvReplayMessage.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvSerialize.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvSiteEvaluationClasses.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvStartPositioner.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/cvStopWatch.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvTacticalAI.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvTacticalAnalysisMap.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvTargeting.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvTeam.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvTechAI.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvTechClasses.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvTradeClasses.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvTraitClasses.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvTreasury.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvTypes.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvUnit.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvUnitClasses.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvUnitCombat.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvUnitCycler.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvUnitMission.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvUnitMovement.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvUnitProductionAI.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvVotingClasses.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvWonderProductionAI.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLL_Expansion2/CvWorldBuilderMapLoader.cpp
+)
+
+add_library(${CORE_DLL} SHARED ${PCH_CPP} ${SOURCES})
+
+target_link_libraries(${CORE_DLL} pch
+    "${CMAKE_CURRENT_SOURCE_DIR}/CvWorldBuilderMap/lib/CvWorldBuilderMapWin32.obj"
+    "${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLLUtil/lib/CvGameCoreDLLUtilWin32.lib"
+    "${CMAKE_CURRENT_SOURCE_DIR}/CvLocalization/lib/CvLocalizationWin32.lib"
+    "${CMAKE_CURRENT_SOURCE_DIR}/CvGameDatabase/lib/CvGameDatabaseWin32.lib"
+    "${CMAKE_CURRENT_SOURCE_DIR}/FirePlace/lib/FireWorksWin32.obj"
+    "${CMAKE_CURRENT_SOURCE_DIR}/FirePlace/lib/FLuaWin32.lib"
+    "${CMAKE_CURRENT_SOURCE_DIR}/ThirdPartyLibs/Lua51/lib/lua51_Win32.lib"
+    "winmm.lib"
+    "kernel32.lib"
+    "user32.lib"
+    "gdi32.lib"
+    "winspool.lib"
+    "comdlg32.lib"
+    "advapi32.lib"
+    "shell32.lib"
+    "ole32.lib"
+    "oleaut32.lib"
+    "uuid.lib"
+    "odbc32.lib"
+    "odbccp32.lib"
+)

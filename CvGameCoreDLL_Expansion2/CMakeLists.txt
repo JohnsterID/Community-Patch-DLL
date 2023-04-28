@@ -1,0 +1,528 @@
+set(PROJECT_NAME VoxPopuli)
+
+################################################################################
+# Source groups
+################################################################################
+set(no_group_source_files
+    "../CvGameCoreDLLUtil/include/CvEnums.h"
+    "_precompile.cpp"
+    "CustomMods.cpp"
+    "CustomMods.h"
+    "CvAchievementInfo.cpp"
+    "CvAchievementInfo.h"
+    "CvAchievementUnlocker.cpp"
+    "CvAchievementUnlocker.h"
+    "CvAdvisorCounsel.cpp"
+    "CvAdvisorCounsel.h"
+    "CvAdvisorRecommender.cpp"
+    "CvAdvisorRecommender.h"
+    "CvAIOperation.cpp"
+    "CvAIOperation.h"
+    "CvAlignedStorage.h"
+    "CvArea.cpp"
+    "CvArea.h"
+    "CvArmyAI.cpp"
+    "CvArmyAI.h"
+    "CvAStar.cpp"
+    "CvAStar.h"
+    "CvAStarNode.cpp"
+    "CvAStarNode.h"
+    "CvBarbarians.cpp"
+    "CvBarbarians.h"
+    "CvBeliefClasses.cpp"
+    "CvBeliefClasses.h"
+    "CvBitfield.h"
+    "CvBuilderTaskingAI.cpp"
+    "CvBuilderTaskingAI.h"
+    "CvBuildingClasses.cpp"
+    "CvBuildingClasses.h"
+    "CvBuildingProductionAI.cpp"
+    "CvBuildingProductionAI.h"
+    "CvCity.cpp"
+    "CvCity.h"
+    "CvCityAI.cpp"
+    "CvCityAI.h"
+    "CvCityCitizens.cpp"
+    "CvCityCitizens.h"
+    "CvCityConnections.cpp"
+    "CvCityConnections.h"
+    "CvCityManager.cpp"
+    "CvCityManager.h"
+    "CvCitySpecializationAI.cpp"
+    "CvCitySpecializationAI.h"
+    "CvCityStrategyAI.cpp"
+    "CvCityStrategyAI.h"
+    "CvContractClasses.cpp"
+    "CvContractClasses.h"
+    "CvCorporationClasses.cpp"
+    "CvCorporationClasses.h"
+    "CvCultureClasses.cpp"
+    "CvCultureClasses.h"
+    "CvDangerPlots.cpp"
+    "CvDangerPlots.h"
+    "CvDatabaseUtility.cpp"
+    "CvDatabaseUtility.h"
+    "CvDealAI.cpp"
+    "CvDealAI.h"
+    "CvDealClasses.cpp"
+    "CvDealClasses.h"
+    "CvDefines.h"
+    "CvDiplomacyAI.cpp"
+    "CvDiplomacyAI.h"
+    "CvDiplomacyAIEnums.h"
+    "CvDiplomacyRequests.cpp"
+    "CvDiplomacyRequests.h"
+    "CvDistanceMap.cpp"
+    "CvDistanceMap.h"
+    "CvEconomicAI.cpp"
+    "CvEconomicAI.h"
+    "CvEmphasisClasses.cpp"
+    "CvEmphasisClasses.h"
+    "CvEnumMap.h"
+    "CvEnumMapSerialization.h"
+    "CvEnumsUtil.h"
+    "CvEspionageClasses.cpp"
+    "CvEspionageClasses.h"
+    "CvEventLog.cpp"
+    "CvEventLog.h"
+    "CvFlavorManager.cpp"
+    "CvFlavorManager.h"
+    "CvFractal.cpp"
+    "CvFractal.h"
+    "CvGame.cpp"
+    "CvGame.h"
+    "CvGameCoreDLL.cpp"
+    "CvGameCoreDLL.def"
+    "CvGameCoreDLL.h"
+    "CvGameCoreDLLPCH.h"
+    "CvGameCoreEnums.h"
+    "CvGameCoreEnumSerialization.cpp"
+    "CvGameCoreEnumSerialization.h"
+    "CvGameCoreStructs.cpp"
+    "CvGameCoreStructs.h"
+    "CvGameCoreUtils.cpp"
+    "CvGameCoreUtils.h"
+    "CvGameQueries.cpp"
+    "CvGameQueries.h"
+    "CvGameTextMgr.cpp"
+    "CvGameTextMgr.h"
+    "CvGlobals.cpp"
+    "CvGlobals.h"
+    "CvGoodyHuts.cpp"
+    "CvGoodyHuts.h"
+    "CvGrandStrategyAI.cpp"
+    "CvGrandStrategyAI.h"
+    "CvGreatPersonInfo.cpp"
+    "CvGreatPersonInfo.h"
+    "CvHomelandAI.cpp"
+    "CvHomelandAI.h"
+    "CvImprovementClasses.cpp"
+    "CvImprovementClasses.h"
+    "CvInfos.cpp"
+    "CvInfos.h"
+    "CvInfosSerializationHelper.cpp"
+    "CvInfosSerializationHelper.h"
+    "CvInternalGameCoreUtils.cpp"
+    "CvInternalGameCoreUtils.h"
+    "CvLoggerCSV.cpp"
+    "CvLoggerCSV.h"
+    "CvMap.cpp"
+    "CvMap.h"
+    "CvMapGenerator.cpp"
+    "CvMapGenerator.h"
+    "CvMeta.h"
+    "CvMilitaryAI.cpp"
+    "CvMilitaryAI.h"
+    "CvMinorCivAI.cpp"
+    "CvMinorCivAI.h"
+    "CvNotificationClasses.cpp"
+    "CvNotificationClasses.h"
+    "CvNotifications.cpp"
+    "CvNotifications.h"
+    "CvPlayer.cpp"
+    "CvPlayer.h"
+    "CvPlayerAI.cpp"
+    "CvPlayerAI.h"
+    "CvPlayerManager.cpp"
+    "CvPlayerManager.h"
+    "CvPlot.cpp"
+    "CvPlot.h"
+    "CvPlotInfo.cpp"
+    "CvPlotInfo.h"
+    "CvPlotManager.cpp"
+    "CvPlotManager.h"
+    "CvPolicyAI.cpp"
+    "CvPolicyAI.h"
+    "CvPolicyClasses.cpp"
+    "CvPolicyClasses.h"
+    "CvPopupInfoSerialization.cpp"
+    "CvPopupInfoSerialization.h"
+    "CvPreGame.cpp"
+    "CvPreGame.h"
+    "CvProcessProductionAI.cpp"
+    "CvProcessProductionAI.h"
+    "CvProjectClasses.cpp"
+    "CvProjectClasses.h"
+    "CvProjectProductionAI.cpp"
+    "CvProjectProductionAI.h"
+    "CvPromotionClasses.cpp"
+    "CvPromotionClasses.h"
+    "CvRandom.cpp"
+    "CvRandom.h"
+    "CvReligionClasses.cpp"
+    "CvReligionClasses.h"
+    "CvReplayInfo.cpp"
+    "CvReplayInfo.h"
+    "CvReplayMessage.cpp"
+    "CvReplayMessage.h"
+    "CvSerialize.cpp"
+    "CvSerialize.h"
+    "CvSiteEvaluationClasses.cpp"
+    "CvSiteEvaluationClasses.h"
+    "CvSpan.h"
+    "CvSpanSerialization.h"
+    "CvStartPositioner.cpp"
+    "CvStartPositioner.h"
+    "cvStopWatch.cpp"
+    "cvStopWatch.h"
+    "CvTacticalAI.cpp"
+    "CvTacticalAI.h"
+    "CvTacticalAnalysisMap.cpp"
+    "CvTacticalAnalysisMap.h"
+    "CvTargeting.cpp"
+    "CvTargeting.h"
+    "CvTeam.cpp"
+    "CvTeam.h"
+    "CvTechAI.cpp"
+    "CvTechAI.h"
+    "CvTechClasses.cpp"
+    "CvTechClasses.h"
+    "CvTradeClasses.cpp"
+    "CvTradeClasses.h"
+    "CvTraitClasses.cpp"
+    "CvTraitClasses.h"
+    "CvTreasury.cpp"
+    "CvTreasury.h"
+    "CvTypes.cpp"
+    "CvTypes.h"
+    "CvUnit.cpp"
+    "CvUnit.h"
+    "CvUnitClasses.cpp"
+    "CvUnitClasses.h"
+    "CvUnitCombat.cpp"
+    "CvUnitCombat.h"
+    "CvUnitCycler.cpp"
+    "CvUnitCycler.h"
+    "CvUnitMission.cpp"
+    "CvUnitMission.h"
+    "CvUnitMovement.cpp"
+    "CvUnitMovement.h"
+    "CvUnitProductionAI.cpp"
+    "CvUnitProductionAI.h"
+    "CvVotingClasses.cpp"
+    "CvVotingClasses.h"
+    "CvWonderProductionAI.cpp"
+    "CvWonderProductionAI.h"
+    "CvWorldBuilderMapLoader.cpp"
+    "CvWorldBuilderMapLoader.h"
+    "HHMods.h"
+    "NatvisFile.natvis"
+    "resource.h"
+    "stackwalker/StackWalker.cpp"
+    "stackwalker/StackWalker.h"
+    "TContainer.h"
+)
+source_group("" FILES ${no_group_source_files})
+
+set(interface
+    "CvDllBuildInfo.cpp"
+    "CvDllBuildInfo.h"
+    "CvDllBuildingInfo.cpp"
+    "CvDllBuildingInfo.h"
+    "CvDllCity.cpp"
+    "CvDllCity.h"
+    "CvDllCivilizationInfo.cpp"
+    "CvDllCivilizationInfo.h"
+    "CvDllColorInfo.cpp"
+    "CvDllColorInfo.h"
+    "CvDllCombatInfo.cpp"
+    "CvDllCombatInfo.h"
+    "CvDllContext.cpp"
+    "CvDllContext.h"
+    "CvDllDatabaseUtility.cpp"
+    "CvDllDatabaseUtility.h"
+    "CvDllDeal.cpp"
+    "CvDllDeal.h"
+    "CvDllDealAI.cpp"
+    "CvDllDealAI.h"
+    "CvDllDiplomacyAI.cpp"
+    "CvDllDiplomacyAI.h"
+    "CvDllDlcPackageInfo.cpp"
+    "CvDllDlcPackageInfo.h"
+    "CvDllEraInfo.cpp"
+    "CvDllEraInfo.h"
+    "CvDLLFAStarIFaceBase.h"
+    "CvDllFeatureInfo.cpp"
+    "CvDllFeatureInfo.h"
+    "CvDllGame.cpp"
+    "CvDllGame.h"
+    "CvDllGameAsynch.cpp"
+    "CvDllGameAsynch.h"
+    "CvDllGameDeals.cpp"
+    "CvDllGameDeals.h"
+    "CvDllGameOptionInfo.cpp"
+    "CvDllGameOptionInfo.h"
+    "CvDllGameSpeedInfo.cpp"
+    "CvDllGameSpeedInfo.h"
+    "CvDllHandicapInfo.cpp"
+    "CvDllHandicapInfo.h"
+    "CvDllImprovementInfo.cpp"
+    "CvDllImprovementInfo.h"
+    "CvDllInterfaceModeInfo.cpp"
+    "CvDllInterfaceModeInfo.h"
+    "CvDllLeaderheadInfo.cpp"
+    "CvDllLeaderheadInfo.h"
+    "CvDllMap.cpp"
+    "CvDllMap.h"
+    "CvDllMinorCivInfo.cpp"
+    "CvDllMinorCivInfo.h"
+    "CvDllMissionData.cpp"
+    "CvDllMissionData.h"
+    "CvDllMissionInfo.cpp"
+    "CvDllMissionInfo.h"
+    "CvDllNetInitInfo.cpp"
+    "CvDllNetInitInfo.h"
+    "CvDllNetLoadGameInfo.cpp"
+    "CvDllNetLoadGameInfo.h"
+    "CvDllNetMessageExt.cpp"
+    "CvDllNetMessageExt.h"
+    "CvDllNetMessageHandler.cpp"
+    "CvDllNetMessageHandler.h"
+    "CvDllNetworkSyncronization.cpp"
+    "CvDllNetworkSyncronization.h"
+    "CvDllPathFinderUpdate.cpp"
+    "CvDllPathFinderUpdate.h"
+    "CvDllPlayer.cpp"
+    "CvDllPlayer.h"
+    "CvDllPlayerColorInfo.cpp"
+    "CvDllPlayerColorInfo.h"
+    "CvDllPlayerOptionInfo.cpp"
+    "CvDllPlayerOptionInfo.h"
+    "CvDllPlot.cpp"
+    "CvDllPlot.h"
+    "CvDllPolicyInfo.cpp"
+    "CvDllPolicyInfo.h"
+    "CvDllPreGame.cpp"
+    "CvDllPreGame.h"
+    "CvDllPromotionInfo.cpp"
+    "CvDllPromotionInfo.h"
+    "CvDllRandom.cpp"
+    "CvDllRandom.h"
+    "CvDllResourceInfo.cpp"
+    "CvDllResourceInfo.h"
+    "CvDllScriptSystemUtility.cpp"
+    "CvDllScriptSystemUtility.h"
+    "CvDllTeam.cpp"
+    "CvDllTeam.h"
+    "CvDllTechInfo.cpp"
+    "CvDllTechInfo.h"
+    "CvDllTerrainInfo.cpp"
+    "CvDllTerrainInfo.h"
+    "CvDllUnit.cpp"
+    "CvDllUnit.h"
+    "CvDllUnitCombatClassInfo.cpp"
+    "CvDllUnitCombatClassInfo.h"
+    "CvDllUnitInfo.cpp"
+    "CvDllUnitInfo.h"
+    "CvDllVersion.h"
+    "CvDllVictoryInfo.cpp"
+    "CvDllVictoryInfo.h"
+    "CvDllWorldBuilderMapLoader.cpp"
+    "CvDllWorldBuilderMapLoader.h"
+    "CvDllWorldInfo.cpp"
+    "CvDllWorldInfo.h"
+    "Lua/CvLuaArea.cpp"
+    "Lua/CvLuaArea.h"
+    "Lua/CvLuaArgsHandle.cpp"
+    "Lua/CvLuaArgsHandle.h"
+    "Lua/CvLuaCity.cpp"
+    "Lua/CvLuaCity.h"
+    "Lua/CvLuaDeal.cpp"
+    "Lua/CvLuaDeal.h"
+    "Lua/CvLuaEnums.cpp"
+    "Lua/CvLuaEnums.h"
+    "Lua/CvLuaFractal.cpp"
+    "Lua/CvLuaFractal.h"
+    "Lua/CvLuaGame.cpp"
+    "Lua/CvLuaGame.h"
+    "Lua/CvLuaGameInfo.cpp"
+    "Lua/CvLuaGameInfo.h"
+    "Lua/CvLuaLeague.cpp"
+    "Lua/CvLuaLeague.h"
+    "Lua/CvLuaMap.cpp"
+    "Lua/CvLuaMap.h"
+    "Lua/CvLuaPlayer.cpp"
+    "Lua/CvLuaPlayer.h"
+    "Lua/CvLuaPlot.cpp"
+    "Lua/CvLuaPlot.h"
+    "Lua/CvLuaScopedIndirectInstance.h"
+    "Lua/CvLuaScopedInstance.h"
+    "Lua/CvLuaSupport.cpp"
+    "Lua/CvLuaSupport.h"
+    "Lua/CvLuaTeam.cpp"
+    "Lua/CvLuaTeam.h"
+    "Lua/CvLuaTeamTech.cpp"
+    "Lua/CvLuaTeamTech.h"
+    "Lua/CvLuaUnit.cpp"
+    "Lua/CvLuaUnit.h"
+)
+source_group("interface" FILES ${interface})
+
+set(ALL_FILES
+    ${no_group_source_files}
+    ${interface}
+)
+
+################################################################################
+# Target
+################################################################################
+add_library(${PROJECT_NAME} SHARED ${ALL_FILES})
+
+target_precompile_headers(${PROJECT_NAME} PRIVATE
+    "$<$<COMPILE_LANGUAGE:CXX>:${CMAKE_CURRENT_SOURCE_DIR}/CvGameCoreDLLPCH.h>"
+)
+
+use_props(${PROJECT_NAME} "${CMAKE_CONFIGURATION_TYPES}" "${DEFAULT_CXX_PROPS}")
+set_target_properties(${PROJECT_NAME} PROPERTIES
+    VS_GLOBAL_KEYWORD "Win32Proj"
+)
+################################################################################
+# Target name
+################################################################################
+set_target_properties(${PROJECT_NAME} PROPERTIES
+    TARGET_NAME_DEBUG   "CvGameCore_Expansion2"
+    TARGET_NAME_RELEASE "CvGameCore_Expansion2"
+)
+################################################################################
+# Output directory
+################################################################################
+set_target_properties(${PROJECT_NAME} PROPERTIES
+    OUTPUT_DIRECTORY_DEBUG   "${CMAKE_SOURCE_DIR}//BuildOutput/$<CONFIG>/"
+    OUTPUT_DIRECTORY_RELEASE "${CMAKE_SOURCE_DIR}//BuildOutput/$<CONFIG>/"
+)
+set_target_properties(${PROJECT_NAME} PROPERTIES
+    INTERPROCEDURAL_OPTIMIZATION_RELEASE "FALSE"
+)
+################################################################################
+# MSVC runtime library
+################################################################################
+get_property(MSVC_RUNTIME_LIBRARY_DEFAULT TARGET ${PROJECT_NAME} PROPERTY MSVC_RUNTIME_LIBRARY)
+string(CONCAT "MSVC_RUNTIME_LIBRARY_STR"
+    MultiThreadedDLL
+)
+set_target_properties(${PROJECT_NAME} PROPERTIES MSVC_RUNTIME_LIBRARY ${MSVC_RUNTIME_LIBRARY_STR})
+
+################################################################################
+# Include directories
+################################################################################
+target_include_directories(${PROJECT_NAME} PUBLIC
+    "${CMAKE_CURRENT_SOURCE_DIR}/.;"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../CvWorldBuilderMap/include;"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../CvGameCoreDLLUtil/include;"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../CvLocalization/include;"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../CvGameDatabase/include;"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../FirePlace/include;"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../FirePlace/include/FireWorks;"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../ThirdPartyLibs/Lua51/include"
+)
+
+################################################################################
+# Compile definitions
+################################################################################
+target_compile_definitions(${PROJECT_NAME} PRIVATE
+    "$<$<CONFIG:Debug>:"
+        "VPDEBUG"
+    ">"
+    "$<$<CONFIG:Release>:"
+        "STRONG_ASSUMPTIONS;"
+        "NDEBUG"
+    ">"
+    "FXS_IS_DLL;"
+    "WIN32;"
+    "_WINDOWS;"
+    "_USRDLL;"
+    "EXTERNAL_PAUSING;"
+    "STACKWALKER;"
+    "CVGAMECOREDLL_EXPORTS;"
+    "FINAL_RELEASE;"
+    "_CRT_SECURE_NO_WARNINGS"
+)
+
+################################################################################
+# Compile and link options
+################################################################################
+if(MSVC)
+    target_compile_options(${PROJECT_NAME} PRIVATE
+        $<$<CONFIG:Debug>:
+            /Od
+        >
+        $<$<CONFIG:Release>:
+            /GL;
+            /Ox
+        >
+        /W3;
+        /Zi;
+        /Zm211;
+        ${DEFAULT_CXX_EXCEPTION_HANDLING}
+    )
+    target_link_options(${PROJECT_NAME} PRIVATE
+        $<$<CONFIG:Debug>:
+            /INCREMENTAL
+        >
+        $<$<CONFIG:Release>:
+            /OPT:REF;
+            /LTCG;
+            /OPT:ICF;
+            /INCREMENTAL:NO
+        >
+        /DEBUG;
+        /MACHINE:X86;
+        /SUBSYSTEM:WINDOWS
+    )
+endif()
+
+################################################################################
+# Pre build events
+################################################################################
+add_custom_command_if(
+    TARGET ${PROJECT_NAME}
+    PRE_BUILD
+    COMMANDS
+    COMMAND   $<CONFIG:Debug> ..\\update_commit_id.bat
+    COMMAND $<CONFIG:Release> ..\\update_commit_id.bat
+)
+
+################################################################################
+# Dependencies
+################################################################################
+set(ADDITIONAL_LIBRARY_DEPENDENCIES
+    "CvWorldBuilderMapWin32;"
+    "CvGameCoreDLLUtilWin32;"
+    "CvLocalizationWin32;"
+    "CvGameDatabaseWin32;"
+    "FireWorksWin32;"
+    "FLuaWin32;"
+    "lua51_Win32;"
+    "winmm"
+)
+target_link_libraries(${PROJECT_NAME} PUBLIC "${ADDITIONAL_LIBRARY_DEPENDENCIES}")
+
+target_link_directories(${PROJECT_NAME} PUBLIC
+    "${CMAKE_SOURCE_DIR}/CvWorldBuilderMap/lib/;"
+    "${CMAKE_SOURCE_DIR}/CvGameCoreDLLUtil/lib/;"
+    "${CMAKE_SOURCE_DIR}/CvLocalization/lib/;"
+    "${CMAKE_SOURCE_DIR}/CvGameDatabase/lib/;"
+    "${CMAKE_SOURCE_DIR}/FirePlace/lib/;"
+    "${CMAKE_SOURCE_DIR}/ThirdPartyLibs/Lua51/lib/"
+)
+
