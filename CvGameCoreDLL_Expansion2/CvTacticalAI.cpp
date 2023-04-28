@@ -1025,7 +1025,8 @@ void CvTacticalAI::ExecuteBarbarianTheft()
 
 struct STargetWithTwoScoresTiebreak
 {
-	STargetWithTwoScoresTiebreak(CvTacticalTarget* pTarget_, CvPlot* pPlot_, int score1_, int score2_) : pTarget(pTarget_), pPlot(pPlot_), score1(score1_), score2(score2_) {}
+	STargetWithTwoScoresTiebreak(CvTacticalTarget* pTarget_, CvPlot* pPlot_, int score1_, int score2_) :
+		pTarget(pTarget_), pPlot(pPlot_), score1(score1_), score2(score2_) {}
 
 	bool operator<(const STargetWithTwoScoresTiebreak& other) const
 	{
@@ -3553,7 +3554,13 @@ bool CvTacticalAI::ExecuteSpotterMove(const vector<CvUnit*>& vUnits, CvPlot* pTa
 				if (pPathPlot->canSeePlot(pTargetPlot, pUnit->getTeam(), pUnit->visibilityRange(), NO_DIRECTION))
 				{
 					//or should we use danger as the sorting criterion?
-					vOptions.push_back(OptionWithScore<pair<CvUnit*, CvPlot*>>(make_pair(pUnit,pPathPlot),path[i].m_iMoves));
+					vOptions.push_back(
+						OptionWithScore<pair<CvUnit*, CvPlot*>>(
+							make_pair(pUnit,pPathPlot),
+							path[i].m_iMoves,
+							pPathPlot->GetPlotIndex()
+						)
+					);
 				}
 			}
 		}
@@ -3701,7 +3708,10 @@ bool CvTacticalAI::PositionUnitsAroundTarget(const vector<CvUnit*>& vUnits, CvPl
 	//we want to move the civilians last so they have a better chance of getting cover
 	struct PrSortCombatFirst
 	{
-		bool operator()(const CvUnit* lhs, const CvUnit* rhs) const { return (lhs->IsCombatUnit() ? 0 : 1) < (rhs->IsCombatUnit() ? 0 : 1); }
+		bool operator()(const CvUnit* lhs, const CvUnit* rhs) const { 
+			return std::make_pair(lhs->IsCombatUnit() ? 0 : 1, lhs->GetID()) <
+				std::make_pair(rhs->IsCombatUnit() ? 0 : 1, rhs->GetID());
+		}
 	};
 	std::sort(remaining.begin(), remaining.end(), PrSortCombatFirst());
 
@@ -3763,12 +3773,20 @@ void CvTacticalAI::ExecuteLandingOperation(CvPlot* pTargetPlot)
 
 	struct SAssignment
 	{
-		SAssignment( CvUnit* unit, CvPlot* plot, int score, bool isAttack ) : pUnit(unit), pPlot(plot), iScore(score), bAttack(isAttack) {}
+		SAssignment( CvUnit* unit, CvPlot* plot, int score, bool isAttack ) :
+			pUnit(unit),
+			pPlot(plot),
+			iScore(score),
+			bAttack(isAttack),
+			comparing(std::make_pair(iScore, pPlot->GetPlotIndex())) {}
 		CvUnit* pUnit;
 		CvPlot* pPlot;
 		int iScore;
 		bool bAttack;
-		bool operator<(const SAssignment& rhs) { return iScore>rhs.iScore; }
+		std::pair<int, int> comparing;
+		bool operator<(const SAssignment& rhs) { 
+			return comparing > rhs.comparing; 
+		}
 	};
 
 	struct PrPlotMatch
@@ -5698,12 +5716,18 @@ CvPlot* CvTacticalAI::FindNearbyTarget(CvUnit* pUnit, int iMaxTurns, bool bOffen
 			if (pUnit->plot() == pPlot)
 				return pPlot;
 
-			candidates.push_back(OptionWithScore<CvPlot*>(pPlot, plotDistance(*pPlot, *pUnit->plot())));
+			candidates.push_back(
+				OptionWithScore<CvPlot*>(
+					pPlot, 
+					plotDistance(*pPlot, *pUnit->plot()),
+					pPlot->GetPlotIndex()
+				)
+			);
 		}
 	}
 
 	//second round. default sort order is descending
-	std::stable_sort(candidates.begin(), candidates.end());
+	std::sort(candidates.begin(), candidates.end());
 	std::reverse(candidates.begin(), candidates.end());
 
 	for (size_t i=0; i<candidates.size(); i++)
@@ -6132,7 +6156,7 @@ bool TacticalAIHelpers::PerformOpportunityAttack(CvUnit* pUnit, bool bAllowMovem
 	if (meleeTargets.empty())
 		return false;
 
-	std::stable_sort(meleeTargets.begin(), meleeTargets.end());
+	std::sort(meleeTargets.begin(), meleeTargets.end());
 
 	//we will never do attacks with negative scores!
 	if (meleeTargets.back().score < iScoreThreshold)
@@ -6348,21 +6372,29 @@ CvPlot* TacticalAIHelpers::FindSafestPlotInReach(const CvUnit* pUnit, bool bAllo
 
 		if(bIsInCityOrCitadel)
 		{
-			aCityList.push_back( OptionWithScore<CvPlot*>(pPlot,iScore) );
+			aCityList.push_back(
+				OptionWithScore<CvPlot*>(pPlot,iScore,pPlot->GetPlotIndex())
+			);
 		}
 		else if(bIsInCover) //mostly relevant for civilians
 		{
-			aCoverList.push_back( OptionWithScore<CvPlot*>(pPlot,iScore) );
+			aCoverList.push_back(
+				OptionWithScore<CvPlot*>(pPlot,iScore,pPlot->GetPlotIndex())
+			);
 		}
 		else if(bIsZeroDanger)
 		{
 			//if danger is zero, look at distance to closest owned city instead
 			//idea: could also look at number of plots reachable from pPlot to avoid dead ends
-			aZeroDangerList.push_back( OptionWithScore<CvPlot*>(pPlot, bIsInTerritory ? iCityDistance : iCityDistance*2) );
+			aZeroDangerList.push_back(
+				OptionWithScore<CvPlot*>(pPlot, bIsInTerritory ? iCityDistance : iCityDistance*2, pPlot->GetPlotIndex())
+			);
 		}
 		else if(!bWouldEmbark || bAllowEmbark)
 		{
-			aDangerList.push_back( OptionWithScore<CvPlot*>(pPlot,iScore) );
+			aDangerList.push_back(
+				OptionWithScore<CvPlot*>(pPlot,iScore, pPlot->GetPlotIndex())
+			);
 		}
 	}
 
@@ -8572,7 +8604,7 @@ void CvTacticalPosition::getPreferredAssignmentsForUnit(const SUnitStats& unit, 
 	gPossibleMoves.insert(gPossibleMoves.begin(), STacticalAssignment(unit.iPlotIndex, unit.iPlotIndex, unit.iUnitID, 0, unit.eStrategy, 0, A_BLOCKED));
 
 	//need to return in sorted order. note that we don't filter out bad (negative moves) they just are unlikely to get picked
-	std::stable_sort(gPossibleMoves.begin(),gPossibleMoves.end());
+	std::sort(gPossibleMoves.begin(),gPossibleMoves.end());
 
 	//don't return more than requested
 	if (gPossibleMoves.size() > (size_t)nMaxCount)

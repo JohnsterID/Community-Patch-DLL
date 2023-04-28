@@ -427,8 +427,12 @@ struct OptionWithScore
 {
 	T option;
 	int score;
-	OptionWithScore(const T& t, int s) : option(t), score(s) {}
-	bool operator<(const OptionWithScore& rhs) const { return score > rhs.score; } //sort descending!
+	std::pair<int, int> comparing;
+	OptionWithScore(const T& t, int s, int fallback) : 
+		option(t),
+		score(s),
+		comparing(std::make_pair(s, fallback)) {}
+	bool operator<(const OptionWithScore& rhs) const { return comparing > rhs.comparing; } //sort descending!
 };
 
 template<class T>

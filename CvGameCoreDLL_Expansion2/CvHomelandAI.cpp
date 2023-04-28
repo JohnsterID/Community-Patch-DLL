@@ -6067,6 +6067,7 @@ SPatrolTarget::SPatrolTarget()
 	pTarget = NULL;
 	pWorstEnemy = NULL;
 	iThreatLevel = 0;
+	comparing = std::make_pair(iThreatLevel, 0);
 }
 
 SPatrolTarget::SPatrolTarget(CvPlot * target, CvPlot * neighbor, int iThreat)
@@ -6074,12 +6075,13 @@ SPatrolTarget::SPatrolTarget(CvPlot * target, CvPlot * neighbor, int iThreat)
 	pTarget = target;
 	pWorstEnemy = neighbor;
 	iThreatLevel = iThreat;
+	comparing = std::make_pair(iThreatLevel, pTarget->GetPlotIndex());
 }
 
 bool SPatrolTarget::operator<(const SPatrolTarget & rhs) const
 {
 	//sort descending!
-	return iThreatLevel > rhs.iThreatLevel;
+	return comparing > rhs.comparing;
 }
 
 bool SPatrolTarget::operator==(const SPatrolTarget & rhs) const

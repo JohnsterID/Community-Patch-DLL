@@ -805,7 +805,13 @@ size_t CvMilitaryAI::UpdateAttackTargets()
 			if (target.m_iApproachScore == 0)
 				continue;
 
-			vAttackOptions.push_back(OptionWithScore<CvAttackTarget>(target, ScoreAttackTarget(target)));
+			vAttackOptions.push_back(
+				OptionWithScore<CvAttackTarget>(
+					target,
+					ScoreAttackTarget(target),
+					target.m_iTargetPlotIndex
+				)
+			);
 
 			//and now the other way around
 			if (GET_PLAYER(eOtherPlayer).isMajorCiv())
@@ -820,7 +826,13 @@ size_t CvMilitaryAI::UpdateAttackTargets()
 					{
 						//do not try any advanced scoring, just use a basic approach/distance score
 						int iScore = (reverseTarget.m_iApproachScore * 10) / sqrti(it->second.length());
-						vDefenseOptions.push_back(OptionWithScore<CvAttackTarget>(reverseTarget, iScore));
+						vDefenseOptions.push_back(
+							OptionWithScore<CvAttackTarget>(
+								reverseTarget,
+								iScore,
+								reverseTarget.m_iTargetPlotIndex
+							)
+						);
 					}
 				}
 			}
@@ -842,7 +854,7 @@ size_t CvMilitaryAI::UpdateAttackTargets()
 			if (target.m_iApproachScore == 0)
 				continue;
 
-			vAttackOptions.push_back(OptionWithScore<CvAttackTarget>(target, ScoreAttackTarget(target)));
+			vAttackOptions.push_back(OptionWithScore<CvAttackTarget>(target, ScoreAttackTarget(target), target.m_iTargetPlotIndex));
 
 			//and now the other way around
 			if (GET_PLAYER(eOtherPlayer).isMajorCiv())
@@ -857,7 +869,7 @@ size_t CvMilitaryAI::UpdateAttackTargets()
 					{
 						//do not try any advanced scoring, just use a basic approach/distance score
 						int iScore = (reverseTarget.m_iApproachScore * 10) / sqrti(it->second.length());
-						vDefenseOptions.push_back(OptionWithScore<CvAttackTarget>(reverseTarget, iScore));
+						vDefenseOptions.push_back(OptionWithScore<CvAttackTarget>(reverseTarget, iScore, reverseTarget.m_iTargetPlotIndex));
 					}
 				}
 			}
@@ -2509,7 +2521,10 @@ CvUnit* CvMilitaryAI::FindUselessShip()
 	//sort ships by experience: we want to scrap the veterans last ...
 	struct PrSortByExperience
 	{
-		bool operator()(const CvUnit* lhs, const CvUnit* rhs) const { return lhs->getExperienceTimes100() < rhs->getExperienceTimes100(); }
+		bool operator()(const CvUnit* lhs, const CvUnit* rhs) const { 
+			return std::make_pair(lhs->getExperienceTimes100(), lhs->GetID()) <
+				std::make_pair(rhs->getExperienceTimes100(), rhs->GetID()); 
+		}
 	};
 	std::sort( candidates.begin(), candidates.end(), PrSortByExperience() );
 

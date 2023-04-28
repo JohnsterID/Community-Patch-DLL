@@ -3941,7 +3941,13 @@ bool CvPlayerReligions::UpdateStateReligion()
 				if (pHolyCity && pHolyCity->getOwner() == ePlayer)
 				{
 					int iValue = GetNumDomesticFollowers(it->m_eReligion);
-					vHolyReligions.push_back(OptionWithScore<ReligionTypes>(it->m_eReligion, iValue));
+					vHolyReligions.push_back(
+						OptionWithScore<ReligionTypes>(
+							it->m_eReligion,
+							iValue,
+							it->GetHolyCity()->GetID()
+						)
+					);
 				}
 			}
 		}
@@ -5494,7 +5500,8 @@ void CvCityReligions::RecomputeFollowers(CvReligiousFollowChangeReason eReason, 
 
 	struct PrSortByPressureDesc {
 		//no religion should go last
-		bool operator()(const CvReligionInCity& lhs, const CvReligionInCity& rhs) const { return lhs.m_iPressure > rhs.m_iPressure && lhs.m_eReligion != NO_RELIGION; }
+		bool operator()(const CvReligionInCity& lhs, const CvReligionInCity& rhs) const {
+			return lhs.m_iPressure > rhs.m_iPressure && lhs.m_eReligion != NO_RELIGION; }
 	};
 
 	//just for convenience, sort the local religions by accumulated pressure

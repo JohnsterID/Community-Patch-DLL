@@ -9338,7 +9338,9 @@ UnitTypes CvGame::GetCsGiftSpawnUnitType(PlayerTypes ePlayer, bool bIncludeShips
 			continue;
 
 		// CUSTOMLOG("CS Gift considering unit type %i", eLoopUnit);
-		veUnitRankings.push_back( OptionWithScore<UnitTypes>(eLoopUnit, pkUnitInfo->GetPower()));
+		veUnitRankings.push_back(
+			OptionWithScore<UnitTypes>(eLoopUnit, pkUnitInfo->GetPower(), eLoopUnit)
+		);
 	}
 
 	// Choose from weighted unit types
@@ -9663,7 +9665,7 @@ UnitTypes CvGame::GetRandomUniqueUnitType(bool bIncludeCivsInGame, bool bInclude
 			if (pkUnitInfo->IsMinorCivGift())
 				iRandom += 5;
 
-			veUnitRankings.push_back( OptionWithScore<UnitTypes>(eLoopUnit, iRandom));
+			veUnitRankings.push_back( OptionWithScore<UnitTypes>(eLoopUnit, iRandom, eLoopUnit));
 		}
 		// we didn't find any candidates! try again with all UUs
 		if (veUnitRankings.size() <= 0)

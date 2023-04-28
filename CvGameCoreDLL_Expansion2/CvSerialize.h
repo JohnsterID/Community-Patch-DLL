@@ -270,6 +270,48 @@ public:
 	{
 		updateValue();
 	}
+	/*virtual bool compare(FDataStream& otherValue, int playerID, int timestamp) const
+	{
+		ValueType other;
+		otherValue >> other;
+
+		// Check serialization and deserialization logic for ValueType
+		FDataStream testStream;
+		testStream << other;
+		ValueType testValue;
+		testStream >> testValue;
+		if (other != testValue) {
+			std::string errorMsg = "Serialization and deserialization logic for ValueType is inconsistent";
+			gGlobals.getDLLIFace()->netMessageDebugLog(errorMsg);
+			return false;
+		}
+
+		if (other == currentValue()) {
+			return true;
+		}
+		else {
+			std::string desyncInfo = "Desync detected for variable " + name() + "\n";
+			desyncInfo += "Player ID/Network ID: " + FSerialization::toString(playerID) + "\n";
+			desyncInfo += "Timestamp/Frame number: " + FSerialization::toString(timestamp) + "\n";
+			desyncInfo += "Current value: " + FSerialization::toString(currentValue()) + "\n";
+			desyncInfo += "Received value: " + FSerialization::toString(other) + "\n";
+
+			// Add call stack information
+			desyncInfo += "Call stack:\n";
+			for (std::vector< std::pair<std::string, std::string> >::const_iterator iter = callStacks.begin(); iter != callStacks.end(); ++iter) {
+				desyncInfo += "    " + iter->first + " (" + iter->second + ")\n";
+			}
+
+			// Add debug dump information
+			desyncInfo += "Debug dump:\n";
+			desyncInfo += debugDump(callStacks);
+
+			gGlobals.getDLLIFace()->netMessageDebugLog(desyncInfo);
+			return false;
+		}
+
+		return other == currentValue();
+	}*/
 	virtual bool compare(FDataStream& otherValue) const
 	{
 		ValueType other;

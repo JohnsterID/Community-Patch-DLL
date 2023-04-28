@@ -5664,7 +5664,7 @@ bool CvUnit::jumpToNearestValidPlot()
 	}
 
 	//we want lowest scores first
-	std::stable_sort(candidates.begin(), candidates.end());
+	std::sort(candidates.begin(), candidates.end());
 
 	for (size_t i = 0; i < candidates.size(); i++)
 	{
@@ -15836,11 +15836,16 @@ struct ScoredUnit
 	int distanceToPlot;
 	CvUnit* unit;
 
-	ScoredUnit(int distanceToPlot, CvUnit* unit) : distanceToPlot(distanceToPlot), unit(unit) {}
+	std::pair<int, int> comparing;
+
+	ScoredUnit(int distanceToPlot, CvUnit* unit) :
+		distanceToPlot(distanceToPlot),
+		unit(unit),
+		comparing(std::make_pair(distanceToPlot, unit->GetID())) {}
 
 	bool operator > (const ScoredUnit& o) const
 	{
-		return (distanceToPlot > o.distanceToPlot);
+		return (comparing > o.comparing);
 	}
 };
 
@@ -15850,16 +15855,21 @@ struct ScoredPlot
 	int distanceToPlot;
 	CvPlot* plot;
 
-	ScoredPlot(int distanceToPlot, CvPlot* plot) : distanceToPlot(distanceToPlot), plot(plot) {}
+	std::pair<int, int> comparing;
+
+	ScoredPlot(int distanceToPlot, CvPlot* plot) :
+		distanceToPlot(distanceToPlot),
+		plot(plot),
+		comparing(std::make_pair(distanceToPlot, plot->GetPlotIndex())) {}
 
 	bool operator > (const ScoredPlot& o) const
 	{
-		return (distanceToPlot > o.distanceToPlot);
+		return (comparing > o.comparing);
 	}
 
   bool operator < (const ScoredPlot& o) const
   {
-    return (distanceToPlot < o.distanceToPlot);
+    return (comparing < o.comparing);
   }
 };
 
@@ -15911,7 +15921,7 @@ void CvUnit::DoSquadMovement(CvPlot* pDestPlot)
 		int dist = plotDistance(*pLoopUnit->plot(), *pDestPlot);
 		unitsToMoveByDistance.push_back(ScoredUnit(dist, pLoopUnit));
 	}
-	std::stable_sort(unitsToMoveByDistance.begin(), unitsToMoveByDistance.end(), greater<ScoredUnit>());
+	std::sort(unitsToMoveByDistance.begin(), unitsToMoveByDistance.end(), greater<ScoredUnit>());
 
 	// Generate a list of eligible plots for these units, only adding another
 	// ring when there are still insufficient plots for the current selection
@@ -29698,7 +29708,7 @@ int CvUnit::ComputePath(const CvPlot* pToPlot, int iFlags, int iMaxTurns, bool b
 			}
 		}
 
-		std::stable_sort(eligiblePlots.begin(), eligiblePlots.end(), less<ScoredPlot>());
+		std::sort(eligiblePlots.begin(), eligiblePlots.end(), less<ScoredPlot>());
 		if (!eligiblePlots.empty())
 		{
 			pDestPlot = eligiblePlots.front().plot;

@@ -4345,7 +4345,13 @@ void CvDealAI::DoAddStrategicResourceToThem(CvDeal* pDeal, PlayerTypes eThem, in
 			if (iItemValue == INT_MAX)
 				continue;
 
-			vOptions.push_back(OptionWithScore<TradeItem>(TradeItem(eResource, iResourceQuantity), iItemValue));
+			vOptions.push_back(
+				OptionWithScore<TradeItem>(
+					TradeItem(eResource, iResourceQuantity), 
+					iItemValue,
+					eResource
+				)
+			);
 		}
 	}
 
@@ -4434,7 +4440,13 @@ void CvDealAI::DoAddStrategicResourceToUs(CvDeal* pDeal, PlayerTypes eThem, int&
 			if (iItemValue == INT_MAX)
 				continue;
 
-			vOptions.push_back(OptionWithScore<TradeItem>(TradeItem(eResource, iResourceQuantity), iItemValue));
+			vOptions.push_back(
+				OptionWithScore<TradeItem>(
+					TradeItem(eResource, iResourceQuantity),
+					iItemValue,
+					eResource
+				)
+			);
 		}
 	}
 

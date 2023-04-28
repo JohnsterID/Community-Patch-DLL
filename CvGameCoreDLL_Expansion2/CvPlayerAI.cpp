@@ -744,13 +744,13 @@ void CvPlayerAI::AI_considerAnnex()
 			iWeight += 3;
 
 		int iScore = iWeight * pCity->getYieldRateTimes100(YIELD_PRODUCTION, false);
-		options.push_back( OptionWithScore<CvCity*>(pCity,iScore) );
+		options.push_back( OptionWithScore<CvCity*>(pCity,iScore,pCity->GetID()) );
 	}
 
 	if (!options.empty())
 	{
 		//descending by default
-		std::stable_sort(options.begin(), options.end());
+		sort(options.begin(), options.end());
 
 		CvCity* pTargetCity = options.front().option;
 		if (pTargetCity)
@@ -1926,7 +1926,7 @@ CvPlot* CvPlayerAI::FindBestMerchantTargetPlotForCash(CvUnit* pMerchant)
 		}
 	}
 
-	std::stable_sort(vCandidates.begin(), vCandidates.end());
+	sort(vCandidates.begin(), vCandidates.end());
 
 	int iFlags = CvUnit::MOVEFLAG_NO_ENEMY_TERRITORY | CvUnit::MOVEFLAG_APPROX_TARGET_RING1 | CvUnit::MOVEFLAG_APPROX_TARGET_NATIVE_DOMAIN;
 	for (size_t i = 0; i < vCandidates.size(); i++)

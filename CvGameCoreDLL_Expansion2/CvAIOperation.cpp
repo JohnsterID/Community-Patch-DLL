@@ -487,7 +487,13 @@ int CvAIOperation::GrabUnitsFromTheReserves(CvPlot* pMusterPlot, CvPlot* pTarget
 			if (pLoopUnit->getDomainType() == DOMAIN_LAND && pLoopUnit->plot()->getArea() != pMusterPlot->getArea())
 				iTurnsToReachCheckpoint++;
 
-			choices.push_back(OptionWithScore<int>(pLoopUnit->GetID(), 10000 + pLoopUnit->GetPower() - iTurnsToReachCheckpoint * 30));
+			choices.push_back(
+				OptionWithScore<int>(
+					pLoopUnit->GetID(),
+					10000 + pLoopUnit->GetPower() - iTurnsToReachCheckpoint * 30,
+					pLoopUnit->GetID()
+				)
+			);
 		}
 	}
 
