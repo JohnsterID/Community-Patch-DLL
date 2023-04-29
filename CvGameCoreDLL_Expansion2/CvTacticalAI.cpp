@@ -454,6 +454,9 @@ void CvTacticalAI::FindTacticalTargets()
 					{
 						CvUnit* pUnit = pLoopPlot->getUnitByIndex(iUnitLoop);
 
+						if (!pUnit)
+							continue;
+
 						//barbarians do not attack civilians before the first city was founded.
 						if (!m_pPlayer->isBarbarian() || GET_PLAYER(pUnit->getOwner()).GetNumCitiesFounded() > 0)
 						{
@@ -1022,7 +1025,8 @@ void CvTacticalAI::ExecuteBarbarianTheft()
 
 struct STargetWithTwoScoresTiebreak
 {
-	STargetWithTwoScoresTiebreak(CvTacticalTarget* pTarget_, CvPlot* pPlot_, int score1_, int score2_) : pTarget(pTarget_), pPlot(pPlot_), score1(score1_), score2(score2_) {}
+	STargetWithTwoScoresTiebreak(CvTacticalTarget* pTarget_, CvPlot* pPlot_, int score1_, int score2_) :
+		pTarget(pTarget_), pPlot(pPlot_), score1(score1_), score2(score2_) {}
 
 	bool operator<(const STargetWithTwoScoresTiebreak& other) const
 	{
@@ -2127,6 +2131,10 @@ void CvTacticalAI::PlotReinforcementMoves(CvTacticalDominanceZone* pTargetZone)
 		for (int i = 0; i < pPlot->getNumUnits(); i++)
 		{
 			CvUnit* pUnit = pPlot->getUnitByIndex(i);
+
+			if (!pUnit)
+				continue;
+
 			if (pUnit->getOwner()==m_pPlayer->GetID() && pUnit->canUseForTacticalAI())
 			{
 				CvTacticalDominanceZone* pUnitZone = GetTacticalAnalysisMap()->GetZoneByPlot(pUnit->plot());
@@ -3548,7 +3556,13 @@ bool CvTacticalAI::ExecuteSpotterMove(const vector<CvUnit*>& vUnits, CvPlot* pTa
 				if (pPathPlot->canSeePlot(pTargetPlot, pUnit->getTeam(), pUnit->visibilityRange(), NO_DIRECTION))
 				{
 					//or should we use danger as the sorting criterion?
-					vOptions.push_back(OptionWithScore<pair<CvUnit*, CvPlot*>>(make_pair(pUnit,pPathPlot),path[i].m_iMoves));
+					vOptions.push_back(
+						OptionWithScore<pair<CvUnit*, CvPlot*>>(
+							make_pair(pUnit,pPathPlot),
+							path[i].m_iMoves,
+							pPathPlot->GetPlotIndex()
+						)
+					);
 				}
 			}
 		}
@@ -3696,7 +3710,10 @@ bool CvTacticalAI::PositionUnitsAroundTarget(const vector<CvUnit*>& vUnits, CvPl
 	//we want to move the civilians last so they have a better chance of getting cover
 	struct PrSortCombatFirst
 	{
-		bool operator()(const CvUnit* lhs, const CvUnit* rhs) const { return (lhs->IsCombatUnit() ? 0 : 1) < (rhs->IsCombatUnit() ? 0 : 1); }
+		bool operator()(const CvUnit* lhs, const CvUnit* rhs) const { 
+			return std::make_pair(lhs->IsCombatUnit() ? 0 : 1, lhs->GetID()) <
+				std::make_pair(rhs->IsCombatUnit() ? 0 : 1, rhs->GetID());
+		}
 	};
 	std::sort(remaining.begin(), remaining.end(), PrSortCombatFirst());
 
@@ -3758,12 +3775,20 @@ void CvTacticalAI::ExecuteLandingOperation(CvPlot* pTargetPlot)
 
 	struct SAssignment
 	{
-		SAssignment( CvUnit* unit, CvPlot* plot, int score, bool isAttack ) : pUnit(unit), pPlot(plot), iScore(score), bAttack(isAttack) {}
+		SAssignment( CvUnit* unit, CvPlot* plot, int score, bool isAttack ) :
+			pUnit(unit),
+			pPlot(plot),
+			iScore(score),
+			bAttack(isAttack),
+			comparing(std::make_pair(iScore, pPlot->GetPlotIndex())) {}
 		CvUnit* pUnit;
 		CvPlot* pPlot;
 		int iScore;
 		bool bAttack;
-		bool operator<(const SAssignment& rhs) { return iScore>rhs.iScore; }
+		std::pair<int, int> comparing;
+		bool operator<(const SAssignment& rhs) { 
+			return comparing > rhs.comparing; 
+		}
 	};
 
 	struct PrPlotMatch
@@ -5696,7 +5721,13 @@ CvPlot* CvTacticalAI::FindNearbyTarget(CvUnit* pUnit, int iMaxTurns, bool bOffen
 			if (pUnit->plot() == pPlot)
 				return pPlot;
 
-			candidates.push_back(OptionWithScore<CvPlot*>(pPlot, plotDistance(*pPlot, *pUnit->plot())));
+			candidates.push_back(
+				OptionWithScore<CvPlot*>(
+					pPlot, 
+					plotDistance(*pPlot, *pUnit->plot()),
+					pPlot->GetPlotIndex()
+				)
+			);
 		}
 	}
 
@@ -5807,7 +5838,8 @@ bool CvTacticalAI::IsHighPriorityCivilianTarget(CvTacticalTarget* pTarget)
 						{
 							if((pLoopPlot->defenseModifier(m_pPlayer->getTeam(), false, false) > 10) && pLoopPlot->getNumUnits() > 0)
 							{
-								if(pLoopPlot->getUnitByIndex(0)->getOwner() == m_pPlayer->GetID())
+								CvUnit* pLoopUnit = pLoopPlot->getUnitByIndex(0);
+								if(pLoopUnit && pLoopUnit->getOwner() == m_pPlayer->GetID())
 								{
 									bRtnValue = false;
 								}
@@ -5867,7 +5899,8 @@ bool CvTacticalAI::IsMediumPriorityCivilianTarget(CvTacticalTarget* pTarget)
 					{
 						if((pLoopPlot->defenseModifier(m_pPlayer->getTeam(), false, false) > 15) && pLoopPlot->getNumUnits() > 0)
 						{
-							if(pLoopPlot->getUnitByIndex(0)->getOwner() == m_pPlayer->GetID())
+							CvUnit* pLoopUnit = pLoopPlot->getUnitByIndex(0);
+							if(pLoopUnit && pLoopUnit->getOwner() == m_pPlayer->GetID())
 							{
 								bRtnValue = false;
 							}
@@ -6344,21 +6377,29 @@ CvPlot* TacticalAIHelpers::FindSafestPlotInReach(const CvUnit* pUnit, bool bAllo
 
 		if(bIsInCityOrCitadel)
 		{
-			aCityList.push_back( OptionWithScore<CvPlot*>(pPlot,iScore) );
+			aCityList.push_back(
+				OptionWithScore<CvPlot*>(pPlot,iScore,pPlot->GetPlotIndex())
+			);
 		}
 		else if(bIsInCover) //mostly relevant for civilians
 		{
-			aCoverList.push_back( OptionWithScore<CvPlot*>(pPlot,iScore) );
+			aCoverList.push_back(
+				OptionWithScore<CvPlot*>(pPlot,iScore,pPlot->GetPlotIndex())
+			);
 		}
 		else if(bIsZeroDanger)
 		{
 			//if danger is zero, look at distance to closest owned city instead
 			//idea: could also look at number of plots reachable from pPlot to avoid dead ends
-			aZeroDangerList.push_back( OptionWithScore<CvPlot*>(pPlot, bIsInTerritory ? iCityDistance : iCityDistance*2) );
+			aZeroDangerList.push_back(
+				OptionWithScore<CvPlot*>(pPlot, bIsInTerritory ? iCityDistance : iCityDistance*2, pPlot->GetPlotIndex())
+			);
 		}
 		else if(!bWouldEmbark || bAllowEmbark)
 		{
-			aDangerList.push_back( OptionWithScore<CvPlot*>(pPlot,iScore) );
+			aDangerList.push_back(
+				OptionWithScore<CvPlot*>(pPlot,iScore, pPlot->GetPlotIndex())
+			);
 		}
 	}
 
@@ -8037,6 +8078,9 @@ CvTacticalPlot::CvTacticalPlot(const CvPlot* plot, PlayerTypes ePlayer, const ve
 	for (int i = 0; i < pPlot->getNumUnits(); i++)
 	{
 		CvUnit* pPlotUnit = pPlot->getUnitByIndex(i);
+
+		if (!pPlotUnit)
+			continue;
 
 		//ignore zombies
 		if (pPlotUnit->isDelayedDeath())

@@ -1020,7 +1020,8 @@ struct OrderIndex
 };
 bool sortHotkeyPriority(const OrderIndex& orderIndex1, const OrderIndex& orderIndex2)
 {
-	return (orderIndex1.m_iPriority > orderIndex2.m_iPriority);
+	return std::make_pair(orderIndex1.m_iPriority, orderIndex1.m_iIndex) >
+		std::make_pair(orderIndex2.m_iPriority, orderIndex2.m_iIndex);
 }
 
 template <class T>

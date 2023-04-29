@@ -203,9 +203,11 @@ public:
 	typedef typename VarTraits::ValueType ValueType;
 	typedef typename VarTraits::ContainerType ContainerType;
 	typedef typename VarTraits::SyncVarsType SyncVarsType;
+	std::string nameStr;
 
 	CvSyncVar()
-		: CvSyncVarBase<ValueType>(EmptyString, getContainer().getSyncArchive(), currentValue())
+		: CvSyncVarBase<ValueType>(nameStr, getContainer().getSyncArchive(), currentValue()),
+		nameStr(VarTraits::name())
 	{}
 	~CvSyncVar() {}
 
@@ -268,11 +270,59 @@ public:
 	{
 		updateValue();
 	}
+	/*virtual bool compare(FDataStream& otherValue, int playerID, int timestamp) const
+	{
+		ValueType other;
+		otherValue >> other;
+
+		// Check serialization and deserialization logic for ValueType
+		FDataStream testStream;
+		testStream << other;
+		ValueType testValue;
+		testStream >> testValue;
+		if (other != testValue) {
+			std::string errorMsg = "Serialization and deserialization logic for ValueType is inconsistent";
+			gGlobals.getDLLIFace()->netMessageDebugLog(errorMsg);
+			return false;
+		}
+
+		if (other == currentValue()) {
+			return true;
+		}
+		else {
+			std::string desyncInfo = "Desync detected for variable " + name() + "\n";
+			desyncInfo += "Player ID/Network ID: " + FSerialization::toString(playerID) + "\n";
+			desyncInfo += "Timestamp/Frame number: " + FSerialization::toString(timestamp) + "\n";
+			desyncInfo += "Current value: " + FSerialization::toString(currentValue()) + "\n";
+			desyncInfo += "Received value: " + FSerialization::toString(other) + "\n";
+
+			// Add call stack information
+			desyncInfo += "Call stack:\n";
+			for (std::vector< std::pair<std::string, std::string> >::const_iterator iter = callStacks.begin(); iter != callStacks.end(); ++iter) {
+				desyncInfo += "    " + iter->first + " (" + iter->second + ")\n";
+			}
+
+			// Add debug dump information
+			desyncInfo += "Debug dump:\n";
+			desyncInfo += debugDump(callStacks);
+
+			gGlobals.getDLLIFace()->netMessageDebugLog(desyncInfo);
+			return false;
+		}
+
+		return other == currentValue();
+	}*/
 	virtual bool compare(FDataStream& otherValue) const
 	{
 		ValueType other;
 		otherValue >> other;
 		const bool result = other == currentValue();
+
+		if (!result) {
+			// std::string desyncValues = std::string("Desync values, current ") + FSerialization::toString(currentValue()) + "; other " + FSerialization::toString(other) + std::string("\n");
+			// gGlobals.getDLLIFace()->netMessageDebugLog(desyncValues);
+		}
+
 		return result; // Place a conditional breakpoint here to help debug sync errors.
 	}
 	virtual void reset()
@@ -281,7 +331,7 @@ public:
 	}
 	virtual const std::string& name() const
 	{
-		return EmptyString;
+		return nameStr;
 	}
 	virtual void setStackTraceRemark()
 	{
@@ -407,6 +457,7 @@ public:
 		typedef CvSyncArchive<ContainerType>::SyncVars SyncVarsType; \
 		static inline const ValueType& Get(const ContainerType& container) { return container.memberName; } \
 		static inline ValueType& Get(ContainerType& container) { return container.memberName; } \
+		static inline const char* name() { return #memberName; } \
 		static inline const SyncVarsType& GetStorage(const CvSyncVar<memberName##_Traits>& var) { \
 			return *reinterpret_cast<const SyncVarsType*>(reinterpret_cast<const char*>(&var) - offsetof(SyncVarsType, memberName)); \
 		} \

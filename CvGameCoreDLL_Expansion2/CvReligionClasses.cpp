@@ -3941,7 +3941,13 @@ bool CvPlayerReligions::UpdateStateReligion()
 				if (pHolyCity && pHolyCity->getOwner() == ePlayer)
 				{
 					int iValue = GetNumDomesticFollowers(it->m_eReligion);
-					vHolyReligions.push_back(OptionWithScore<ReligionTypes>(it->m_eReligion, iValue));
+					vHolyReligions.push_back(
+						OptionWithScore<ReligionTypes>(
+							it->m_eReligion,
+							iValue,
+							it->GetHolyCity()->GetID()
+						)
+					);
 				}
 			}
 		}
@@ -4503,7 +4509,12 @@ bool CvCityReligions::IsForeignMissionaryNearby(ReligionTypes eReligion)
 		for (int iUnitLoop = 0; iUnitLoop < pPlot->getNumUnits(); iUnitLoop++)
 		{
 			CvUnit* pLoopUnit = pPlot->getUnitByIndex(iUnitLoop);
+
+			if (!pLoopUnit)
+				continue;
+
 			CvUnitEntry* pkEntry = GC.getUnitInfo(pLoopUnit->getUnitType());
+
 			if (pkEntry && pkEntry->IsSpreadReligion())
 			{
 				if (pLoopUnit->getOwner() != m_pCity->getOwner() && pLoopUnit->GetReligionData()->GetReligion() != eReligion)
@@ -5489,7 +5500,8 @@ void CvCityReligions::RecomputeFollowers(CvReligiousFollowChangeReason eReason, 
 
 	struct PrSortByPressureDesc {
 		//no religion should go last
-		bool operator()(const CvReligionInCity& lhs, const CvReligionInCity& rhs) const { return lhs.m_iPressure > rhs.m_iPressure && lhs.m_eReligion != NO_RELIGION; }
+		bool operator()(const CvReligionInCity& lhs, const CvReligionInCity& rhs) const {
+			return lhs.m_iPressure > rhs.m_iPressure && lhs.m_eReligion != NO_RELIGION; }
 	};
 
 	//just for convenience, sort the local religions by accumulated pressure
@@ -7023,6 +7035,10 @@ bool CvReligionAI::DoReligionDefenseInCities()
 			for (int i = 0; i < pPlot->getNumUnits(); i++)
 			{
 				CvUnit* pUnit = pPlot->getUnitByIndex(i);
+
+				if (!pUnit)
+					continue;
+
 				//if it's a foreign prophet with the wrong religion ...
 				if (pUnit->getTeam() != m_pPlayer->getTeam() && pUnit->AI_getUnitAIType() == UNITAI_PROPHET && pUnit->GetReligionData()->GetReligion() != eDesired)
 				{

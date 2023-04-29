@@ -1120,7 +1120,9 @@ void CvBuilderTaskingAI::AddImprovingResourcesDirectives(CvUnit* pUnit, CvPlot* 
 				LogInfo(strTemp, m_pPlayer);
 			}
 
-			m_aDirectives.push_back( OptionWithScore<BuilderDirective>(directive, iWeight));
+			m_aDirectives.push_back(
+				OptionWithScore<BuilderDirective>(directive, iWeight, pPlot->GetPlotIndex())
+			);
 		}
 	}
 }
@@ -1359,7 +1361,9 @@ void CvBuilderTaskingAI::AddImprovingPlotsDirectives(CvUnit* pUnit, CvPlot* pPlo
 			LogInfo(strTemp, m_pPlayer);
 		}
 
-		m_aDirectives.push_back( OptionWithScore<BuilderDirective>(directive, iWeight));
+		m_aDirectives.push_back(
+			OptionWithScore<BuilderDirective>(directive, iWeight, pPlot->GetPlotIndex())
+		);
 	}
 }
 
@@ -1441,7 +1445,9 @@ void CvBuilderTaskingAI::AddRemoveRouteDirectives(CvUnit* pUnit, CvPlot* pPlot, 
 		LogInfo(strTemp, m_pPlayer);
 	}
 
-	m_aDirectives.push_back( OptionWithScore<BuilderDirective>(directive, iWeight));
+	m_aDirectives.push_back(
+		OptionWithScore<BuilderDirective>(directive, iWeight, pPlot->GetPlotIndex())
+	);
 }
 
 /// Adds a directive if the unit can construct a road in the plot
@@ -1502,7 +1508,9 @@ void CvBuilderTaskingAI::AddRouteDirectives(CvUnit* pUnit, CvPlot* pPlot, CvCity
 		LogInfo(strTemp, m_pPlayer);
 	}
 
-	m_aDirectives.push_back( OptionWithScore<BuilderDirective>(directive, iWeight));
+	m_aDirectives.push_back(
+		OptionWithScore<BuilderDirective>(directive, iWeight, pPlot->GetPlotIndex())
+	);
 }
 
 /// Determines if the builder should "chop" the feature in the tile
@@ -1703,7 +1711,9 @@ void CvBuilderTaskingAI::AddChopDirectives(CvUnit* pUnit, CvPlot* pPlot, CvCity*
 		//directive.m_iGoldCost = m_pPlayer->getBuildCost(pPlot, eChopBuild);
 		directive.m_sMoveTurnsAway = iMoveTurnsAway;
 
-		m_aDirectives.push_back( OptionWithScore<BuilderDirective>(directive, iWeight));
+		m_aDirectives.push_back(
+			OptionWithScore<BuilderDirective>(directive, iWeight, pPlot->GetPlotIndex())
+		);
 	}
 }
 
@@ -1767,7 +1777,9 @@ void CvBuilderTaskingAI::AddRepairTilesDirectives(CvUnit* pUnit, CvPlot* pPlot, 
 		//directive.m_iGoldCost = m_pPlayer->getBuildCost(pPlot, eChopBuild);
 		directive.m_sMoveTurnsAway = iMoveTurnsAway;
 
-		m_aDirectives.push_back( OptionWithScore<BuilderDirective>(directive, iWeight));
+		m_aDirectives.push_back(
+			OptionWithScore<BuilderDirective>(directive, iWeight, pPlot->GetPlotIndex())
+		);
 	}
 }
 // Everything means less than zero, hey
@@ -1801,7 +1813,9 @@ void CvBuilderTaskingAI::AddScrubFalloutDirectives(CvUnit* pUnit, CvPlot* pPlot,
 		directive.m_sX = pPlot->getX();
 		directive.m_sY = pPlot->getY();
 		directive.m_sMoveTurnsAway = iMoveTurnsAway;
-		m_aDirectives.push_back( OptionWithScore<BuilderDirective>(directive, iWeight));
+		m_aDirectives.push_back(
+			OptionWithScore<BuilderDirective>(directive, iWeight, pPlot->GetPlotIndex())
+		);
 	}
 }
 
