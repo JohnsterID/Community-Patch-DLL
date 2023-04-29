@@ -270,13 +270,13 @@ public:
 	{
 		updateValue();
 	}
-	/*virtual bool compare(FDataStream& otherValue, int playerID, int timestamp) const
+	bool compare(FDataStream& otherValue, int playerID, int timestamp) const
 	{
 		ValueType other;
 		otherValue >> other;
 
 		// Check serialization and deserialization logic for ValueType
-		FDataStream testStream;
+		FMemoryStream testStream;
 		testStream << other;
 		ValueType testValue;
 		testStream >> testValue;
@@ -297,6 +297,7 @@ public:
 			desyncInfo += "Received value: " + FSerialization::toString(other) + "\n";
 
 			// Add call stack information
+			std::vector< std::pair<std::string, std::string> > callStacks;
 			desyncInfo += "Call stack:\n";
 			for (std::vector< std::pair<std::string, std::string> >::const_iterator iter = callStacks.begin(); iter != callStacks.end(); ++iter) {
 				desyncInfo += "    " + iter->first + " (" + iter->second + ")\n";
@@ -309,18 +310,17 @@ public:
 			gGlobals.getDLLIFace()->netMessageDebugLog(desyncInfo);
 			return false;
 		}
+	}
 
-		return other == currentValue();
-	}*/
-	virtual bool compare(FDataStream& otherValue) const
+	bool compare(FDataStream& otherValue) const
 	{
 		ValueType other;
 		otherValue >> other;
 		const bool result = other == currentValue();
 
 		if (!result) {
-			// std::string desyncValues = std::string("Desync values, current ") + FSerialization::toString(currentValue()) + "; other " + FSerialization::toString(other) + std::string("\n");
-			// gGlobals.getDLLIFace()->netMessageDebugLog(desyncValues);
+			std::string desyncValues = std::string("Desync values, current ") + FSerialization::toString(currentValue()) + "; other " + FSerialization::toString(other) + std::string("\n");
+			gGlobals.getDLLIFace()->netMessageDebugLog(desyncValues);
 		}
 
 		return result; // Place a conditional breakpoint here to help debug sync errors.
