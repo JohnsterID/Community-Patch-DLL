@@ -538,12 +538,17 @@ struct STacticalAssignment
 	int iDamage; //just in case of attack, not set in constructor
 	int iSelfDamage; //only relevant for melee ...
 
+	std::pair<int, int> comparing;
+
 	//convenience constructor
 	STacticalAssignment(int iFromPlot = 0, int iToPlot = 0, int iUnitID_ = 0, int iRemainingMoves_ = 0, eUnitMovementStrategy eMoveType_ = MS_NONE, int iScore_ = 0, eUnitAssignmentType eType_ = A_FINISH) :
-		iFromPlotIndex(iFromPlot), iToPlotIndex(iToPlot), iUnitID(iUnitID_), iRemainingMoves(iRemainingMoves_), eMoveType(eMoveType_), iScore(iScore_), eAssignmentType(eType_), iDamage(0), iSelfDamage(0) {}
+		iFromPlotIndex(iFromPlot), iToPlotIndex(iToPlot), iUnitID(iUnitID_), iRemainingMoves(iRemainingMoves_), eMoveType(eMoveType_), iScore(iScore_), eAssignmentType(eType_), iDamage(0), iSelfDamage(0),
+		comparing (std::make_pair(iScore, iToPlotIndex)) {}
 
 	//sort descending
-	bool operator<(const STacticalAssignment& rhs) const { return iScore>rhs.iScore; }
+	bool operator<(const STacticalAssignment& rhs) const { 
+		return comparing > rhs.comparing; 
+	}
 	bool operator==(const STacticalAssignment& rhs) const;
 };
 
@@ -568,16 +573,23 @@ struct SUnitStats
 	eUnitMovementStrategy eStrategy;
 	const CvUnit* pUnit;
 
+	std::pair<int, int> comparing;
+
 	//convenience constructor - do not use pUnit here because it's initialized last! (pUnit_ is ok)
 	SUnitStats(const CvUnit* pUnit_, int iImportance, eUnitMovementStrategy eStrategy_) :
 		pUnit(pUnit_), iUnitID(pUnit_->GetID()), iPlotIndex(pUnit_->plot()->GetPlotIndex()), iAttacksLeft(pUnit_->getNumAttacks() - pUnit_->getNumAttacksMadeThisTurn()), 
-		iMovesLeft(pUnit_->getMoves()), iImportanceScore(iImportance), iSelfDamage(0), eLastAssignment(A_INITIAL), eStrategy(eStrategy_) {}
+		iMovesLeft(pUnit_->getMoves()), iImportanceScore(iImportance), iSelfDamage(0), eLastAssignment(A_INITIAL), eStrategy(eStrategy_),
+		comparing(std::make_pair(iImportanceScore, pUnit->GetID())) {}
 	//use with caution, this may lead to an inconsistent state
 	SUnitStats(const CvUnit* pUnit_, int iUnit, int iPlot, int iAttacks, int iMoves, int iImportance, eUnitMovementStrategy eStrategy_) : 
 		pUnit(pUnit_), iUnitID(iUnit), iPlotIndex(iPlot), iAttacksLeft(iAttacks), iMovesLeft(iMoves), iImportanceScore(iImportance), iSelfDamage(0),
-		eLastAssignment(A_INITIAL), eStrategy(eStrategy_) {}
+		eLastAssignment(A_INITIAL), eStrategy(eStrategy_),
+		comparing(std::make_pair(iImportanceScore, pUnit->GetID())) {}
 
-	bool operator<(const SUnitStats& rhs) { return iImportanceScore > rhs.iImportanceScore; } //sort descending by default
+	//sort descending by default
+	bool operator<(const SUnitStats& rhs) { 
+		return comparing > rhs.comparing; 
+	} 
 };
 
 struct SPathFinderStartPos
@@ -873,8 +885,11 @@ public:
 	{
 		bool operator()(const CvTacticalPosition* lhs, const CvTacticalPosition* rhs) const
 		{
+			//equal ... try to use number of moves as a tiebraker
 			if (lhs->getScoreTotal() == rhs->getScoreTotal())
-				//equal ... try to use number of moves as a tiebraker
+				if (lhs->getAssignments().size() == rhs->getAssignments().size())
+					return lhs->getID() < rhs->getID();
+
 				return lhs->getAssignments().size() < rhs->getAssignments().size();
 			
 			//regular descending sort. only makes sense for "completed" positions!

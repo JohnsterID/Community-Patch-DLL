@@ -348,6 +348,7 @@ struct SPatrolTarget {
 	CvPlot* pTarget;
 	CvPlot* pWorstEnemy; //may be null
 	int iThreatLevel;
+	std::pair<int, int> comparing;
 
 	SPatrolTarget();
 	SPatrolTarget(CvPlot* target, CvPlot* neighbor, int iThreat);

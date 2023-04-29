@@ -1037,10 +1037,13 @@ SYNC_ARCHIVE_END()
 struct SPlotWithScore
 {
 	SPlotWithScore() {}
-	SPlotWithScore(CvPlot* pPlot_, int score_) : pPlot(pPlot_), score(score_) {}
+	SPlotWithScore(CvPlot* pPlot_, int score_) : 
+		pPlot(pPlot_), 
+		score(score_), 
+		comparing(std::make_pair(score_, pPlot_->GetPlotIndex())) {}
     bool operator<(const SPlotWithScore& other) const //for sorting
     {
-        return score < other.score;
+        return comparing < other.comparing;
     }
     bool operator<(const int ref) const
     {
@@ -1048,12 +1051,13 @@ struct SPlotWithScore
     }
     bool operator==(const SPlotWithScore& other) const //for std::find
     {
-        return pPlot == other.pPlot;
+        return comparing == other.comparing;
     }
 
 	template<typename PlotWithScore, typename Visitor>
 	static void Serialize(PlotWithScore& plotWithScore, Visitor& visitor);
 
+	std::pair<int, int> comparing;
 	CvPlot* pPlot;
 	int score;
 };

@@ -3633,7 +3633,7 @@ CvCity* CvPlayer::acquireCity(CvCity* pCity, bool bConquest, bool bGift)
 			if (strcmp(szCivKey, "CIVILIZATION_INDONESIA") == 0)
 			{
 				CvUnit *pConqueringUnit = pCityPlot->getUnitByIndex(0);
-				if (pConqueringUnit->getUnitType() == (UnitTypes)GC.getInfoTypeForString("UNIT_KRIS_SWORDSMAN", true))
+				if (pConqueringUnit && pConqueringUnit->getUnitType() == (UnitTypes)GC.getInfoTypeForString("UNIT_KRIS_SWORDSMAN", true))
 				{
 					PromotionTypes ePromotion = (PromotionTypes)GC.getInfoTypeForString("PROMOTION_ENEMY_BLADE", true);
 					if (pConqueringUnit->isHasPromotion(ePromotion))
@@ -3672,7 +3672,7 @@ CvCity* CvPlayer::acquireCity(CvCity* pCity, bool bConquest, bool bGift)
 			{
 				CvUnit *pConqueringUnit = pCityPlot->getUnitByIndex(0);
 				PromotionTypes ePromotion = (PromotionTypes)GC.getInfoTypeForString("PROMOTION_PICKETT", true);
-				if (pConqueringUnit->isHasPromotion(ePromotion))
+				if (pConqueringUnit && pConqueringUnit->isHasPromotion(ePromotion))
 				{
 					gDLL->UnlockAchievement(ACHIEVEMENT_XP2_59);
 				}
@@ -5278,7 +5278,10 @@ vector<CvCity*> CvPlayer::GetThreatenedCities(bool bCoastalOnly)
 	vector<CvCity*> result;
 	struct SortByThreatLevel
 	{
-		bool operator()(const CvCity* lhs, const CvCity* rhs) const { return lhs->getThreatValue() > rhs->getThreatValue(); }
+		bool operator()(const CvCity* lhs, const CvCity* rhs) const { 
+			return make_pair(lhs->getThreatValue(), lhs->GetID()) >
+				make_pair(rhs->getThreatValue(), rhs->GetID());
+		}
 	};
 
 	int iLoop = 0;
@@ -47194,7 +47197,6 @@ void CvPlayer::Serialize(Player& player, Visitor& visitor)
 	visitor(player.m_iAbleToAnnexCityStatesCount);
 	visitor(player.m_iOnlyTradeSameIdeology);
 	visitor(player.m_iSupplyFreeUnits);
-	visitor(player.m_aistrInstantYield);
 	visitor(player.m_abActiveContract);
 	visitor(player.m_iJFDReformCooldownRate);
 	visitor(player.m_iJFDGovernmentCooldownRate);
@@ -47317,7 +47319,6 @@ void CvPlayer::Serialize(Player& player, Visitor& visitor)
 	visitor(player.m_iNumFreePolicies);
 	visitor(player.m_iNumFreePoliciesEver);
 	visitor(player.m_iNumFreeTenets);
-	visitor(player.m_iLastSliceMoved);
 	visitor(player.m_uiStartTime);
 	visitor(player.m_bHasUUPeriod);
 	visitor(player.m_bNoNewWars);

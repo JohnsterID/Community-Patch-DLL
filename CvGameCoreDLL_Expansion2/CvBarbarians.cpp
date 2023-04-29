@@ -1437,7 +1437,7 @@ UnitTypes CvBarbarians::GetRandomBarbarianUnitType(CvPlot* pPlot, UnitAITypes eP
 		}
 
 		if (iScore > 0)
-			candidates.push_back(OptionWithScore<UnitTypes>(eLoopUnit, iScore));
+			candidates.push_back(OptionWithScore<UnitTypes>(eLoopUnit, iScore, eLoopUnit));
 	}
 
 	if (candidates.empty())

@@ -670,7 +670,7 @@ void CvCityStrategyAI::PrecalcYieldStats()
 		int iYieldPerPop100 = (iYield*100) / max(1, m_pCity->getPopulation());
 		int iDeviation = iYieldPerPop100 - (int)expectedYieldPerPop[iI];
 
-		deviations.push_back( OptionWithScore<YieldTypes>(eYield,iDeviation) );
+		deviations.push_back( OptionWithScore<YieldTypes>(eYield,iDeviation, eYield) );
 	}
 
 	//this sorts in descending order

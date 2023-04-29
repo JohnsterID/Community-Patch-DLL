@@ -744,7 +744,7 @@ void CvPlayerAI::AI_considerAnnex()
 			iWeight += 3;
 
 		int iScore = iWeight * pCity->getYieldRateTimes100(YIELD_PRODUCTION, false);
-		options.push_back( OptionWithScore<CvCity*>(pCity,iScore) );
+		options.push_back( OptionWithScore<CvCity*>(pCity,iScore,pCity->GetID()) );
 	}
 
 	if (!options.empty())

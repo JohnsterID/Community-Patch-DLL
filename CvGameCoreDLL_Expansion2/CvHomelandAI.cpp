@@ -4065,7 +4065,7 @@ void CvHomelandAI::ExecuteGeneralMoves()
 				for (int iUnitLoop = 0; iUnitLoop < pTarget->getNumUnits(); iUnitLoop++)
 				{
 					CvUnit *pLoopUnit = pTarget->getUnitByIndex(iUnitLoop);
-					if (pLoopUnit->IsGreatGeneral() && pLoopUnit->GetID() != pUnit->GetID())
+					if (pLoopUnit && pLoopUnit->IsGreatGeneral() && pLoopUnit->GetID() != pUnit->GetID())
 						bOccupied = true;
 				}
 
@@ -5274,6 +5274,10 @@ CvPlot* CvHomelandAI::FindArchaeologistTarget(CvUnit *pUnit)
 			for (int iUnitLoop = 0; iUnitLoop < pTarget->getNumUnits(); iUnitLoop++)
 			{
 				CvUnit *pLoopUnit = pTarget->getUnitByIndex(iUnitLoop);
+
+				if (!pLoopUnit)
+					continue;
+
 				if (pLoopUnit->AI_getUnitAIType() != UNITAI_ARCHAEOLOGIST)
 					continue;
 				
@@ -6063,6 +6067,7 @@ SPatrolTarget::SPatrolTarget()
 	pTarget = NULL;
 	pWorstEnemy = NULL;
 	iThreatLevel = 0;
+	comparing = std::make_pair(iThreatLevel, 0);
 }
 
 SPatrolTarget::SPatrolTarget(CvPlot * target, CvPlot * neighbor, int iThreat)
@@ -6070,12 +6075,13 @@ SPatrolTarget::SPatrolTarget(CvPlot * target, CvPlot * neighbor, int iThreat)
 	pTarget = target;
 	pWorstEnemy = neighbor;
 	iThreatLevel = iThreat;
+	comparing = std::make_pair(iThreatLevel, pTarget->GetPlotIndex());
 }
 
 bool SPatrolTarget::operator<(const SPatrolTarget & rhs) const
 {
 	//sort descending!
-	return iThreatLevel > rhs.iThreatLevel;
+	return comparing > rhs.comparing;
 }
 
 bool SPatrolTarget::operator==(const SPatrolTarget & rhs) const
