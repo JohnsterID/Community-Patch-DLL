@@ -12,16 +12,26 @@
 #ifndef _CVASSERT_H
 #define _CVASSERT_H
 #pragma once
-
 #include <string>
 #include <set>
 
-#ifndef _WIN32
+#ifdef _WIN32
+#include <Windows.h>
+#else
 #include <cstdio>
 #endif
 
 bool CvAssertDlg(const char* expr, const char* szFile, unsigned int uiLine, bool& bIgnoreAlways, const char* msg) {
 #ifdef _WIN32
+#ifndef MB_ICONERROR
+#define MB_ICONERROR 0x00000010L
+#endif
+#ifndef MB_ABORTRETRYIGNORE
+#define MB_ABORTRETRYIGNORE 0x00000002L
+#endif
+#ifndef MB_SETFOREGROUND
+#define MB_SETFOREGROUND 0x00010000L
+#endif
     int nRet = MessageBoxA(NULL, msg, "Assertion Failed", MB_ICONERROR | MB_ABORTRETRYIGNORE | MB_SETFOREGROUND);
 #else
     printf("%s\n%s\n%s\n", msg, "Abort (A)", "Ignore (I)");
@@ -29,7 +39,6 @@ bool CvAssertDlg(const char* expr, const char* szFile, unsigned int uiLine, bool
     fgets(response, 16, stdin);
     int nRet = (response[0] == 'a' || response[0] == 'A') ? 1 : 2;
 #endif
-
     switch (nRet) {
     case 1:
         return true;
@@ -60,41 +69,29 @@ bool CvAssertDlg(const char* expr, const char* szFile, unsigned int uiLine, bool
 
 #ifdef CVASSERT_ENABLE 
 
-#define CvAssertMsg(expr, msg, szFile, uiLine)                                                             \
-{                                                                                           \
-    static bool bIgnoreAlways = false;                                                      \
-    if (!bIgnoreAlways && !(expr))                                                          \
-    {                                                                                       \
-        std::string assertMsg = #expr;                                                       \
-        std::string fileMsg = szFile;                                                        \
-        unsigned int lineMsg = uiLine;                                                       \
-        std::string message = (msg != NULL) ? msg : "";                                      \
-        if (CvAssertDlg(assertMsg.c_str(), fileMsg.c_str(), lineMsg, bIgnoreAlways, message.c_str()))  \
-        {                                                                                   \
-            CVASSERT_BREAKPOINT;                                                            \
-        }                                                                                   \
-    }                                                                                       \
+#define CvAssertMsg(expr, msg)																	\
+{																								\
+    static bool bIgnoreAlways = false;															\
+    if (!bIgnoreAlways && !(expr))																\
+    {																							\
+        if (CvAssertDlg(#expr, __FILE__, __LINE__, bIgnoreAlways, msg))							\
+        { CVASSERT_BREAKPOINT; }																\
+    }																							\
 }
 
-#define CvAssertFmt(expr, fmt, szFile, uiLine, ...)                                                         \
-{                                                                                           \
-    static bool bIgnoreAlways = false;                                                      \
-    if (!bIgnoreAlways && !(expr))                                                          \
-    {                                                                                       \
-        char str[1024];                                                                     \
-        sprintf(str, fmt, __VA_ARGS__);                                                     \
-        std::string assertMsg = #expr;                                                       \
-        std::string fileMsg = szFile;                                                        \
-        unsigned int lineMsg = uiLine;                                                       \
-        std::string message = str;                                                           \
-        if (CvAssertDlg(assertMsg.c_str(), fileMsg.c_str(), lineMsg, bIgnoreAlways, message.c_str()))  \
-        {                                                                                   \
-            CVASSERT_BREAKPOINT;                                                            \
-        }                                                                                   \
-    }                                                                                       \
+#define CvAssertFmt(expr, fmt, ...)																\
+{																								\
+    static bool bIgnoreAlways = false;															\
+    if (!bIgnoreAlways && !(expr))																\
+    {																							\
+        char str[1024];																			\
+        sprintf_s(str, sizeof(str), fmt, __VA_ARGS__);											\
+        if (CvAssertDlg(#expr, __FILE__, __LINE__, bIgnoreAlways, str))							\
+        { CVASSERT_BREAKPOINT; }																\
+    }																							\
 }
 
-#define CvAssert(expr, szFile, uiLine) CvAssertMsg(expr, "", szFile, uiLine)
+#define CvAssert(expr) CvAssertMsg(expr, "")
 
 // An assert that only happens in the when CVASSERT_ENABLE is true AND it is a debug build
 #ifdef _DEBUG
