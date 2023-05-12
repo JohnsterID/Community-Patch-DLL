@@ -262,21 +262,6 @@ int GetPlotYield(CvPlot* pPlot, YieldTypes eYield)
 
 void CvBuilderTaskingAI::ConnectCitiesToCapital(CvCity* pPlayerCapital, CvCity* pTargetCity, RouteTypes eRoute, int iNetGoldTimes100)
 {
-	// for quests we might be targeting a city state ...
-	bool bSamePlayer = (pTargetCity->getOwner() == pPlayerCapital->getOwner());
-
-	// if we already have a connection, bail out
-	bool bIndustrialRoute = (GC.getGame().GetIndustrialRoute() == eRoute);
-	if(bIndustrialRoute)
-	{
-		if (m_pPlayer->GetCityConnections()->AreCitiesDirectlyConnected(pPlayerCapital, pTargetCity, CvCityConnections::CONNECTION_RAILROAD))
-			return;
-	}
-	else if (m_pPlayer->GetCityConnections()->AreCitiesDirectlyConnected(pPlayerCapital, pTargetCity, CvCityConnections::CONNECTION_ROAD))
-	{
-		return;
-	}
-
 	if(pTargetCity->IsRazing())
 	{
 		return;
@@ -303,11 +288,13 @@ void CvBuilderTaskingAI::ConnectCitiesToCapital(CvCity* pPlayerCapital, CvCity* 
 			return;
 	}
 
+	// for quests we might be targeting a city state ...
+	bool bSamePlayer = pTargetCity->getOwner() == pPlayerCapital->getOwner();
+
 	bool bHuman = m_pPlayer->isHuman();
 	// go through the route to see how long it is and how many plots already have roads
 	int iRoadLength = 0;
 	int iPlotsNeeded = 0;
-	int iWildPlots = 0; //plots not under our control ... dangerous
 
 	for (size_t i=0; i<path.vPlots.size(); i++)
 	{
@@ -321,16 +308,9 @@ void CvBuilderTaskingAI::ConnectCitiesToCapital(CvCity* pPlayerCapital, CvCity* 
 
 		iRoadLength++;
 
-		if(pPlot->getRouteType() < eRoute || pPlot->IsRoutePillaged())
+		if ((pPlot->getRouteType() < eRoute || pPlot->IsRoutePillaged()) && !GetSameRouteBenefitFromTrait(pPlot, eRoute))
 			iPlotsNeeded++;
-
-		if (pPlot->getOwner()!=m_pPlayer->GetID())
-			iWildPlots++;
 	}
-
-	//don't build through the wilderness
-	if (iWildPlots>3 && bSamePlayer && !bHuman)
-		return;
 
 	//see if the new route makes sense economically
 	int iValue = -1;
@@ -348,15 +328,17 @@ void CvBuilderTaskingAI::ConnectCitiesToCapital(CvCity* pPlayerCapital, CvCity* 
 		int iSideBenefits = 500 + iRoadLength * 100;
 
 		// give an additional bump if we're almost done (don't get distracted and leave half-finished roads)
-		if (iPlotsNeeded < 3 && iRoadLength - iPlotsNeeded > 3)
+		if (iPlotsNeeded > 0 && iPlotsNeeded < 3)
 			iSideBenefits += 20000;
 
 		//assume one unhappiness is worth gold per turn per city
 		iSideBenefits += pTargetCity->GetUnhappinessFromIsolation() * (m_pPlayer->IsEmpireUnhappy() ? 200 : 100);
 
-		if(bIndustrialRoute)
+		if(GC.getGame().GetIndustrialRoute() == eRoute)
 		{
 			iSideBenefits += (pTargetCity->getYieldRate(YIELD_PRODUCTION, false) * /*25 in CP, 0 in VP*/ GD_INT_GET(INDUSTRIAL_ROUTE_PRODUCTION_MOD));
+			// railroads have extra benefits over normal roads
+			iSideBenefits += 200 + iRoadLength * 350;
 		}
 
 		int iProfit = iGoldForRoute - (iRoadLength*iMaintenancePerTile) + iSideBenefits;
@@ -373,62 +355,100 @@ void CvBuilderTaskingAI::ConnectCitiesToCapital(CvCity* pPlayerCapital, CvCity* 
 		if(!pPlot)
 			break;
 
-		if(pPlot->getRouteType() >= eRoute && !pPlot->IsRoutePillaged())
+		if(pPlot->isCity())
 			continue;
-
-		//don't build roads if our trait gives the same benefit
-		if (m_pPlayer->getBestRoute() == ROUTE_ROAD && m_pPlayer->GetPlayerTraits()->IsRiverTradeRoad() || m_pPlayer->GetPlayerTraits()->IsWoodlandMovementBonus())
-		{
-			if (m_pPlayer->GetPlayerTraits()->IsWoodlandMovementBonus() && (pPlot->getFeatureType() == FEATURE_FOREST || pPlot->getFeatureType() == FEATURE_JUNGLE))
-				continue;
-			
-			if (m_pPlayer->GetPlayerTraits()->IsRiverTradeRoad() && pPlot->isRiver())
-				continue;
-		}
 
 		//remember it
 		AddRoutePlot(pPlot, eRoute, iValue);
 	}
 }
 
-void CvBuilderTaskingAI::ConnectCitiesForShortcuts(CvCity* pCity1, CvCity* pCity2, RouteTypes eRoute)
+void CvBuilderTaskingAI::ConnectCitiesForShortcuts(CvCity* pCity1, CvCity* pCity2, RouteTypes eRoute, int iNetGoldTimes100)
 {
 	// don't connect cities from different owners
 	if(pCity1->getOwner() != pCity2->getOwner())
 		return;
 
-	// if we *don't* already have a basic land connection, bail out
-	SPath existingPath;
-	if (!m_pPlayer->IsCityConnectedToCity(pCity1, pCity2, ROUTE_ROAD, true, &existingPath))
+	// don't connect razing cities
+	if (pCity1->IsRazing() || pCity2->IsRazing())
+		return;
+
+	CvRouteInfo* pRouteInfo = GC.getRouteInfo(eRoute);
+	if (!pRouteInfo)
+	{
+		return;
+	}
+
+	CvCity* pPlayerCapital = m_pPlayer->getCapitalCity();
+	// only build a shortcut if both cities have a connection to the capital (including sea routes)
+	if (!m_pPlayer->IsCityConnectedToCity(pCity1, pPlayerCapital, eRoute, false) || !m_pPlayer->IsCityConnectedToCity(pCity2, pPlayerCapital, eRoute, false))
 		return;
 
 	// build a path between the two cities - this will tend to re-use existing routes, unless the new path is much shorter
 	SPathFinderUserData data(m_pPlayer->GetID(),PT_BUILD_ROUTE,eRoute);
 	SPath newPath = GC.GetStepFinder().GetPath(pCity1->getX(), pCity1->getY(), pCity2->getX(), pCity2->getY(), data);
 
-	//this cannot really happen, but anyway
+	// cities are not on the same landmass? then give up
 	if(!newPath)
 		return;
 
-	//now compare if the new path is shorter or better than the existing path. 
-	//don't use the normalized distance though because we have two different pathfinders here, so it's not quite comparable
-	if (newPath.vPlots.size() < existingPath.vPlots.size() || eRoute>ROUTE_ROAD )
+	// go through the route to see how long it is and how many plots already have roads
+	int iRoadLength = 0;
+	int iPlotsNeeded = 0;
+
+	for (size_t i = 0; i < newPath.vPlots.size(); i++)
 	{
-		for (size_t i=0; i<newPath.vPlots.size(); i++)
+		CvPlot* pPlot = newPath.get(i);
+		if (!pPlot)
+			break;
+
+		//don't count the cities themselves
+		if (pPlot->isCity())
 		{
-			CvPlot* pPlot = newPath.get(i);
-			if(pPlot->getRouteType() >= eRoute && !pPlot->IsRoutePillaged())
-				continue;
-
-			if (m_pPlayer->GetPlayerTraits()->IsWoodlandMovementBonus() && (pPlot->getFeatureType() == FEATURE_FOREST || pPlot->getFeatureType() == FEATURE_JUNGLE))
-				continue;
-
-			if (m_pPlayer->GetPlayerTraits()->IsRiverTradeRoad() && pPlot->isRiver())
-				continue;
-
-			//remember it
-			AddRoutePlot(pPlot, eRoute, 10);
+			// if we are going via a city, that isn't one of the two cities we are connecting, then this shortcut is not needed
+			CvCity* pPlotCity = pPlot->getPlotCity();
+			if (pPlotCity != pCity1 && pPlotCity != pCity2 && pPlotCity->getOwner() == m_pPlayer->GetID())
+				return;
+			continue;
 		}
+
+		iRoadLength++;
+
+		if ((pPlot->getRouteType() < eRoute || pPlot->IsRoutePillaged()) && !GetSameRouteBenefitFromTrait(pPlot, eRoute))
+			iPlotsNeeded++;
+	}
+
+	int iMaintenancePerTile = pRouteInfo->GetGoldMaintenance() * (100 + m_pPlayer->GetImprovementGoldMaintenanceMod());
+
+	//route has side benefits also (movement, village gold, trade route range, religion spread)
+	int iSideBenefits = 500 + iRoadLength * 100;
+
+	if (GC.getGame().GetIndustrialRoute() == eRoute)
+	{
+		// railroads have extra benefits over normal roads
+		iSideBenefits += 200 + iRoadLength * 350;
+	}
+
+	// give an additional bump if we're almost done (don't get distracted and leave half-finished roads)
+	if (iPlotsNeeded > 0 && iPlotsNeeded < 3)
+		iSideBenefits += 20000;
+
+	int iProfit = iSideBenefits - (iRoadLength * iMaintenancePerTile);
+
+	if (iPlotsNeeded > 3 && (iProfit < 0 || (iProfit + iNetGoldTimes100 < 0)))
+		return;
+
+	for (size_t i=0; i<newPath.vPlots.size(); i++)
+	{
+		CvPlot* pPlot = newPath.get(i);
+		if (!pPlot)
+			break;
+
+		if (pPlot->isCity())
+			continue;
+
+		//remember it
+		AddRoutePlot(pPlot, eRoute, iProfit);
 	}
 }
 
@@ -442,6 +462,16 @@ bool CvBuilderTaskingAI::WantRouteAtPlot(const CvPlot* pPlot) const
 	return (it != m_routeWantedPlots.end());
 }
 
+RouteTypes CvBuilderTaskingAI::GetRouteTypeWantedAtPlot(const CvPlot* pPlot) const
+{
+	if (!pPlot)
+		return NO_ROUTE;
+	RoutePlotContainer::const_iterator it = m_routeWantedPlots.find(pPlot->GetPlotIndex());
+	if (it != m_routeWantedPlots.end())
+		return it->second.first;
+	return NO_ROUTE;
+}
+
 bool CvBuilderTaskingAI::NeedRouteAtPlot(const CvPlot* pPlot) const
 {
 	if (!pPlot)
@@ -449,6 +479,16 @@ bool CvBuilderTaskingAI::NeedRouteAtPlot(const CvPlot* pPlot) const
 
 	RoutePlotContainer::const_iterator it = m_routeNeededPlots.find(pPlot->GetPlotIndex());
 	return (it != m_routeNeededPlots.end());
+}
+
+RouteTypes CvBuilderTaskingAI::GetRouteTypeNeededAtPlot(const CvPlot* pPlot) const
+{
+	if (!pPlot)
+		return NO_ROUTE;
+	RoutePlotContainer::const_iterator it = m_routeNeededPlots.find(pPlot->GetPlotIndex());
+	if (it != m_routeNeededPlots.end())
+		return it->second.first;
+	return NO_ROUTE;
 }
 
 bool CvBuilderTaskingAI::WantCanalAtPlot(const CvPlot* pPlot) const
@@ -466,16 +506,42 @@ void CvBuilderTaskingAI::AddRoutePlot(CvPlot* pPlot, RouteTypes eRoute, int iVal
 	if (!pPlot)
 		return;
 
-	// if we already know about this plot, continue on
-	if( GetRouteValue(pPlot)>=iValue )
+	if (iValue <= 0 || eRoute == NO_ROUTE)
 		return;
 
+	RouteTypes eOldRoute = NO_ROUTE;
+	int iOldValue = 0;
+
+	RoutePlotContainer::const_iterator it;
+
+	it = m_routeNeededPlots.find(pPlot->GetPlotIndex());
+	if (it != m_routeNeededPlots.end())
+	{
+		eOldRoute = it->second.first;
+		iOldValue = it->second.second;
+	}
+
+	it = m_routeWantedPlots.find(pPlot->GetPlotIndex());
+	if (it != m_routeWantedPlots.end())
+	{
+		eOldRoute = it->second.first;
+		iOldValue = it->second.second;
+	}
+
+	// if we already want a better route, ignore this
+	if (eOldRoute > eRoute)
+		return;
+
+	// if we wanted a lower tech route, ignore the old value
+	if (eOldRoute < eRoute)
+		iOldValue = 0;
+
 	//if it is the right route, add to needed plots
-	if (pPlot->getRouteType() == eRoute)
-		m_routeNeededPlots[pPlot->GetPlotIndex()] = make_pair(eRoute, iValue);
+	if (pPlot->getRouteType() == eRoute || GetSameRouteBenefitFromTrait(pPlot, eRoute))
+		m_routeNeededPlots[pPlot->GetPlotIndex()] = make_pair(eRoute, iValue + iOldValue);
 	else
 		//if no matching route, add to wanted plots
-		m_routeWantedPlots[pPlot->GetPlotIndex()] = make_pair(eRoute, iValue);
+		m_routeWantedPlots[pPlot->GetPlotIndex()] = make_pair(eRoute, iValue + iOldValue);
 }
 
 int CvBuilderTaskingAI::GetRouteValue(CvPlot* pPlot)
@@ -496,6 +562,18 @@ int CvBuilderTaskingAI::GetRouteValue(CvPlot* pPlot)
 		iCreateValue = it->second.second;
 
 	return max(iKeepValue,iCreateValue);
+}
+
+bool CvBuilderTaskingAI::GetSameRouteBenefitFromTrait(CvPlot* pPlot, RouteTypes eRoute) const
+{
+	if (eRoute == ROUTE_ROAD)
+	{
+		if (m_pPlayer->GetPlayerTraits()->IsWoodlandMovementBonus() && (pPlot->getFeatureType() == FEATURE_FOREST || pPlot->getFeatureType() == FEATURE_JUNGLE))
+			return true;
+		else if (m_pPlayer->GetPlayerTraits()->IsRiverTradeRoad() && pPlot->isRiver())
+			return true;
+	}
+	return false;
 }
 
 void CvBuilderTaskingAI::UpdateCanalPlots()
@@ -599,6 +677,10 @@ void CvBuilderTaskingAI::ConnectPointsForStrategy(CvCity* pOriginCity, CvPlot* p
 	if (pOriginCity->getOwner() != pTargetPlot->getOwner())
 		return;
 
+	// only connect strategic points to the city they belong to
+	if (pTargetPlot->getOwningCity() != pOriginCity)
+		return;
+
 	CvRouteInfo* pRouteInfo = GC.getRouteInfo(eRoute);
 	if (!pRouteInfo)
 		return;
@@ -623,16 +705,14 @@ void CvBuilderTaskingAI::ConnectPointsForStrategy(CvCity* pOriginCity, CvPlot* p
 		if (!pPlot)
 			break;
 
+		if (pPlot->isCity())
+			continue;
+
 		if (pPlot->getOwner() != m_pPlayer->GetID())
 			break;
 
 		// remember the plot
 		AddRoutePlot(pPlot, eRoute, 54);
-
-		// for citadels also put routes on the neighboring plots ...
-		if (TacticalAIHelpers::IsPlayerCitadel(pPlot, m_pPlayer->GetID()))
-			for (int i = RING0_PLOTS; i < RING1_PLOTS; i++)
-				AddRoutePlot(iterateRingPlots(pPlot, i), eRoute, 42);
 	}
 }
 /// Looks at city connections and marks plots that can be added as routes by EvaluateBuilder
@@ -657,7 +737,7 @@ void CvBuilderTaskingAI::UpdateRoutePlots(void)
 	m_routeNeededPlots.clear();
 	m_routeWantedPlots.clear();
 
-	for(int i = 0; i < GC.getNumBuildInfos(); i++)
+	for(int i = GC.getNumBuildInfos() - 1; i >= 0; i--)
 	{
 		BuildTypes eBuild = (BuildTypes)i;
 		CvBuildInfo* pkBuild = GC.getBuildInfo(eBuild);
@@ -709,13 +789,13 @@ void CvBuilderTaskingAI::UpdateRoutePlots(void)
 
 				if (pFirstCity && !pSecondCity)
 				{
-					ConnectPointsForStrategy(pFirstCity, pSecondPlot, eBestRoute, iNetGoldTimes100);
+					ConnectPointsForStrategy(pFirstCity, pSecondPlot, eRoute, iNetGoldTimes100);
 					continue;
 				}
 
 				if (!pFirstCity && pSecondCity)
 				{
-					ConnectPointsForStrategy(pSecondCity, pFirstPlot, eBestRoute, iNetGoldTimes100);
+					ConnectPointsForStrategy(pSecondCity, pFirstPlot, eRoute, iNetGoldTimes100);
 					continue;
 				}
 
@@ -727,26 +807,27 @@ void CvBuilderTaskingAI::UpdateRoutePlots(void)
 				if (bConnectOnlyCapitals)
 				{
 					// only need to build roads to the capital for the money and happiness
-					if(!pFirstCity->isCapital() && !pSecondCity->isCapital() && iNetGoldTimes100>0)
+					if (!pFirstCity->isCapital() && !pSecondCity->isCapital())
 					{
 						//if we already have a connection to the capital, it may be possible to have a much shorter route for a direct connection
 						//thus improving unit movement and gold bonus from villages
-						ConnectCitiesForShortcuts(pFirstCity, pSecondCity, eBestRoute);
-						continue;
-					}
-
-					if(pFirstCity->isCapital() && pFirstCity->getOwner() == m_pPlayer->GetID())
-					{
-						pPlayerCapitalCity = pFirstCity;
-						pTargetCity = pSecondCity;
+						ConnectCitiesForShortcuts(pFirstCity, pSecondCity, eRoute, iNetGoldTimes100);
 					}
 					else
 					{
-						pPlayerCapitalCity = pSecondCity;
-						pTargetCity = pFirstCity;
-					}
+						if (pFirstCity->isCapital() && pFirstCity->getOwner() == m_pPlayer->GetID())
+						{
+							pPlayerCapitalCity = pFirstCity;
+							pTargetCity = pSecondCity;
+						}
+						else
+						{
+							pPlayerCapitalCity = pSecondCity;
+							pTargetCity = pFirstCity;
+						}
 
-					ConnectCitiesToCapital(pPlayerCapitalCity, pTargetCity, eRoute, iNetGoldTimes100);
+						ConnectCitiesToCapital(pPlayerCapitalCity, pTargetCity, eRoute, iNetGoldTimes100);
+					}
 				}
 				else
 				{
@@ -853,15 +934,27 @@ BuilderDirective CvBuilderTaskingAI::EvaluateBuilder(CvUnit* pUnit, const map<Cv
 			//some special improvements and roads
 			AddImprovingPlotsDirectives(pUnit, pPlot, pWorkingCity, iMoveTurnsAway);
 			AddRouteDirectives(pUnit, pPlot, pWorkingCity, iMoveTurnsAway);
+			if (pUnit->AI_getUnitAIType() == UNITAI_WORKER)
+			{
+				// May want to repair and remove road tiles outside of our territory
+				AddRepairTilesDirectives(pUnit, pPlot, pWorkingCity, iMoveTurnsAway);
+				AddRemoveRouteDirectives(pUnit, pPlot, pWorkingCity, iMoveTurnsAway);
+			}
 		}
 		else
 		{
 			//only roads
 			AddRouteDirectives(pUnit, pPlot, pWorkingCity, iMoveTurnsAway);
+			if (pUnit->AI_getUnitAIType() == UNITAI_WORKER)
+			{
+				// May want to repair and remove road tiles outside of our territory
+				AddRepairTilesDirectives(pUnit, pPlot, pWorkingCity, iMoveTurnsAway);
+				AddRemoveRouteDirectives(pUnit, pPlot, pWorkingCity, iMoveTurnsAway);
+			}
 		}
 	}
 
-	sort(m_aDirectives.begin(), m_aDirectives.end());
+	std::stable_sort(m_aDirectives.begin(), m_aDirectives.end());
 	LogDirectives(pUnit);
 
 	//nothing found?
@@ -889,6 +982,10 @@ void CvBuilderTaskingAI::AddImprovingResourcesDirectives(CvUnit* pUnit, CvPlot* 
 		if (pPlot->IsImprovementPillaged())
 			return;
 	}
+
+	// if city owning this plot is being razed, ignore this plot
+	if (pCity && pCity->IsRazing())
+		return;
 
 	CvResourceInfo* pkResource = GC.getResourceInfo(eResource);
 
@@ -1051,6 +1148,10 @@ void CvBuilderTaskingAI::AddImprovingPlotsDirectives(CvUnit* pUnit, CvPlot* pPlo
 	}
 
 	if(!m_bEvaluateAdjacent && !pPlot->isWithinTeamCityRadius(pUnit->getTeam()))
+		return;
+
+	// if city owning this plot is being razed, ignore this plot
+	if (pCity && pCity->IsRazing())
 		return;
 
 	// check to see if a non-bonus resource is here. if so, bail out!
@@ -1294,7 +1395,17 @@ void CvBuilderTaskingAI::AddRemoveRouteDirectives(CvUnit* pUnit, CvPlot* pPlot, 
 		return;
 
 	// keep routes which are needed
-	if (NeedRouteAtPlot(pPlot))
+	if (NeedRouteAtPlot(pPlot) && !GetSameRouteBenefitFromTrait(pPlot, pPlot->getRouteType()))
+	{
+		return;
+	}
+
+	// we don't need to remove pillaged routes
+	if (pPlot->IsRoutePillaged())
+		return;
+
+	// don't remove routes which we did not create
+	if (pPlot->GetPlayerResponsibleForRoute() != NO_PLAYER && pPlot->GetPlayerResponsibleForRoute() != m_pPlayer->GetID())
 		return;
 
 	//don't touch master's roads!
@@ -1418,6 +1529,10 @@ void CvBuilderTaskingAI::AddChopDirectives(CvUnit* pUnit, CvPlot* pPlot, CvCity*
 	if (pPlot->IsImprovementPillaged())
 		return;
 
+	// if city owning this plot is being razed, ignore this plot
+	if (pCity && pCity->IsRazing())
+		return;
+
 	// check to see if a resource is here. If so, bail out!
 	ResourceTypes eResource = pPlot->getResourceType(m_pPlayer->getTeam());
 	if(eResource != NO_RESOURCE)
@@ -1458,7 +1573,7 @@ void CvBuilderTaskingAI::AddChopDirectives(CvUnit* pUnit, CvPlot* pPlot, CvCity*
 	//Don't cut down city connections!
 	if (m_pPlayer->GetPlayerTraits()->IsWoodlandMovementBonus() && (eFeature == FEATURE_FOREST || eFeature == FEATURE_JUNGLE))
 	{
-		if(pPlot->IsCityConnection(m_pPlayer->GetID()))
+		if(NeedRouteAtPlot(pPlot))
 		{
 			return;
 		}
@@ -1596,9 +1711,32 @@ void CvBuilderTaskingAI::AddChopDirectives(CvUnit* pUnit, CvPlot* pPlot, CvCity*
 
 void CvBuilderTaskingAI::AddRepairTilesDirectives(CvUnit* pUnit, CvPlot* pPlot, CvCity* pWorkingCity, int iMoveTurnsAway)
 {
-	// if it's not within a city radius
-	// do not check pWorkingCity for razing but the actual owning city ...
-	if (!pPlot || pPlot->getOwner() != pUnit->getOwner() || pPlot->getOwningCity()->IsRazing())
+	if (!pPlot)
+	{
+		return;
+	}
+
+	bool isOwned = pPlot->isOwned();
+	bool isOwnedByUs = pPlot->getOwner() == pUnit->getOwner();
+	// If it's owned by someone else, ignore it
+	if (isOwned && !isOwnedByUs)
+	{
+		return;
+	}
+	bool isPillagedRouteWeWantToRepair = NeedRouteAtPlot(pPlot) && pPlot->IsRoutePillaged();
+	// If it's owned by us, but it's being razed, ignore it (check actual owning city instead of working city)
+	if (isOwnedByUs && pPlot->getOwningCity()->IsRazing() && !isPillagedRouteWeWantToRepair)
+	{
+		return;
+	}
+	// If it's not owned by us, and it's not a route we want to repair, ignore it
+	if (!isOwned && !isPillagedRouteWeWantToRepair)
+	{
+		return;
+	}
+
+	// if city owning this plot is being razed, and it's not a route we want to repair, ignore this plot
+	if (pWorkingCity && pWorkingCity->IsRazing() && !isPillagedRouteWeWantToRepair)
 	{
 		return;
 	}
@@ -1620,6 +1758,13 @@ void CvBuilderTaskingAI::AddRepairTilesDirectives(CvUnit* pUnit, CvPlot* pPlot, 
 	if (pWorkingCity && pWorkingCity->GetCityCitizens()->IsWorkingPlot(pPlot))
 		iWeight *= 2;
 
+	if (isPillagedRouteWeWantToRepair)
+	{
+		RoutePlotContainer::const_iterator it = m_routeNeededPlots.find(pPlot->GetPlotIndex());
+		if (it != m_routeNeededPlots.end())
+			iWeight += it->second.second;
+	}
+
 	if (iWeight > 0)
 	{
 		BuilderDirective directive;
@@ -1635,7 +1780,7 @@ void CvBuilderTaskingAI::AddRepairTilesDirectives(CvUnit* pUnit, CvPlot* pPlot, 
 	}
 }
 // Everything means less than zero, hey
-void CvBuilderTaskingAI::AddScrubFalloutDirectives(CvUnit* pUnit, CvPlot* pPlot, CvCity* /*pCity*/, int iMoveTurnsAway)
+void CvBuilderTaskingAI::AddScrubFalloutDirectives(CvUnit* pUnit, CvPlot* pPlot, CvCity* pCity, int iMoveTurnsAway)
 {
 	if(m_eFalloutFeature == NO_FEATURE || m_eFalloutRemove == NO_BUILD)
 	{
@@ -1646,6 +1791,10 @@ void CvBuilderTaskingAI::AddScrubFalloutDirectives(CvUnit* pUnit, CvPlot* pPlot,
 	{
 		return;
 	}
+
+	// if city owning this plot is being razed, ignore this plot
+	if (pCity && pCity->IsRazing())
+		return;
 
 	if(pPlot->getFeatureType() == m_eFalloutFeature && pUnit->canBuild(pPlot, m_eFalloutRemove))
 	{

@@ -1302,6 +1302,7 @@ public:
 	int GetNoUnhappfromXSpecialists() const;
 
 	bool isBorderCity() const;
+	bool isBorderCity(vector<PlayerTypes>& vUnfriendlyMajors) const;
 
 	void DoBarbIncursion();
 #endif
@@ -1593,6 +1594,9 @@ public:
 	int GetExtraHitPoints() const;
 	void ChangeExtraHitPoints(int iValue);
 
+	int getDamageReductionFlat() const;
+	void changeDamageReductionFlat(int iChange);
+
 	int GetMaxHitPoints() const;
 	const CvSyncArchive<CvCity>& getSyncArchive() const;
 	CvSyncArchive<CvCity>& getSyncArchive();
@@ -1815,6 +1819,7 @@ protected:
 	int m_iCityWorkingChange;
 	int m_iCitySupplyModifier;
 	int m_iCitySupplyFlat;
+	int m_iDamageReductionFlat;
 	bool m_bAllowsProductionTradeRoutes;
 	bool m_bAllowsFoodTradeRoutes;
 	bool m_bAllowPuppetPurchase;
@@ -2215,6 +2220,7 @@ SYNC_ARCHIVE_VAR(int, m_iPlotBuyCostModifier)
 SYNC_ARCHIVE_VAR(int, m_iCityWorkingChange)
 SYNC_ARCHIVE_VAR(int, m_iCitySupplyModifier)
 SYNC_ARCHIVE_VAR(int, m_iCitySupplyFlat)
+SYNC_ARCHIVE_VAR(int, m_iDamageReductionFlat)
 SYNC_ARCHIVE_VAR(bool, m_bAllowsProductionTradeRoutes)
 SYNC_ARCHIVE_VAR(bool, m_bAllowsFoodTradeRoutes)
 SYNC_ARCHIVE_VAR(bool, m_bAllowPuppetPurchase)

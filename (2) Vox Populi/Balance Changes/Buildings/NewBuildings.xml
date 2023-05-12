@@ -32,6 +32,18 @@
 			<DefaultBuilding>BUILDING_ORDER</DefaultBuilding>
 			<Description>TXT_KEY_BUILDING_ORDER</Description>
 		</Row>
+		<!--Teocalli-->
+		<Row>
+			<Type>BUILDINGCLASS_TEOCALLI</Type>
+			<DefaultBuilding>BUILDING_TEOCALLI</DefaultBuilding>
+			<Description>TXT_KEY_BUILDING_TEOCALLI</Description>
+		</Row>
+		<!--Gurdwara-->
+		<Row>
+			<Type>BUILDINGCLASS_GURDWARA</Type>
+			<DefaultBuilding>BUILDING_GURDWARA</DefaultBuilding>
+			<Description>TXT_KEY_BUILDING_GURDWARA</Description>
+		</Row>
 		<Row>
 			<Type>BUILDINGCLASS_PALACE_THRONE_ROOM</Type>
 			<DefaultBuilding>BUILDING_THRONE_ROOM</DefaultBuilding>
@@ -77,7 +89,7 @@
 			<Type>BUILDINGCLASS_LODGE</Type>
 			<DefaultBuilding>BUILDING_LODGE</DefaultBuilding>
 			<Description>TXT_KEY_BUILDING_LODGE</Description>
-		</Row>	
+		</Row>
 		<Row>
 			<Type>BUILDINGCLASS_WELL</Type>
 			<DefaultBuilding>BUILDING_WELL</DefaultBuilding>
@@ -102,7 +114,7 @@
 			<Type>BUILDINGCLASS_TIDAL_PLANT</Type>
 			<DefaultBuilding>BUILDING_TIDAL_PLANT</DefaultBuilding>
 			<Description>TXT_KEY_BUILDING_TIDAL_PLANT</Description>
-		</Row>	
+		</Row>
 		<Row>
 			<Type>BUILDINGCLASS_STOCKYARD</Type>
 			<DefaultBuilding>BUILDING_STOCKYARD</DefaultBuilding>
@@ -133,12 +145,12 @@
 			<Type>BUILDINGCLASS_INTERPRETIVE_CENTER</Type>
 			<DefaultBuilding>BUILDING_INTERPRETIVE_CENTER</DefaultBuilding>
 			<Description>TXT_KEY_BUILDING_INTERPRETIVE_CENTER</Description>
-		</Row>	
+		</Row>
 		<Row>
 			<Type>BUILDINGCLASS_TRAINSTATION</Type>
 			<DefaultBuilding>BUILDING_TRAINSTATION</DefaultBuilding>
 			<Description>TXT_KEY_BUILDING_TRAINSTATION</Description>
-		</Row> 
+		</Row>
 		<Row>
 			<Type>BUILDINGCLASS_RIALTO_DISTRICT</Type>
 			<DefaultBuilding>BUILDING_RIALTO_DISTRICT</DefaultBuilding>
@@ -166,7 +178,7 @@
 			<Type>BUILDINGCLASS_SPAIN_MISSION</Type>
 			<DefaultBuilding>BUILDING_SPAIN_MISSION</DefaultBuilding>
 			<Description>TXT_KEY_BUILDING_MISSION</Description>
-		</Row> 	
+		</Row>
 	</BuildingClasses>
 	<Buildings>
 		<!--Stupa-->
@@ -182,7 +194,6 @@
 			<Happiness>1</Happiness>
 			<Help>TXT_KEY_BUILDING_STUPA_HELP</Help>
 			<ReligiousPressureModifier>25</ReligiousPressureModifier>
-			<ConversionModifier>-10</ConversionModifier>
 			<IconAtlas>COMMUNITY_ATLAS</IconAtlas>
 			<PortraitIndex>11</PortraitIndex>
 			<Cost>-1</Cost>
@@ -197,12 +208,9 @@
 			<Civilopedia>TXT_KEY_BUILDING_CHURCH_TEXT</Civilopedia>
 			<Strategy>TXT_KEY_BUILDING_CHURCH_STRATEGY</Strategy>
 			<Help>TXT_KEY_BUILDING_CHURCH_HELP</Help>
-			<GreatWorkSlotType>GREAT_WORK_SLOT_MUSIC</GreatWorkSlotType>
-			<GreatWorkCount>1</GreatWorkCount>
 			<WLTKDTurns>15</WLTKDTurns>
 			<ConquestProb>100</ConquestProb>
 			<ArtDefineTag>TEMPLE</ArtDefineTag>
-			<ConversionModifier>-10</ConversionModifier>
 			<MinAreaSize>-1</MinAreaSize>
 			<ReligiousPressureModifier>40</ReligiousPressureModifier>
 			<Cost>-1</Cost>
@@ -210,7 +218,6 @@
 			<PortraitIndex>3</PortraitIndex>
 			<UnlockedByBelief>true</UnlockedByBelief>
 			<FaithCost>200</FaithCost>
-		
 		</Row>
 		<!--Mandir-->
 		<Row>
@@ -220,16 +227,14 @@
 			<Civilopedia>TXT_KEY_BUILDING_MANDIR_TEXT</Civilopedia>
 			<Strategy>TXT_KEY_BUILDING_MANDIR_STRATEGY</Strategy>
 			<Help>TXT_KEY_BUILDING_MANDIR_HELP</Help>
-			<GreatWorkSlotType>GREAT_WORK_SLOT_MUSIC</GreatWorkSlotType>
-			<GreatWorkCount>1</GreatWorkCount>
 			<ConquestProb>100</ConquestProb>
-			<ConversionModifier>-10</ConversionModifier>
 			<Cost>-1</Cost>
-			<ReligiousPressureModifier>25</ReligiousPressureModifier>
+			<ReligiousPressureModifier>15</ReligiousPressureModifier>
+			<ConversionModifier>-10</ConversionModifier>
 			<ArtDefineTag>TEMPLE</ArtDefineTag>
 			<MinAreaSize>-1</MinAreaSize>
-			<IconAtlas>COMMUNITY_ATLAS</IconAtlas>
-			<PortraitIndex>4</PortraitIndex>
+			<IconAtlas>COMMUNITY_3_ATLAS</IconAtlas>
+			<PortraitIndex>8</PortraitIndex>
 			<UnlockedByBelief>true</UnlockedByBelief>
 			<FaithCost>200</FaithCost>
 		</Row>
@@ -240,17 +245,14 @@
 			<Description>TXT_KEY_BUILDING_SYNAGOGUE</Description>
 			<Civilopedia>TXT_KEY_BUILDING_SYNAGOGUE_TEXT</Civilopedia>
 			<Strategy>TXT_KEY_BUILDING_SYNAGOGUE_STRATEGY</Strategy>
-			<GreatWorkSlotType>GREAT_WORK_SLOT_LITERATURE</GreatWorkSlotType>
-			<GreatWorkCount>1</GreatWorkCount>
 			<Help>TXT_KEY_BUILDING_SYNAGOGUE_HELP</Help>
 			<ConquestProb>100</ConquestProb>
 			<Cost>-1</Cost>
-			<ReligiousPressureModifier>25</ReligiousPressureModifier>
-			<ConversionModifier>-10</ConversionModifier>
+			<ConversionModifier>-15</ConversionModifier>
 			<ArtDefineTag>TEMPLE</ArtDefineTag>
 			<MinAreaSize>-1</MinAreaSize>
-			<IconAtlas>COMMUNITY_ATLAS</IconAtlas>
-			<PortraitIndex>10</PortraitIndex>
+			<IconAtlas>COMMUNITY_3_ATLAS</IconAtlas>
+			<PortraitIndex>5</PortraitIndex>
 			<UnlockedByBelief>true</UnlockedByBelief>
 			<FaithCost>200</FaithCost>
 		</Row>
@@ -265,14 +267,50 @@
 			<TrainedFreePromotion>PROMOTION_MORALE</TrainedFreePromotion>
 			<ConquestProb>100</ConquestProb>
 			<ArtDefineTag>TEMPLE</ArtDefineTag>
-			<ConversionModifier>-10</ConversionModifier>
 			<Cost>-1</Cost>
-			<Defense>300</Defense>
-			<ExtraCityHitPoints>50</ExtraCityHitPoints>
+			<RangedStrikeModifier>10</RangedStrikeModifier>
 			<ReligiousPressureModifier>25</ReligiousPressureModifier>
 			<MinAreaSize>-1</MinAreaSize>
-			<IconAtlas>COMMUNITY_ATLAS</IconAtlas>
-			<PortraitIndex>5</PortraitIndex>
+			<IconAtlas>COMMUNITY_3_ATLAS</IconAtlas>
+			<PortraitIndex>11</PortraitIndex>
+			<UnlockedByBelief>true</UnlockedByBelief>
+			<FaithCost>200</FaithCost>
+		</Row>
+		<!--Teocalli-->
+		<Row>
+			<Type>BUILDING_TEOCALLI</Type>
+			<BuildingClass>BUILDINGCLASS_TEOCALLI</BuildingClass>
+			<Description>TXT_KEY_BUILDING_TEOCALLI</Description>
+			<Civilopedia>TXT_KEY_BUILDING_TEOCALLI_PEDIA</Civilopedia>
+			<Strategy>TXT_KEY_BUILDING_TEOCALLI_STRATEGY</Strategy>
+			<Help>TXT_KEY_BUILDING_TEOCALLI_HELP</Help>
+			<ConquestProb>100</ConquestProb>
+			<ArtDefineTag>TEMPLE</ArtDefineTag>
+			<Cost>-1</Cost>
+			<CitySupplyFlat>1</CitySupplyFlat>
+			<ReligiousPressureModifier>25</ReligiousPressureModifier>
+			<MinAreaSize>-1</MinAreaSize>
+			<IconAtlas>EXPANSION_BW_ATLAS_1</IconAtlas>
+			<PortraitIndex>7</PortraitIndex>
+			<UnlockedByBelief>true</UnlockedByBelief>
+			<FaithCost>200</FaithCost>
+		</Row>
+		<!--Gurdwara-->
+		<Row>
+			<Type>BUILDING_GURDWARA</Type>
+			<BuildingClass>BUILDINGCLASS_GURDWARA</BuildingClass>
+			<Description>TXT_KEY_BUILDING_GURDWARA</Description>
+			<Civilopedia>TXT_KEY_BUILDING_GURDWARA_PEDIA</Civilopedia>
+			<Strategy>TXT_KEY_BUILDING_GURDWARA_STRATEGY</Strategy>
+			<Help>TXT_KEY_BUILDING_GURDWARA_HELP</Help>
+			<ConquestProb>100</ConquestProb>
+			<ArtDefineTag>TEMPLE</ArtDefineTag>
+			<Cost>-1</Cost>
+			<BuildingDefenseModifier>10</BuildingDefenseModifier>
+			<ReligiousPressureModifier>25</ReligiousPressureModifier>
+			<MinAreaSize>-1</MinAreaSize>
+			<IconAtlas>COMMUNITY_3_ATLAS</IconAtlas>
+			<PortraitIndex>3</PortraitIndex>
 			<UnlockedByBelief>true</UnlockedByBelief>
 			<FaithCost>200</FaithCost>
 		</Row>
@@ -286,7 +324,7 @@
 			<ArtDefineTag>ART_DEF_BUILDING_MARKET</ArtDefineTag>
 			<SpecialistType>SPECIALIST_MUSICIAN</SpecialistType>
 			<SpecialistCount>1</SpecialistCount>
-			<CultureRateModifier>0</CultureRateModifier>
+			<CultureRateModifier>10</CultureRateModifier>
 			<NoUnhappfromXSpecialists>2</NoUnhappfromXSpecialists>
 			<GreatWorkSlotType>GREAT_WORK_SLOT_MUSIC</GreatWorkSlotType>
 			<GreatWorkCount>1</GreatWorkCount>
@@ -328,10 +366,8 @@
 			<ConquestProb>0</ConquestProb>
 			<ArtDefineTag>ART_DEF_BUILDING_MARKET</ArtDefineTag>
 			<MinAreaSize>-1</MinAreaSize>
-			<Defense>200</Defense>
 			<NukeImmune>true</NukeImmune>
 			<NeverCapture>true</NeverCapture>
-			<ExtraCityHitPoints>50</ExtraCityHitPoints>
 			<CitySupplyModifier>20</CitySupplyModifier>
 			<CapitalOnly>true</CapitalOnly>
 			<SpecialistType>SPECIALIST_ENGINEER</SpecialistType>
@@ -435,7 +471,6 @@
 			<GreatWorkCount>1</GreatWorkCount>
 			<GreatWorkSlotType>GREAT_WORK_SLOT_ART_ARTIFACT</GreatWorkSlotType>
 			<NumCityCostMod>10</NumCityCostMod>
-			<NationalPopRequired>30</NationalPopRequired>
 			<HurryCostModifier>-1</HurryCostModifier>
 			<MinAreaSize>-1</MinAreaSize>
 			<NeverCapture>true</NeverCapture>
@@ -477,7 +512,6 @@
 			<Strategy>TXT_KEY_BUILDING_ODEON_STRATEGY</Strategy>
 			<Help>TXT_KEY_BUILDING_ODEON_HELP</Help>
 			<ArtDefineTag>COLESSEUM</ArtDefineTag>
-			<Defense>200</Defense>
 			<GreatWorkSlotType>GREAT_WORK_SLOT_LITERATURE</GreatWorkSlotType>
 			<GreatWorkCount>2</GreatWorkCount>
 			<ConquestProb>100</ConquestProb>
@@ -543,14 +577,14 @@
 			<HurryCostModifier>25</HurryCostModifier>
 			<IconAtlas>COMMUNITY_2_ATLAS</IconAtlas>
 			<PortraitIndex>9</PortraitIndex>
-		</Row> 
+		</Row>
 		<Row>
 			<Type>BUILDING_SEOWON</Type>
 			<BuildingClass>BUILDINGCLASS_UNIVERSITY</BuildingClass>
 			<Cost>300</Cost>
 			<GoldMaintenance>2</GoldMaintenance>
 			<FreeStartEra>ERA_INDUSTRIAL</FreeStartEra>
-			<PrereqTech>TECH_PHILOSOPHY</PrereqTech>
+			<PrereqTech>TECH_EDUCATION</PrereqTech>
 			<Help>TXT_KEY_BUILDING_SEOWON_HELP</Help>
 			<FaithCost>200</FaithCost>
 			<ConquestProb>66</ConquestProb>
@@ -614,8 +648,6 @@
 			<ArtDefineTag>CASTLE</ArtDefineTag>
 			<MinAreaSize>-1</MinAreaSize>
 			<AllowsRangeStrike>true</AllowsRangeStrike>
-			<Defense>300</Defense>
-			<ExtraCityHitPoints>100</ExtraCityHitPoints>
 			<InstantReligiousPressure>9999</InstantReligiousPressure>
 			<HurryCostModifier>33</HurryCostModifier>
 			<IconAtlas>COMMUNITY_ATLAS</IconAtlas>
@@ -682,7 +714,6 @@
 			<ResourceDiversityModifier>25</ResourceDiversityModifier>
 			<TradeRouteRecipientBonus>5</TradeRouteRecipientBonus>
 			<TradeRouteTargetBonus>3</TradeRouteTargetBonus>
-			<NationalPopRequired>20</NationalPopRequired>
 			<NumCityCostMod>10</NumCityCostMod>
 			<HurryCostModifier>-1</HurryCostModifier>
 			<MinAreaSize>-1</MinAreaSize>
@@ -701,7 +732,6 @@
 			<ArtDefineTag>ART_DEF_BUILDING_NATIONAL_TREASURY</ArtDefineTag>
 			<NukeImmune>true</NukeImmune>
 			<PrereqTech>TECH_WRITING</PrereqTech>
-			<NationalPopRequired>10</NationalPopRequired>
 			<CitySupplyFlat>5</CitySupplyFlat>
 			<NumCityCostMod>10</NumCityCostMod>
 			<HurryCostModifier>-1</HurryCostModifier>
@@ -725,10 +755,8 @@
 			<CitySupplyModifier>25</CitySupplyModifier>
 			<CitySupplyFlat>5</CitySupplyFlat>
 			<MinAreaSize>-1</MinAreaSize>
-			<Defense>400</Defense>
 			<CivilizationRequired>CIVILIZATION_VENICE</CivilizationRequired>
 			<FreePromotion>PROMOTION_ARSENALE</FreePromotion>
-			<NationalPopRequired>15</NationalPopRequired>
 			<NumCityCostMod>10</NumCityCostMod>
 			<SpecialistType>SPECIALIST_ENGINEER</SpecialistType>
 			<SpecialistCount>1</SpecialistCount>
@@ -753,7 +781,6 @@
 			<CivilizationRequired>CIVILIZATION_VENICE</CivilizationRequired>
 			<TradeRouteRecipientBonus>3</TradeRouteRecipientBonus>
 			<TradeRouteTargetBonus>3</TradeRouteTargetBonus>
-			<NationalPopRequired>15</NationalPopRequired>
 			<NumCityCostMod>10</NumCityCostMod>
 			<SpecialistType>SPECIALIST_MERCHANT</SpecialistType>
 			<SpecialistCount>1</SpecialistCount>
@@ -775,7 +802,6 @@
 			<NukeImmune>true</NukeImmune>
 			<MinAreaSize>-1</MinAreaSize>
 			<CivilizationRequired>CIVILIZATION_VENICE</CivilizationRequired>
-			<NationalPopRequired>15</NationalPopRequired>
 			<NumCityCostMod>10</NumCityCostMod>
 			<GreatWorkSlotType>GREAT_WORK_SLOT_ART_ARTIFACT</GreatWorkSlotType>
 			<ThemingBonusHelp>TXT_KEY_BUILDING_MURANO_GLASSWORKS_THEMING_BONUS_HELP</ThemingBonusHelp>
@@ -879,7 +905,7 @@
 			<HurryCostModifier>-20</HurryCostModifier>
 			<IconAtlas>FCOMPANY_ATLAS</IconAtlas>
 			<PortraitIndex>1</PortraitIndex>
-		</Row>	
+		</Row>
 		<Row>
 			<Type>BUILDING_GROCER</Type>
 			<BuildingClass>BUILDINGCLASS_GROCER</BuildingClass>
@@ -936,7 +962,7 @@
 			<HurryCostModifier>-20</HurryCostModifier>
 			<IconAtlas>FCOMPANY_ATLAS</IconAtlas>
 			<PortraitIndex>2</PortraitIndex>
-		</Row> 
+		</Row>
 		<Row>
 			<Type>BUILDING_STOCKYARD</Type>
 			<BuildingClass>BUILDINGCLASS_STOCKYARD</BuildingClass>
@@ -984,8 +1010,6 @@
 			<ArtDefineTag>CASTLE</ArtDefineTag>
 			<ConquestProb>0</ConquestProb>
 			<NeverCapture>true</NeverCapture>
-			<Defense>1000</Defense>
-			<ExtraCityHitPoints>100</ExtraCityHitPoints>
 			<HurryCostModifier>0</HurryCostModifier>
 			<IconAtlas>COMMUNITY_ATLAS</IconAtlas>
 			<PortraitIndex>54</PortraitIndex>
@@ -1002,10 +1026,8 @@
 			<Help>TXT_KEY_BUILDING_MINEFIELD_HELP</Help>
 			<ArtDefineTag>ART_DEF_BUILDING_GARDEN</ArtDefineTag>
 			<MinAreaSize>10</MinAreaSize>
-			<ConquestProb>66</ConquestProb>
+			<ConquestProb>0</ConquestProb>
 			<Water>true</Water>
-			<Defense>500</Defense>
-			<ExtraCityHitPoints>100</ExtraCityHitPoints>
 			<DeepWaterTileDamage>5</DeepWaterTileDamage>
 			<BorderObstacleWater>1</BorderObstacleWater>
 			<HurryCostModifier>0</HurryCostModifier>
@@ -1030,7 +1052,7 @@
 			<PortraitIndex>1</PortraitIndex>
 			<Happiness>2</Happiness>
 			<LandmarksTourismPercent>50</LandmarksTourismPercent>
-		</Row> 	
+		</Row>
 		<Row>
 			<Type>BUILDING_TRAINSTATION</Type>
 			<BuildingClass>BUILDINGCLASS_TRAINSTATION</BuildingClass>

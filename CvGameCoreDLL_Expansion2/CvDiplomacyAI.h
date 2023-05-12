@@ -1179,7 +1179,7 @@ public:
 	void DoRelationshipPairing();
 	void DoUpdatePlanningExchanges();
 	void DoUpdatePrimeLeagueAlly();
-	bool AvoidExchangesWithPlayer(PlayerTypes ePlayer, bool bWarOnly = false) const;
+	bool AvoidExchangesWithPlayer(PlayerTypes ePlayer, bool bWarOnly = false, bool bIgnoreSelfApproach = false) const;
 	bool IsGoodChoiceForDoF(PlayerTypes ePlayer);
 	bool IsGoodChoiceForDefensivePact(PlayerTypes ePlayer);
 	bool IsGoodChoiceForResearchAgreement(PlayerTypes ePlayer);
@@ -1269,9 +1269,9 @@ public:
 	// Planning Exchanges
 	/////////////////////////////////////////////////////////
 
-	bool IsPhonyWar(PlayerTypes ePlayer, bool bFromApproachSelection = false) const;
+	bool IsPhonyWar(PlayerTypes ePlayer, bool bIgnoreCurrentApproach = false) const;
 	bool IsWantsToConquer(PlayerTypes ePlayer) const;
-	bool IsPotentialMilitaryTargetOrThreat(PlayerTypes ePlayer, bool bFromApproachSelection = false) const;
+	bool IsPotentialMilitaryTargetOrThreat(PlayerTypes ePlayer, bool bFromApproachSelection) const;
 
 	/////////////////////////////////////////////////////////
 	// Issues of Dispute

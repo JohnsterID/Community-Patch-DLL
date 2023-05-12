@@ -15,10 +15,10 @@ UPDATE Policies
 SET PovertyFlatReductionGlobal = '2'
 WHERE Type = 'POLICY_CARAVANS';
 
--- Imperialism
+/*-- Imperialism
 UPDATE Policies
 SET NeedsModifierFromAirUnits = '3'
-WHERE Type = 'POLICY_EXPLORATION_FINISHER';
+WHERE Type = 'POLICY_EXPLORATION_FINISHER';*/
 
 -- Rationalism
 UPDATE Policies
@@ -103,6 +103,14 @@ WHERE Type = 'BUILDING_SYNAGOGUE';
 UPDATE Buildings
 SET DistressFlatReduction = '1'
 WHERE Type = 'BUILDING_ORDER';
+
+UPDATE Buildings
+SET DistressFlatReduction = '1'
+WHERE Type = 'BUILDING_TEOCALLI';
+
+UPDATE Buildings
+SET DistressFlatReduction = '1'
+WHERE Type = 'BUILDING_GURDWARA';
 
 UPDATE Buildings
 SET DistressFlatReduction = '1'

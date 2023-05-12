@@ -9,7 +9,7 @@ SET SpreadStrengthModifier = '0'
 WHERE Type = 'BELIEF_RELIGIOUS_TEXTS';
 
 UPDATE Beliefs
-SET InquisitorCostModifier = '-25'
+SET InquisitorCostModifier = '-33'
 WHERE Type = 'BELIEF_RELIGIOUS_TEXTS';
 
 UPDATE Beliefs
@@ -36,10 +36,9 @@ VALUES
 	('BELIEF_RELIQUARY', 'YIELD_CULTURE', 2),
 	('BELIEF_RELIQUARY', 'YIELD_FAITH', 2);
 
-INSERT INTO Belief_YieldPerGPT
-	(BeliefType, YieldType, Yield)
-VALUES
-	('BELIEF_RELIQUARY', 'YIELD_FAITH', 10);
+UPDATE Beliefs
+SET OtherReligionPressureErosion = '10'
+WHERE Type = 'BELIEF_RELIQUARY';
 
 
 -- Just War (Now Abode of Peace)
@@ -64,16 +63,12 @@ SET CityStateMinimumInfluence = '35'
 WHERE Type = 'BELIEF_JUST_WAR';
 
 UPDATE Beliefs
-SET CityStateInfluenceModifier = '20'
+SET CityStateInfluenceModifier = '25'
 WHERE Type = 'BELIEF_JUST_WAR';
 
 -- Heathen Conversion (Now Zealotry)
 UPDATE Beliefs
 SET Enhancer = '1'
-WHERE Type = 'BELIEF_HEATHEN_CONVERSION';
-
-UPDATE Beliefs
-SET OtherReligionPressureErosion = '15'
 WHERE Type = 'BELIEF_HEATHEN_CONVERSION';
 
 UPDATE Beliefs
@@ -215,11 +210,11 @@ WHERE Type = 'BELIEF_MESSIAH';
 
 -- NEW
 
-INSERT INTO Belief_YieldChangePerXForeignFollowers
-	(BeliefType, YieldType, ForeignFollowers)
+INSERT INTO Belief_YieldChangePerXCityStateFollowers
+	(BeliefType, YieldType, PerXFollowers)
 VALUES
-	('BELIEF_JUST_WAR', 'YIELD_GOLD', 10),
-	('BELIEF_JUST_WAR', 'YIELD_FAITH', 10);
+	('BELIEF_JUST_WAR', 'YIELD_GOLD', 2),
+	('BELIEF_JUST_WAR', 'YIELD_FAITH', 2);
 
 INSERT INTO Belief_EraFaithUnitPurchase
 	(BeliefType, EraType)

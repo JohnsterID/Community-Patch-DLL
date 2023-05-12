@@ -10,7 +10,7 @@ SET SpecialistType = 'SPECIALIST_SCIENTIST'
 WHERE Type = 'BUILDING_WALLS_OF_BABYLON';
 
 UPDATE Buildings
-SET SpecialistCount = '1'
+SET GreatPeopleRateChange = 3, GoldMaintenance = 0, GreatScientistBeakerModifier = 10
 WHERE Type = 'BUILDING_WALLS_OF_BABYLON';
 
 -- Mongols
@@ -307,6 +307,10 @@ UPDATE Traits
 Set MountainPass = '1'
 WHERE Type = 'TRAIT_GREAT_ANDEAN_ROAD';
 
+UPDATE Builds
+SET Help = 'TXT_KEY_BUILD_TERRACE_FARM_HELP'
+WHERE Type = 'BUILD_TERRACE_FARM';
+
 -- Denmark -- Unique National Epic (Jelling Stones) -- Replace Ski Infantry
 
 -- Korea -- Replace Turtle Ship with UB, adjust UA
@@ -321,25 +325,6 @@ WHERE Type = 'TRAIT_SCHOLARS_JADE_HALL';
 UPDATE Traits
 Set IsOddEraScaler = '1'
 WHERE Type = 'TRAIT_SCHOLARS_JADE_HALL';
-
-UPDATE Traits
-SET GoldenAgeGreatArtistRateModifier = '30'
-WHERE Type = 'TRAIT_SCHOLARS_JADE_HALL';
-
-UPDATE Traits
-SET GoldenAgeGreatMusicianRateModifier = '30'
-WHERE Type = 'TRAIT_SCHOLARS_JADE_HALL';
-
-UPDATE Traits
-SET GoldenAgeGreatWriterRateModifier = '30'
-WHERE Type = 'TRAIT_SCHOLARS_JADE_HALL';
-
-INSERT INTO Trait_GoldenAgeGreatPersonRateModifier
-	(TraitType, GreatPersonType, Modifier)
-VALUES
-	('TRAIT_SCHOLARS_JADE_HALL', 'GREATPERSON_ENGINEER', 30),
-	('TRAIT_SCHOLARS_JADE_HALL', 'GREATPERSON_SCIENTIST', 30),
-	('TRAIT_SCHOLARS_JADE_HALL', 'GREATPERSON_MERCHANT', 30);
 
 INSERT INTO Trait_GreatPersonBornYield
 	(TraitType, GreatPersonType, YieldType, Yield)
@@ -356,6 +341,10 @@ VALUES
 
 DELETE FROM Trait_ImprovementYieldChanges
 WHERE TraitType = 'TRAIT_SCHOLARS_JADE_HALL';
+
+INSERT INTO Trait_GoldenAgeYieldModifiers
+		(TraitType, 					YieldType, 			Yield)
+VALUES	('TRAIT_SCHOLARS_JADE_HALL', 	'YIELD_SCIENCE', 	20);
 -- New Changes
 
 INSERT INTO Improvement_YieldAdjacentSameType
@@ -466,27 +455,34 @@ INSERT INTO Building_YieldChanges
 	(BuildingType, YieldType, Yield)
 VALUES
 	('BUILDING_SEOWON', 'YIELD_SCIENCE', 3),
-	('BUILDING_SEOWON', 'YIELD_FAITH', 2),
+	('BUILDING_SEOWON', 'YIELD_CULTURE', 2),
 	('BUILDING_JELLING_STONES', 'YIELD_CULTURE', 2),
 	('BUILDING_YURT', 'YIELD_FAITH', 1),
 	('BUILDING_YURT', 'YIELD_CULTURE_LOCAL', 2),
-	('BUILDING_WALLS_OF_BABYLON', 'YIELD_SCIENCE', 1),
+	('BUILDING_WALLS_OF_BABYLON', 'YIELD_SCIENCE', 4),
 	('BUILDING_SPAIN_MISSION',	'YIELD_FAITH',	2);
-
-INSERT INTO Building_SpecialistYieldChangesLocal
-	(BuildingType, SpecialistType, YieldType, Yield)
-VALUES
-	('BUILDING_WALLS_OF_BABYLON', 'SPECIALIST_SCIENTIST', 'YIELD_GOLD', 2);
-
-INSERT INTO Building_GoldenAgeYieldMod
-	(BuildingType, YieldType, Yield)
-VALUES
-	('BUILDING_SEOWON', 'YIELD_SCIENCE', 15);
 
 INSERT INTO Building_GrowthExtraYield
 	(BuildingType, YieldType, Yield)
 VALUES
 	('BUILDING_SEOWON', 'YIELD_SCIENCE', 50);
+
+INSERT INTO Building_ImprovementYieldChanges
+		(BuildingType, 		ImprovementType,				YieldType,			Yield)
+VALUES	('BUILDING_SEOWON', 'IMPROVEMENT_ACADEMY', 			'YIELD_SCIENCE', 	1),
+		('BUILDING_SEOWON', 'IMPROVEMENT_CUSTOMS_HOUSE', 	'YIELD_SCIENCE', 	1),
+		('BUILDING_SEOWON', 'IMPROVEMENT_MANUFACTORY', 		'YIELD_SCIENCE', 	1),
+		('BUILDING_SEOWON', 'IMPROVEMENT_CITADEL', 			'YIELD_SCIENCE', 	1),
+		('BUILDING_SEOWON', 'IMPROVEMENT_HOLY_SITE', 		'YIELD_SCIENCE', 	1),
+		('BUILDING_SEOWON', 'IMPROVEMENT_MONGOLIA_ORDO', 	'YIELD_SCIENCE', 	1),
+		('BUILDING_SEOWON', 'IMPROVEMENT_EMBASSY', 			'YIELD_SCIENCE', 	1),
+		('BUILDING_SEOWON', 'IMPROVEMENT_ACADEMY', 			'YIELD_PRODUCTION', 1),
+		('BUILDING_SEOWON', 'IMPROVEMENT_CUSTOMS_HOUSE', 	'YIELD_PRODUCTION', 1),
+		('BUILDING_SEOWON', 'IMPROVEMENT_MANUFACTORY', 		'YIELD_PRODUCTION', 1),
+		('BUILDING_SEOWON', 'IMPROVEMENT_CITADEL', 			'YIELD_PRODUCTION', 1),
+		('BUILDING_SEOWON', 'IMPROVEMENT_HOLY_SITE', 		'YIELD_PRODUCTION', 1),
+		('BUILDING_SEOWON', 'IMPROVEMENT_MONGOLIA_ORDO', 	'YIELD_PRODUCTION', 1),
+		('BUILDING_SEOWON', 'IMPROVEMENT_EMBASSY', 			'YIELD_PRODUCTION', 1);
 
 INSERT INTO Building_ClassesNeededInCity
 	(BuildingType, BuildingClassType)
