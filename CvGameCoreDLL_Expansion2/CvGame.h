@@ -842,7 +842,22 @@ public:
 
 	bool isFirstActivationOfPlayersAfterLoad() const;
 
+	// exe things
+#if defined(MOD_EXE_HACKING)
+	void SetExeBinType(CvBinType eBinType);
+	CvBinType GetExeBinType() const;
+
+	void SetExeWantForceResyncValue(int value);
+	void SetExeWantForceResyncPointer(int* pointer);
+#endif
+
 protected:
+
+#if defined(MOD_EXE_HACKING)
+	// exe things
+	CvBinType m_eExeBinType;
+	int* s_iExeWantForceResync;
+#endif
 
 	bool m_firstActivationOfPlayersAfterLoad;
 

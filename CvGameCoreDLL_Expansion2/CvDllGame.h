@@ -31,6 +31,10 @@ public:
 	TeamTypes DLLCALL GetActiveTeam();
 	int DLLCALL GetGameTurn() const;
 
+#if defined(MOD_EXE_HACKING)
+	void InitExeStuff();
+#endif
+
 	void DLLCALL ChangeNumGameTurnActive(int iChange, const char* why);
 	int DLLCALL CountHumanPlayersAlive() const;
 	int DLLCALL CountNumHumanGameTurnActive();

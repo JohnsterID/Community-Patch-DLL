@@ -513,6 +513,10 @@ void CvLuaGame::RegisterMembers(lua_State* L)
 	Method(IsPitbossHost);
 	Method(IsHost);
 	Method(GetTimeStringForYear);
+
+#if defined(MOD_EXE_HACKING)
+	Method(SetExeWantForceResyncValue);
+#endif
 }
 //------------------------------------------------------------------------------
 
@@ -4193,3 +4197,11 @@ int CvLuaGame::lGetTimeStringForYear(lua_State* L)
 	lua_pushstring(L, timeString.GetCString());
 	return 1;
 }
+#if defined(MOD_EXE_HACKING)
+int CvLuaGame::lSetExeWantForceResyncValue(lua_State* L)
+{
+	int value = lua_tointeger(L, 1);
+	GC.getGame().SetExeWantForceResyncValue(value);
+	return 0;
+}
+#endif

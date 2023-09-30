@@ -14795,3 +14795,27 @@ bool CvGame::isFirstActivationOfPlayersAfterLoad() const
 {
 	return m_firstActivationOfPlayersAfterLoad;
 }
+
+//	--------------------------------------------------------------------------------
+// exe things
+
+#if defined(MOD_EXE_HACKING)
+void CvGame::SetExeBinType(CvBinType eBinType)
+{
+	m_eExeBinType = eBinType;
+}
+CvBinType CvGame::GetExeBinType() const
+{
+	return m_eExeBinType;
+}
+void CvGame::SetExeWantForceResyncValue(int value) 
+{
+	if (m_eExeBinType == BIN_DX11 && isReallyNetworkMultiPlayer() && gDLL->IsHost()) {
+		*(int*)(s_iExeWantForceResync) = value;
+	}
+}
+void CvGame::SetExeWantForceResyncPointer(int* pointer)
+{
+	s_iExeWantForceResync = pointer;
+}
+#endif

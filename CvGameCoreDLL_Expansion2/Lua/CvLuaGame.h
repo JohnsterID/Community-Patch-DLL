@@ -500,6 +500,10 @@ protected:
 	static int lIsPitbossHost(lua_State* L);
 	static int lIsHost(lua_State* L);
 	static int lGetTimeStringForYear(lua_State* L);
+
+#if defined(MOD_EXE_HACKING)
+	static int lSetExeWantForceResyncValue(lua_State* L);
+#endif
 };
 
 #endif //CVLUAGAME_H

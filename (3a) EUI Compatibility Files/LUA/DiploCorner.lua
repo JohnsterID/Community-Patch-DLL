@@ -506,8 +506,16 @@ if( Game.IsGameMultiPlayer() ) then
 	if ( not Game.IsHotSeat() ) then
 		Controls.ChatToggle:SetHide( false );
 		OnChatToggle();
+		
+		local bShowForceResync = Matchmaking.IsHost();
+		Controls.ForceResyncButton:SetHide( not bShowForceResync );
 	end
 end
+
+function OnForceResyncButton()
+	Game.SetExeWantForceResyncValue(1);
+end
+Controls.ForceResyncButton:RegisterCallback(Mouse.eLClick, OnForceResyncButton);
 
 
 -------------------------------------------------------------------------------
