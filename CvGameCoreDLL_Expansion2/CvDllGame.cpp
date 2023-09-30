@@ -588,86 +588,54 @@ void CvDllGame::SetLastTurnAICivsProcessed()
 }
 //------------------------------------------------------------------------------
 #if defined(MOD_EXE_HACKING)
+// Constants
+const DWORD DX11_FORCE_RESYNC_ADDRESS = 0x02dd2f68;
+const DWORD DX11_HEADERS_OFFSET = 0x400000;
+// Custom integer to string conversion
+std::string intToString(int value) {
+	std::string result;
+	do {
+		char digit = '0' + (value % 10);
+		result = digit + result;
+		value /= 10;
+	} while (value != 0);
+	return result;
+}
 bool endsWith(const char* str, const char* ending) {
 	size_t str_len = strlen(str), ending_len = strlen(ending);
 	return str_len >= ending_len && !strcmp(str + str_len - ending_len, ending);
 }
+void logError(const std::string& errorMessage) {
+	std::cerr << "Error: " << errorMessage << std::endl;
+}
 void CvDllGame::InitExeStuff() {
-	// Here we are going to do some hacking on .exe code
-	// 
-	// civ5 exes are CEG-protected (some kind of steam out-of-box protection).
-	// It disallows you to patch .exe directly, but still we are able to patch it in runtime
-	// and do everything we want (I'm not sure, but it looks like so).
-	// 
-	// Reversing .exe is pretty simple because .exe files are not obfuscated in any way,
-	// so you can just load them into ghidra/ida/etc, find the addresses you need and then 
-	// patch them here.
-	// (!) Moreover, civ5 linux executable is compiled with all the namings preserved, 
-	// so things become even more easier because everything what you need is:
-	// - Find address in linux executable.
-	// - Map it somehow to .exe address (orient by string constants, 
-	//   similar code instructions and so on).
-	// - Patch it here.
-	//
-	// todo: support dx9, tablet (?) binaries
-	// todo: some modern way of patching
-	// todo: code caves
-	CvBinType binType;
+	std::vector<char> moduleName(MAX_PATH);
+	if (GetModuleFileName(NULL, &moduleName[0], moduleName.size()) == 0) {
+		logError("Unable to retrieve module file name. Error code: " + intToString(GetLastError()));
+		return;
+	}
 
-	char moduleName[1024];
-	if (!GetModuleFileName(NULL, moduleName, sizeof(moduleName))) {
-		// todo: log error (GetLastError)
-		binType = BIN_UNKNOWN;
+	CvBinType binType = BIN_UNKNOWN;
+	if (endsWith(&moduleName[0], "CivilizationV.exe")) {
+		binType = BIN_DX9;
+	}
+	else if (endsWith(&moduleName[0], "CivilizationV_DX11.exe")) {
+		binType = BIN_DX11;
+		// Perform DX11 specific initialization
+		DWORD baseAddr = (DWORD)GetModuleHandleA(NULL);
+		DWORD totalOffset = baseAddr - DX11_HEADERS_OFFSET;
+		int* s_wantForceResync = reinterpret_cast<int*>(DX11_FORCE_RESYNC_ADDRESS + totalOffset);
+		m_pGame->SetExeWantForceResyncPointer(s_wantForceResync);
+	}
+	else if (endsWith(&moduleName[0], "CivilizationV_Tablet.exe")) {
+		binType = BIN_TABLET;
 	}
 	else {
-		if (endsWith(moduleName, "CivilizationV.exe"))
-			binType = BIN_DX9;
-		else if (endsWith(moduleName, "CivilizationV_DX11.exe"))
-			binType = BIN_DX11;
-		else if (endsWith(moduleName, "CivilizationV_Tablet.exe"))
-			binType = BIN_TABLET;
-		else {
-			// todo: log moduleName
-			binType = BIN_UNKNOWN;
-		}
+		logError("Unknown module name: " + std::string(&moduleName[0]));
+		return;
 	}
 
 	m_pGame->SetExeBinType(binType);
-
-	if (binType == BIN_DX11) {
-		DWORD baseAddr = (DWORD) GetModuleHandleA(0);
-		DWORD headersOffset = 0x400000;
-		DWORD totalOffset = baseAddr - headersOffset;
-
-		int* s_wantForceResync = reinterpret_cast<int*>(0x02dd2f68 + totalOffset);
-
-		m_pGame->SetExeWantForceResyncPointer(s_wantForceResync);
-	}
-
-	/*{
-	    // the very basic example of how to fill something with NOPs
-		DWORD old_protect;
-		DWORD hookLocation = 0x51e031;
-		DWORD hookResultAddress = hookLocation + totalOffset;
-		if (VirtualProtect((void*)(hookResultAddress), 16, PAGE_EXECUTE_READWRITE, &old_protect)) {
-			*(unsigned char*)(hookResultAddress) = 0x90;
-			*(unsigned char*)(hookResultAddress + 1) = 0x90;
-			*(unsigned char*)(hookResultAddress + 2) = 0x90;
-			*(unsigned char*)(hookResultAddress + 3) = 0x90;
-			*(unsigned char*)(hookResultAddress + 4) = 0x90;
-			*(unsigned char*)(hookResultAddress + 5) = 0x90;
-			*(unsigned char*)(hookResultAddress + 6) = 0x90;
-			*(unsigned char*)(hookResultAddress + 7) = 0x90;
-			*(unsigned char*)(hookResultAddress + 8) = 0x90;
-			*(unsigned char*)(hookResultAddress + 9) = 0x90;
-			*(unsigned char*)(hookResultAddress + 10) = 0x90;
-			*(unsigned char*)(hookResultAddress + 11) = 0x90;
-			*(unsigned char*)(hookResultAddress + 12) = 0x90;
-			*(unsigned char*)(hookResultAddress + 13) = 0x90;
-			*(unsigned char*)(hookResultAddress + 14) = 0x90;
-			*(unsigned char*)(hookResultAddress + 15) = 0x90;
-			VirtualProtect((void*)(hookResultAddress), 16, old_protect, &old_protect);
-		}
-	}*/
+	logError("Initialized with BinType: " + intToString(binType));
 }
 #endif
