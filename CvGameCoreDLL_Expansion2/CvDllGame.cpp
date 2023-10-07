@@ -591,6 +591,10 @@ void CvDllGame::SetLastTurnAICivsProcessed()
 // Constants
 const DWORD DX11_FORCE_RESYNC_ADDRESS = 0x02dd2f68;
 const DWORD DX11_HEADERS_OFFSET = 0x400000;
+
+const char* MODULE_NAME_DX9 = "CivilizationV.exe";
+const char* MODULE_NAME_DX11 = "CivilizationV_DX11.exe";
+const char* MODULE_NAME_TABLET = "CivilizationV_Tablet.exe";
 // Custom integer to string conversion
 std::string intToString(int value) {
 	std::string result;
@@ -608,34 +612,39 @@ bool endsWith(const char* str, const char* ending) {
 void logError(const std::string& errorMessage) {
 	std::cerr << "Error: " << errorMessage << std::endl;
 }
+
 void CvDllGame::InitExeStuff() {
-	std::vector<char> moduleName(MAX_PATH);
-	if (GetModuleFileName(NULL, &moduleName[0], moduleName.size()) == 0) {
+	char moduleName[MAX_PATH];
+	if (GetModuleFileName(NULL, moduleName, sizeof(moduleName)) == 0) {
 		logError("Unable to retrieve module file name. Error code: " + intToString(GetLastError()));
+		// Handle error (throw exception or return error code)
 		return;
 	}
 
 	CvBinType binType = BIN_UNKNOWN;
-	if (endsWith(&moduleName[0], "CivilizationV.exe")) {
+
+	if (endsWith(moduleName, MODULE_NAME_DX9)) {
 		binType = BIN_DX9;
 	}
-	else if (endsWith(&moduleName[0], "CivilizationV_DX11.exe")) {
+	else if (endsWith(moduleName, MODULE_NAME_DX11)) {
 		binType = BIN_DX11;
 		// Perform DX11 specific initialization
-		DWORD baseAddr = (DWORD)GetModuleHandleA(NULL);
+		DWORD baseAddr = reinterpret_cast<DWORD>(GetModuleHandleA(NULL));
 		DWORD totalOffset = baseAddr - DX11_HEADERS_OFFSET;
-		int* s_wantForceResync = reinterpret_cast<int*>(DX11_FORCE_RESYNC_ADDRESS + totalOffset);
-		m_pGame->SetExeWantForceResyncPointer(s_wantForceResync);
+		int* wantForceResyncPtr = reinterpret_cast<int*>(DX11_FORCE_RESYNC_ADDRESS + totalOffset);
+		m_pGame->SetExeWantForceResyncPointer(wantForceResyncPtr);
 	}
-	else if (endsWith(&moduleName[0], "CivilizationV_Tablet.exe")) {
+	else if (endsWith(moduleName, MODULE_NAME_TABLET)) {
 		binType = BIN_TABLET;
 	}
 	else {
-		logError("Unknown module name: " + std::string(&moduleName[0]));
+		logError("Unknown module name: " + std::string(moduleName));
+		// Handle unrecognized module name (throw exception or return error code)
 		return;
 	}
 
 	m_pGame->SetExeBinType(binType);
 	logError("Initialized with BinType: " + intToString(binType));
 }
+
 #endif
