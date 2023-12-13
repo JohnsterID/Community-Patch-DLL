@@ -2385,51 +2385,84 @@ PlayerTypes GetCurrentPlayer()
 /* See http://forums.civfanatics.com/showthread.php?t=498919                                    */
 /************************************************************************************************/
 
-#pragma comment (lib, "dbghelp.lib")
-void CreateMiniDump(EXCEPTION_POINTERS *pep)
-{
-#ifdef STACKWALKER
-	{
-		/* Try to log the callstack */
-		FILogFile* pLog=LOGFILEMGR.GetLog( "Callstack.log", FILogFile::kDontTimeStamp );
-		if (pLog)
-		{
-			pLog->Msg("Gamecore Callstack\n");
-
-			gStackWalker.SetLog(pLog);	
-			gStackWalker.ShowCallstack(INT_MAX, GetCurrentThread(), pep ? pep->ContextRecord : NULL );
-			gStackWalker.SetLog(NULL);
-
-			pLog->Msg("\nLua Callstack\n");
-			if (gLuaState)
-				LuaSupport::DumpCallStack(gLuaState,pLog);
-
-			pLog->Close();
-		}
-	}
+#pragma comment(lib, "dbghelp.lib")
+// Define MiniDumpWithModuleHeaders if it's not already defined
+#ifndef MiniDumpWithModuleHeaders
+#define MiniDumpWithModuleHeaders 0x00080000
 #endif
 
-	/* Open a file to store the minidump. */
-	HANDLE hFile = CreateFile(_T("CvMiniDump.dmp"), GENERIC_READ | GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-	if((hFile == NULL) || (hFile == INVALID_HANDLE_VALUE)) {
+// Helper function to log the call stack and Lua call stack
+void LogCallStackAndLua(FILogFile* pLog, EXCEPTION_POINTERS* pep)
+{
+	if (pLog)
+	{
+		pLog->Msg("Gamecore Callstack\n");
+
+		gStackWalker.SetLog(pLog);
+		gStackWalker.ShowCallstack(INT_MAX, GetCurrentThread(), pep ? pep->ContextRecord : NULL);
+		gStackWalker.SetLog(NULL);
+
+		pLog->Msg("\nLua Callstack\n");
+		if (gLuaState)
+			LuaSupport::DumpCallStack(gLuaState, pLog);
+
+		pLog->Close();
+	}
+}
+
+// Helper function to generate a unique file name based on date and time
+void GenerateUniqueFileName(TCHAR* szFileName, size_t bufferSize)
+{
+	SYSTEMTIME st;
+	GetLocalTime(&st);
+	_stprintf_s(szFileName, bufferSize, _T("CvMiniDump_%04d%02d%02d_%02d%02d%02d.dmp"),
+		st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
+}
+
+// Helper function to create a minidump file
+void CreateMiniDumpFile(EXCEPTION_POINTERS* pep)
+{
+	TCHAR szFileName[MAX_PATH];
+	GenerateUniqueFileName(szFileName, MAX_PATH);
+
+	// Open a file to store the minidump
+	HANDLE hFile = CreateFile(szFileName, GENERIC_READ | GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+	if (hFile == NULL || hFile == INVALID_HANDLE_VALUE)
+	{
 		_tprintf(_T("CreateFile failed. Error: %lu \n"), GetLastError());
 		return;
 	}
 
-	/* Create the minidump. */
+	// Create the minidump with specified flags
 	MINIDUMP_EXCEPTION_INFORMATION mdei;
-	mdei.ThreadId           = GetCurrentThreadId();
-	mdei.ExceptionPointers  = pep;
-	mdei.ClientPointers     = FALSE;
+	mdei.ThreadId = GetCurrentThreadId();
+	mdei.ExceptionPointers = pep;
+	mdei.ClientPointers = FALSE;
 
-	MINIDUMP_TYPE mdt       = MiniDumpNormal;
+	MINIDUMP_TYPE mdt = static_cast<MINIDUMP_TYPE>(MiniDumpNormal | MiniDumpWithCodeSegs | MiniDumpWithDataSegs | MiniDumpWithProcessThreadData | MiniDumpWithModuleHeaders | MiniDumpWithThreadInfo);
 
 	MiniDumpWriteDump(GetCurrentProcess(), GetCurrentProcessId(), hFile, mdt, (pep != NULL) ? &mdei : NULL, NULL, NULL);
 
 	CloseHandle(hFile);
 }
 
-LONG WINAPI CustomFilter(EXCEPTION_POINTERS *ExceptionInfo)
+// Entry point for creating a minidump
+void CreateMiniDump(EXCEPTION_POINTERS* pep)
+{
+	// Try to log the call stack and Lua call stack
+	FILogFile* pLog = LOGFILEMGR.GetLog("Callstack.log", FILogFile::kDontTimeStamp);
+	LogCallStackAndLua(pLog, pep);
+
+	// Generate a unique file name based on date and time
+	TCHAR szFileName[MAX_PATH];
+	GenerateUniqueFileName(szFileName, MAX_PATH);
+
+	// Create a minidump file
+	CreateMiniDumpFile(pep);
+}
+
+// Custom exception filter to trigger minidump creation
+LONG WINAPI CustomFilter(EXCEPTION_POINTERS* ExceptionInfo)
 {
 	CreateMiniDump(ExceptionInfo);
 	return EXCEPTION_EXECUTE_HANDLER;
