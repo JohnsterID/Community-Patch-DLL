@@ -76,7 +76,6 @@ PREDEFS = {
     Config.Debug: DEBUG_PREDEFS,
 }
 CL_SUPPRESS = [
-    'invalid-offsetof',
     'tautological-constant-out-of-range-compare',
     'comment',
     'enum-constexpr-conversion', # TODO: #9786

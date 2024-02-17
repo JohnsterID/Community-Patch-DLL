@@ -392,7 +392,9 @@ private:
 // Automagically begins a CvSyncArchive specialization
 #define SYNC_ARCHIVE_BEGIN(containerType) \
 template<> inline const containerType& CvSyncArchive<containerType>::getContainer() const { \
-	return *reinterpret_cast<const containerType*>(reinterpret_cast<const char*>(this) - offsetof(containerType, m_syncArchive)); \
+	return *reinterpret_cast<const containerType*>( \
+        reinterpret_cast<const char*>(this) - (reinterpret_cast<const char*>(&((containerType*)0)->m_syncArchive) - reinterpret_cast<const char*>(0)) \
+    ); \
 } \
 template<> inline containerType& CvSyncArchive<containerType>::getContainer() { \
 	return const_cast<containerType&>(const_cast<const CvSyncArchive<containerType>*>(this)->getContainer()); \
@@ -419,7 +421,10 @@ public:
 		static inline ValueType& Get(ContainerType& container) { return container.memberName; } \
 		static inline const char* name() { return #memberName; } \
 		static inline const SyncVarsType& GetStorage(const CvSyncVar<memberName##_Traits>& var) { \
-			return *reinterpret_cast<const SyncVarsType*>(reinterpret_cast<const char*>(&var) - offsetof(SyncVarsType, memberName)); \
+			return *reinterpret_cast<const SyncVarsType*>( \
+				reinterpret_cast<const char*>(&var) - \
+				(reinterpret_cast<const char*>(&((SyncVarsType*)0)->memberName) - reinterpret_cast<const char*>(0)) \
+			); \
 		} \
 		static inline SyncVarsType& GetStorage(CvSyncVar<memberName##_Traits>& var) { \
 			return const_cast<SyncVarsType&>(GetStorage(const_cast<const CvSyncVar<memberName##_Traits>&>(var))); \
