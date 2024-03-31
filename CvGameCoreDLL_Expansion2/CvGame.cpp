@@ -628,7 +628,7 @@ void CvGame::InitPlayers()
 		SlotStatus eStatus = CvPreGame::slotStatus(eLoopPlayer);
 		if (eStatus == SS_TAKEN || eStatus == SS_COMPUTER) // Don't set colors for unoccupied slots.
 		{
-			ePlayerColor = (PlayerColorTypes)CvPreGame::playerColor(eLoopPlayer);
+			ePlayerColor = CvPreGame::playerColor(eLoopPlayer);
 
 			// If it wasn't set in the pregame for some reason, fetch it from the database.
 			if (ePlayerColor == NO_PLAYERCOLOR)
@@ -5444,7 +5444,6 @@ void CvGame::DoUpdateDiploVictory()
 				{
 					if (pPlayer->isAlive())
 					{
-#if defined(MOD_BALANCE_CORE_VICTORY_GAME_CHANGES)
 						if(MOD_BALANCE_CORE_VICTORY_GAME_CHANGES)
 						{
 							fCityStatesToCount += 1.34f;
@@ -5453,13 +5452,9 @@ void CvGame::DoUpdateDiploVictory()
 						{
 							fCityStatesToCount += 1.0f;
 						}
-#else
-						fCityStatesToCount += 1.0f;
-#endif
 					}
 					else
 					{
-#if defined(MOD_BALANCE_CORE_VICTORY_GAME_CHANGES)
 						if(MOD_BALANCE_CORE_VICTORY_GAME_CHANGES)
 						{
 							fCityStatesToCount += 0.75f;
@@ -5468,9 +5463,6 @@ void CvGame::DoUpdateDiploVictory()
 						{
 							fCityStatesToCount += 0.5f;
 						}
-#else
-						fCityStatesToCount += 0.5f;
-#endif
 					}
 				}
 			}
@@ -5479,7 +5471,6 @@ void CvGame::DoUpdateDiploVictory()
 			{
 				if (pPlayer->isAlive())
 				{
-#if defined(MOD_BALANCE_CORE_VICTORY_GAME_CHANGES)
 					if(MOD_BALANCE_CORE_VICTORY_GAME_CHANGES)
 					{
 						fCivsToCount += 1.5f;
@@ -5488,11 +5479,9 @@ void CvGame::DoUpdateDiploVictory()
 					{
 						fCivsToCount += 1.0f;
 					}
-#endif
 				}
 				else
 				{
-#if defined(MOD_BALANCE_CORE_VICTORY_GAME_CHANGES)
 					if(MOD_BALANCE_CORE_VICTORY_GAME_CHANGES)
 					{
 						fCivsToCount += 0.75f;
@@ -5501,9 +5490,6 @@ void CvGame::DoUpdateDiploVictory()
 					{
 						fCivsToCount += 0.5f;
 					}
-#else
-					fCivsToCount += 0.5f;
-#endif
 				}
 			}
 		}
@@ -5512,12 +5498,12 @@ void CvGame::DoUpdateDiploVictory()
 	// Number of delegates needed to win increases the more civs and city-states there are in the game,
 	// but these two scale differently since civs' delegates are harder to secure. These functions 
 	// are based on a logarithmic regression.
-	float fCivVotesPortion = (/*1.443f*/ GD_FLOAT_GET(DIPLO_VICTORY_CIV_DELEGATES_COEFFICIENT) * (float)log(fCivsToCount)) + /*7.000f*/ GD_FLOAT_GET(DIPLO_VICTORY_CIV_DELEGATES_CONSTANT);
+	float fCivVotesPortion = (/*1.443f*/ GD_FLOAT_GET(DIPLO_VICTORY_CIV_DELEGATES_COEFFICIENT) * log(fCivsToCount)) + /*7.000f*/ GD_FLOAT_GET(DIPLO_VICTORY_CIV_DELEGATES_CONSTANT);
 	if (fCivVotesPortion < 0.0f)
 	{
 		fCivVotesPortion = 0.0f;
 	}
-	float fCityStateVotesPortion = (/*16.023f*/ GD_FLOAT_GET(DIPLO_VICTORY_CS_DELEGATES_COEFFICIENT) * (float)log(fCityStatesToCount)) + /*-13.758f*/ GD_FLOAT_GET(DIPLO_VICTORY_CS_DELEGATES_CONSTANT);
+	float fCityStateVotesPortion = (/*16.023f*/ GD_FLOAT_GET(DIPLO_VICTORY_CS_DELEGATES_COEFFICIENT) * log(fCityStatesToCount)) + /*-13.758f*/ GD_FLOAT_GET(DIPLO_VICTORY_CS_DELEGATES_CONSTANT);
 	if (fCityStateVotesPortion < 0.0f)
 	{
 		fCityStateVotesPortion = 0.0f;
@@ -9668,15 +9654,16 @@ void CvGame::updateMoves()
 
 		if(player.isAlive())
 		{
-			bool needsAIUpdate = player.hasUnitsThatNeedAIUpdate();
-			if(player.isTurnActive() || needsAIUpdate)
+			bool bAutomatedUnitNeedsUpdate = player.hasUnitsThatNeedAIUpdate();
+			bool bHomelandAINeedsUpdate = player.GetHomelandAI()->NeedsUpdate();
+			if(player.isTurnActive() || bAutomatedUnitNeedsUpdate || bHomelandAINeedsUpdate)
 			{
-				if(!(player.isAutoMoves()) || needsAIUpdate)
+				if(!(player.isAutoMoves()) || bAutomatedUnitNeedsUpdate || bHomelandAINeedsUpdate)
 				{
-					if(needsAIUpdate || !player.isHuman())
+					if(bAutomatedUnitNeedsUpdate || bHomelandAINeedsUpdate || !player.isHuman())
 					{
-						// ------- this is where the important stuff happens! --------------
-						player.AI_unitUpdate();
+					// ------- this is where the important stuff happens! --------------
+						player.AI_unitUpdate(bHomelandAINeedsUpdate);
 						NET_MESSAGE_DEBUG_OSTR_ALWAYS("UpdateMoves() : player.AI_unitUpdate() called for player " << player.GetID() << " " << player.getName()); 
 					}
 
@@ -11602,7 +11589,7 @@ void CvGame::Read(FDataStream& kStream)
 
 		CUSTOMLOG("Savefile was generated from gamecore version %s", save_gamecore_version.c_str());
 		if (strcmp(save_gamecore_version.c_str(), CURRENT_GAMECORE_VERSION)!=0)
-			CUSTOMLOG("----> Potential savefile format mismatch!");
+			CUSTOMLOG("----> Potential savefile format mismatch, gamecore is version %s!", CURRENT_GAMECORE_VERSION);
 	}
 
 	CvStreamLoadVisitor serialVisitor(kStream);
@@ -13007,13 +12994,40 @@ void CvGame::LogMapState() const
 			routeType = 255;
 		}
 
-		strTemp.Format("{\"X\":%d,\"Y\":%d,\"CityId\":%d,\"CityName\":\"%s\",\"Owner\":%d,\"RouteType\":%d}",
+		// Get the combat unit on the tile to display - for now civilian units and aircraft are not considered
+		// due to only having space to display one flag, hence the filtering for combat strength only
+		CvString combatUnit = "";
+		int combatUnitID = 0;
+		int combatUnitOwner = 255;
+		int combatUnitMaxHP = 0;
+		int combatUnitCurrHP = 0;
+		for (int iZ = 0; iZ < pPlot->getNumUnits(); iZ++)
+		{
+			CvUnit* pLoopUnit = pPlot->getUnitByIndex(iZ);
+			if (pLoopUnit && pLoopUnit->GetBaseCombatStrength() > 0)
+			{
+				combatUnitID = pLoopUnit->GetID();
+				combatUnit = GC.getUnitInfo(pLoopUnit->getUnitType())->GetType();
+				combatUnitOwner = pLoopUnit->getOwner();
+				combatUnitMaxHP = pLoopUnit->GetMaxHitPoints();
+				combatUnitCurrHP = pLoopUnit->GetMaxHitPoints() - pLoopUnit->getDamage();
+
+				break;
+			}
+		}
+
+		strTemp.Format("{\"X\":%d,\"Y\":%d,\"CityId\":%d,\"CityName\":\"%s\",\"Owner\":%d,\"RouteType\":%d,\"UnitID\":%d,\"Unit\":\"%s\",\"UnitOwner\":%d,\"UnitMaxHp\":%d,\"UnitCurrHp\":%d}",
 			pPlot->getX(),
 			pPlot->getY(),
 			cityId,
 			cityName.GetCString(),
 			owner,
-			routeType
+			routeType,
+			combatUnitID,
+			combatUnit.c_str(),
+			combatUnitOwner,
+			combatUnitMaxHP,
+			combatUnitCurrHP
 		);
 		outputJson += strTemp;
 
@@ -13941,7 +13955,7 @@ void CvGame::SpawnArchaeologySitesHistorically()
 			// Then get a writing and set it
 			int iIndex = urandLimitExclusive(aWorksWriting.size(), pPlot->GetPseudoRandomSeed().mix(aWorksWriting.size()));
 			GreatWorkType eWrittenGreatWork = aWorksWriting[iIndex];
-			pPlot->SetArtifactGreatWork((GreatWorkType)eWrittenGreatWork);
+			pPlot->SetArtifactGreatWork(eWrittenGreatWork);
 
 			// Erase that writing from future consideration
 			vector<GreatWorkType>::const_iterator it = std::find (aWorksWriting.begin(), aWorksWriting.end(), eWrittenGreatWork);
@@ -14003,22 +14017,19 @@ CombatPredictionTypes CvGame::GetCombatPrediction(const CvUnit* pAttackingUnit, 
 			pFromPlot = pEnd;
 	}
 
+	int iRangedSupportDamageInflicted = 0;
+	if (pAttackingUnit->isRangedSupportFire()) 
+	{
+		iRangedSupportDamageInflicted = pAttackingUnit->GetRangeCombatDamage(pDefendingUnit, NULL, false);
+	}
+
 	int iAttackingStrength = pAttackingUnit->GetMaxAttackStrength(pFromPlot, pToPlot, pDefendingUnit, false, false);
 	if(iAttackingStrength == 0)
 	{
 		return NO_COMBAT_PREDICTION;
 	}
 
-	int iDefenderStrength = pDefendingUnit->GetMaxDefenseStrength(pToPlot, pAttackingUnit, pFromPlot, false, false);
-
-	if (pAttackingUnit->isRangedSupportFire()) 
-	{
-		int iDefenderCurrentDamage = pDefendingUnit->getDamage();
-		int iRangedSupportDamageInflicted = pAttackingUnit->GetRangeCombatDamage(pDefendingUnit, NULL, false);
-		int iDefendingDamageModifier = pDefendingUnit->GetDamageCombatModifier(false, iDefenderCurrentDamage + iRangedSupportDamageInflicted);
-		
-		iDefenderStrength = iDefenderStrength * (100 + iDefendingDamageModifier) / 100;
-	}
+	int iDefenderStrength = pDefendingUnit->GetMaxDefenseStrength(pToPlot, pAttackingUnit, pFromPlot, false, false, iRangedSupportDamageInflicted);
 
 	//iMyDamageInflicted = pMyUnit:GetCombatDamage(iMyStrength, iTheirStrength, pMyUnit:GetDamage() + iTheirFireSupportCombatDamage, false, false, false);
 	int iAttackingDamageInflicted = pAttackingUnit->getCombatDamage(iAttackingStrength, iDefenderStrength, false, false, false);
@@ -14710,7 +14721,7 @@ bool CvGame::CreateFreeCityPlayer(CvCity* pStartingCity, bool bJustChecking, boo
 	if (eNewPlayer == NO_PLAYER || eNewTeam == NO_TEAM)
 		return false;
 
-	const TeamTypes eTeam(static_cast<TeamTypes>(eNewTeam));
+	const TeamTypes eTeam(eNewTeam);
 	CvTeam& kTeam = GET_TEAM(eTeam);
 
 	MinorCivTypes eNewType = CvPreGame::minorCivType(eNewPlayer);
@@ -14843,7 +14854,7 @@ void CvGame::SetExeWantForceResyncValue(int value)
 {
 	if (IsExeWantForceResyncAvailable())
 	{
-		*(int*)(s_iExeWantForceResync) = value;
+		*s_iExeWantForceResync = value;
 		if (value == 1)
 		{
 			CvString strWarningText = GetLocalizedText("TXT_KEY_VP_MP_WARNING_RESYNC_SCHEDULED");

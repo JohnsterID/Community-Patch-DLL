@@ -320,6 +320,7 @@ CvMap::CvMap()
 	, m_pMapPlots(NULL)
 	, m_pPlotNeighbors(NULL)
 	, m_vVisibilityScratchpad()
+	, m_vKnownVisibilityScratchpad()
 	, m_pYields(NULL)
 	, m_pPlayerCityRadiusCount(NULL)
 	, m_pVisibilityCount(NULL)
@@ -368,6 +369,7 @@ void CvMap::InitPlots()
 
 	//have to include barbarian here ...
 	const int iNumTeams = MAX_TEAMS;
+	const int iNumPlayers = MAX_PLAYERS;
 
 	//allocate all the memory we need up front
 	m_pYields = FNEW(uint8[NUM_YIELD_TYPES*iNumPlots], c_eCiv5GameplayDLL, 0);
@@ -378,6 +380,8 @@ void CvMap::InitPlots()
 	memset(m_pVisibilityCount, 0, iNumTeams*iNumPlots *sizeof(uint8));
 	m_pVisibilityCountThisTurnMax = FNEW(uint8[iNumTeams*iNumPlots], c_eCiv5GameplayDLL, 0);
 	memset(m_pVisibilityCountThisTurnMax, 0, iNumTeams*iNumPlots * sizeof(uint8));
+	m_pKnownVisibilityCount = FNEW(uint8[iNumTeams * iNumPlots], c_eCiv5GameplayDLL, 0);
+	memset(m_pKnownVisibilityCount, 0, iNumTeams * iNumPlots * sizeof(uint8));
 
 	m_pRevealedOwner = FNEW(char[iNumTeams*iNumPlots], c_eCiv5GameplayDLL, 0);
 	memset(m_pRevealedOwner, -1, iNumTeams*iNumPlots *sizeof(char));
@@ -389,6 +393,8 @@ void CvMap::InitPlots()
 	memset(m_pRevealedRouteType, 0, iNumTeams*iNumPlots *sizeof(char));
 	m_pResourceForceReveal = FNEW(bool[iNumTeams*iNumPlots], c_eCiv5GameplayDLL, 0);
 	memset(m_pResourceForceReveal, 0, iNumTeams*iNumPlots *sizeof(bool));
+	m_pHumanPlannedRouteState = FNEW(char[iNumPlayers * iNumPlots], c_eCiv5GameplayDLL, 0);
+	memset(m_pHumanPlannedRouteState, 0, iNumPlayers * iNumPlots * sizeof(char));
 #if defined(MOD_BALANCE_CORE)
 	m_pIsImpassable = FNEW(bool[iNumTeams*iNumPlots], c_eCiv5GameplayDLL, 0);
 	memset(m_pIsImpassable, 0, iNumTeams*iNumPlots *sizeof(bool));
@@ -401,10 +407,12 @@ void CvMap::InitPlots()
 	uint8* pPlayerCityRadiusCount = m_pPlayerCityRadiusCount;
 	uint8* pVisibilityCount = m_pVisibilityCount;
 	uint8* pVisibilityCountThisTurnMax = m_pVisibilityCountThisTurnMax;
+	uint8* pKnownVisibilityCount = m_pKnownVisibilityCount;
 	char* pRevealedOwner = m_pRevealedOwner;
 	char* pRevealedImprovementType = m_pRevealedImprovementType;
 	char* pRevealedRouteType = m_pRevealedRouteType;
 	bool* pResourceForceReveal = m_pResourceForceReveal;
+	char* pHumanPlannedRouteState = m_pHumanPlannedRouteState;
 #if defined(MOD_BALANCE_CORE)
 	bool* pIsImpassable = m_pIsImpassable;
 	bool* pIsStrategic = m_pIsStrategic;
@@ -416,10 +424,12 @@ void CvMap::InitPlots()
 		m_pMapPlots[i].m_aiPlayerCityRadiusCount = pPlayerCityRadiusCount;
 		m_pMapPlots[i].m_aiVisibilityCount = pVisibilityCount;
 		m_pMapPlots[i].m_aiVisibilityCountThisTurnMax = pVisibilityCountThisTurnMax;
+		m_pMapPlots[i].m_aiKnownVisibilityCount = pKnownVisibilityCount;
 		m_pMapPlots[i].m_aiRevealedOwner = pRevealedOwner;
 		m_pMapPlots[i].m_aeRevealedImprovementType = pRevealedImprovementType;
 		m_pMapPlots[i].m_aeRevealedRouteType = pRevealedRouteType;
 		m_pMapPlots[i].m_abResourceForceReveal = pResourceForceReveal;
+		m_pMapPlots[i].m_aeHumanPlannedRouteState = pHumanPlannedRouteState;
 #if defined(MOD_BALANCE_CORE)
 		m_pMapPlots[i].m_abIsImpassable = pIsImpassable;
 		m_pMapPlots[i].m_abStrategicRoute = pIsStrategic;
@@ -429,10 +439,12 @@ void CvMap::InitPlots()
 		pPlayerCityRadiusCount  += iNumTeams;
 		pVisibilityCount		+= iNumTeams;
 		pVisibilityCountThisTurnMax += iNumTeams;
+		pKnownVisibilityCount   += iNumTeams;
 		pRevealedOwner			+= iNumTeams;
 		pRevealedImprovementType+= iNumTeams;
 		pRevealedRouteType		+= iNumTeams;
 		pResourceForceReveal	+= iNumTeams;
+		pHumanPlannedRouteState += iNumTeams;
 #if defined(MOD_BALANCE_CORE)
 		pIsImpassable			+= iNumTeams;
 		pIsStrategic			+= iNumTeams;
@@ -451,6 +463,7 @@ void CvMap::InitPlots()
 	PrecalcNeighbors();
 
 	m_vVisibilityScratchpad = vector<int>(iNumPlots, 0);
+	m_vKnownVisibilityScratchpad = vector<int>(iNumPlots, 0);
 
 	OutputDebugString("realloc map\n");
 	m_vPlotsAtRange2.clear();
@@ -845,11 +858,11 @@ void CvMap::updateAdjacency()
 }
 
 //	--------------------------------------------------------------------------------
-void CvMap::verifyUnitValidPlot()
+void CvMap::verifyUnitValidPlot(PlayerTypes eForSpecificPlayer)
 {
 	for (int iI = 0; iI < numPlots(); iI++)
 	{
-		plotByIndexUnchecked(iI)->verifyUnitValidPlot();
+		plotByIndexUnchecked(iI)->verifyUnitValidPlot(eForSpecificPlayer);
 	}
 }
 
@@ -1142,6 +1155,30 @@ CvArea* CvMap::findBiggestArea(bool bWater)
 	}
 
 	return pBestArea;
+}
+
+
+//	--------------------------------------------------------------------------------
+CvLandmass* CvMap::findBiggestLandmass(bool bWater)
+{
+	CvLandmass* pBestLandmass = NULL;
+	int iBestValue = 0;
+	int iLoop = 0;
+	for(CvLandmass* pLoopLandmass = firstLandmass(&iLoop); pLoopLandmass != NULL; pLoopLandmass = nextLandmass(&iLoop))
+	{
+		if(pLoopLandmass->isWater() == bWater)
+		{
+			int iValue = pLoopLandmass->getNumTiles();
+
+			if(iValue > iBestValue)
+			{
+				iBestValue = iValue;
+				pBestLandmass = pLoopLandmass;
+			}
+		}
+	}
+
+	return pBestLandmass;
 }
 
 

@@ -104,12 +104,6 @@ UPDATE Defines SET Value = 20 WHERE Name = 'CULTURE_COST_FIRST_PLOT';
 UPDATE Defines SET Value = 12 WHERE Name = 'CULTURE_COST_LATER_PLOT_MULTIPLIER';
 UPDATE Defines SET Value = 1.35 WHERE Name = 'CULTURE_COST_LATER_PLOT_EXPONENT';
 
--- Border growth tile selection
-UPDATE Defines SET Value = 20 WHERE Name = 'PLOT_INFLUENCE_WATER_COST';
-UPDATE Defines SET Value = -40 WHERE Name = 'PLOT_INFLUENCE_YIELD_POINT_COST'; -- 3 yield tops 1 distance
-UPDATE Defines SET Value = -180 WHERE Name = 'PLOT_INFLUENCE_RESOURCE_COST'; -- should be more than 100 to be able to skip one ring
-UPDATE Defines SET Value = -500 WHERE Name = 'PLOT_INFLUENCE_NW_COST';
-
 -- % Extra gold cost to buy a resource tile
 UPDATE Defines SET Value = 0 WHERE Name = 'PLOT_BUY_RESOURCE_COST';
 
@@ -328,7 +322,6 @@ WHERE Name IN (
 	'QUEST_DISABLED_EXPLORE_AREA',
 	'QUEST_DISABLED_BUILD_X_BUILDINGS',
 	'QUEST_DISABLED_SPY_ON_MAJOR',
-	'QUEST_DISABLED_COUP',
 	'QUEST_DISABLED_ACQUIRE_CITY'
 );
 

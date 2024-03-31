@@ -40,7 +40,7 @@ public:
 	void AI_doTurnUnitsPre();
 	void AI_doTurnUnitsPost();
 
-	void AI_unitUpdate();
+	void AI_unitUpdate(bool bUpdateHomelandAI);
 	void AI_conquerCity(CvCity* pCity, bool bGift, bool bAllowSphereRemoval);
 
 	void AI_chooseFreeGreatPerson();
@@ -68,6 +68,10 @@ public:
 	bool GreatMerchantWantsCash();
 	CvPlot* FindBestMerchantTargetPlotForCash(CvUnit* pMerchant);
 	CvPlot* FindBestMerchantTargetPlotForPuppet(CvUnit* pMerchant);
+
+	//spaceship planning
+	vector<CvCity*> GetBestCitiesForSpaceshipParts();
+	void AI_doSpaceshipProduction();
 
 	//For Great Diplomats
 	CvPlot* FindBestDiplomatTargetPlot(CvUnit* pUnit);

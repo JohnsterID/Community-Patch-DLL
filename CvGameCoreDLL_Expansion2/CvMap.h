@@ -1,5 +1,5 @@
 /*	-------------------------------------------------------------------------------------------------------
-	© 1991-2012 Take-Two Interactive Software and its subsidiaries.  Developed by Firaxis Games.  
+	ï¿½ 1991-2012 Take-Two Interactive Software and its subsidiaries.  Developed by Firaxis Games.  
 	Sid Meier's Civilization V, Civ, Civilization, 2K Games, Firaxis Games, Take-Two Interactive Software 
 	and their respective logos are all trademarks of Take-Two interactive Software, Inc.  
 	All other marks and trademarks are the property of their respective owners.  
@@ -148,7 +148,7 @@ public:
 	void updateYield();
 	void updateAdjacency();
 
-	void verifyUnitValidPlot();
+	void verifyUnitValidPlot(PlayerTypes eForSpecificPlayer = NO_PLAYER);
 
 	CvPlot* syncRandPlot(int iFlags = 0, int iArea = -1, int iMinUnitDistance = -1, int iTimeout = 100);
 
@@ -157,6 +157,7 @@ public:
 	CvPlot* findNearestStartPlot(int iX, int iY, PlayerTypes& eOwner);
 
 	CvArea* findBiggestArea(bool bWater);
+	CvLandmass* findBiggestLandmass(bool bWater);
 
 	int getMapFractalFlags();
 	bool findWater(CvPlot* pPlot, int iRange, bool bFreshWater);
@@ -281,6 +282,7 @@ public:
 	void PrecalcNeighbors();
 
 	vector<int>& GetVisibilityScratchpad() { return m_vVisibilityScratchpad; }
+	vector<int>& GetKnownVisibilityScratchpad() { return m_vKnownVisibilityScratchpad; }
 #endif
 
 	CvPlotManager& plotManager() { return m_kPlotManager; }
@@ -375,12 +377,14 @@ protected:
 	CvPlot** m_pPlotNeighbors;			//precomputed neighbors for each plot
 	CvPlot* m_apShuffledNeighbors[6];	//scratchpad for shuffled access to neighbors
 	vector<int> m_vVisibilityScratchpad;
+	vector<int> m_vKnownVisibilityScratchpad;
 #endif
 
 	uint8* m_pYields;
 	uint8* m_pPlayerCityRadiusCount;
 	uint8* m_pVisibilityCount;				//actual vis count
 	uint8* m_pVisibilityCountThisTurnMax;	//maximum vis count this turn
+	uint8* m_pKnownVisibilityCount;         //current player's known vis count
 	char*  m_pRevealedOwner;
 #if defined(MOD_BALANCE_CORE)
 	bool*  m_pIsImpassable;
@@ -390,6 +394,7 @@ protected:
 	char* m_pRevealedImprovementType;
 	char* m_pRevealedRouteType;
 	bool* m_pResourceForceReveal;
+	char* m_pHumanPlannedRouteState;
 
 	TContainer<CvArea> m_areas;
 	TContainer<CvLandmass> m_landmasses;

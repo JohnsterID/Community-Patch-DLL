@@ -10,7 +10,8 @@ VALUES		('TXT_KEY_PRODMOD_WONDER_UNITPROMOTION',						'[NEWLINE][ICON_BULLET]Uni
 			('TXT_KEY_PRODMOD_WONDER_TO_BUILDING_FROM_PLAYER_TRAIT',		'[NEWLINE][ICON_BULLET]Trait Wonder Production Modifier for Buildings from Player Traits: {1_Num}%'),
 			('TXT_KEY_PRODMOD_WONDER_TO_BUILDING_FROM_CITY_TRAIT',			'[NEWLINE][ICON_BULLET]Trait Wonder Production Modifier for Buildings from City: {1_Num}%'),
 			('TXT_KEY_PRODMOD_WONDER_IMPROVEMENT',							'[NEWLINE][ICON_BULLET]Improvement Modifier for Wonders: {1_Num}%'),
-			('TXT_KEY_RELIGION_TOOLTIP_EXTENDED',							'{1_ReligionIcon} {2_NumFollowers} Followers ({3_TotalPressure} + {4_PressurePerTurn} Pressure from {5_Num} Source Cities)'),
+			('TXT_KEY_RELIGIOUS_PRESSURE_STRING_EXTENDED',					'({1_Pressure} Pressure, +{2_PressurePerTurn} per Turn)'),
+			('TXT_KEY_RELIGION_TOOLTIP_EXTENDED',							'{1_ReligionIcon} {2_NumFollowers} {2_NumFollowers: plural 1?Follower; other?Followers;} ({3_TotalPressure} + {4_PressurePerTurn} Pressure from {5_Num} {5_Num:plural 1?Source City; other?Source Cities;})'),
 			('TXT_KEY_EUPANEL_EMBARKATION_DEFENSE',							'Embarkation Defense'),
 			('TXT_KEY_EUPANEL_UNITCLASS_NEAR',								'Near Unit'),
 			('TXT_KEY_EUPANEL_NEARBYPROMOTION_COMBAT_BONUS',				'Bonus from Nearby Unit'),
@@ -46,6 +47,10 @@ WHERE EXISTS (SELECT * FROM CustomModOptions WHERE Name='ALTERNATE_ASSYRIA_TRAIT
 
 
 -- Cities
+
+UPDATE Language_en_US	
+SET Text = '[NEWLINE]Requires {TXT_KEY_GRAMMAR_A_AN << {1_BuildingName:textkey}} in this City.'
+WHERE Tag = 'TXT_KEY_NO_ACTION_UNIT_REQUIRES_BUILDING';
 
 -- Razing
 UPDATE Language_en_US	
@@ -103,11 +108,11 @@ WHERE Tag = 'TXT_KEY_EUPANEL_VISIBLE_AA_UNITS';
 
 -- Great Generals I/II Promotions
 UPDATE Language_en_US
-SET Text = 'Generates 50% [COLOR_POSITIVE_TEXT]more[ENDCOLOR] [ICON_GREAT_GENERAL] Great General Points from combat.'
+SET Text = '+50% [ICON_GREAT_GENERAL] Great General Points from combat.'
 WHERE Tag = 'TXT_KEY_PROMOTION_SPAWN_GENERALS_I_HELP';
 
 UPDATE Language_en_US
-SET Text = 'Generates 100% [COLOR_POSITIVE_TEXT]more[ENDCOLOR] [ICON_GREAT_GENERAL] Great General Points from combat.'
+SET Text = '+100% [ICON_GREAT_GENERAL] Great General Points from combat.'
 WHERE Tag = 'TXT_KEY_PROMOTION_SPAWN_GENERALS_II_HELP';
 
 -- Naval Melee Units
@@ -126,8 +131,9 @@ SET Text = 'Cannot End Turn on Ocean Tile'
 WHERE Tag = 'TXT_KEY_PROMOTION_OCEAN_IMPASSABLE';
 
 INSERT INTO Language_en_US
-		(Tag,										Text)
-VALUES	('TXT_KEY_PROMOTION_OCEAN_IMPASSABLE_HELP', 'Can never end turn on an Ocean Tile. May move through visible Ocean Tiles if ending on a visible Coast Tile.');
+	(Tag, Text)
+VALUES
+	('TXT_KEY_PROMOTION_OCEAN_IMPASSABLE_HELP', 'Cannot end turn in [COLOR_NEGATIVE_TEXT]Ocean[ENDCOLOR].[NEWLINE]Can move through visible Ocean if destination is visible Coast.');
 
 UPDATE UnitPromotions
 SET Help = 'TXT_KEY_PROMOTION_OCEAN_IMPASSABLE_HELP'
@@ -138,7 +144,7 @@ SET Text = 'Cannot End Turn on Ocean Tile until Astronomy'
 WHERE Tag = 'TXT_KEY_PROMOTION_OCEAN_IMPASSABLE_ASTRO';
 
 UPDATE Language_en_US
-SET Text = 'Cannot end turn on an Ocean Tile until you have researched [COLOR_POSITIVE_TEXT]Astronomy[ENDCOLOR]. May move through visible Ocean Tiles if ending on a visible Coast Tile.'
+SET Text = 'Cannot end turn in [COLOR_NEGATIVE_TEXT]Ocean[ENDCOLOR] until you have researched [COLOR_CYAN]{TXT_KEY_TECH_ASTRONOMY_TITLE}[ENDCOLOR].[NEWLINE]Can move through visible Ocean if destination is visible Coast.'
 WHERE Tag = 'TXT_KEY_PROMOTION_OCEAN_IMPASSABLE_ASTRO_HELP';
 
 -- Siege Units
@@ -1933,3 +1939,47 @@ WHERE Tag = 'TXT_KEY_TOP_PANEL_INTERNATIONAL_TRADE_ROUTES_TT_UNASSIGNED';
 UPDATE Language_en_US
 SET Text = '{1_CivName:textkey} {1_CivName: plural 1?is; other?are;} their current Ally.  You need another {2_NumInfluence} [ICON_INFLUENCE] Influence to surpass {1CivName:textkey} and become their Ally.[NEWLINE][NEWLINE]If a player becomes the Ally of a City-State, they receive extra bonuses relating to that City-State''s trait, and they will also receive any luxury and strategic Resources the City-State has connected.'
 WHERE Tag = 'TXT_KEY_CITY_STATE_ALLY_TT';
+
+UPDATE Language_en_US
+SET Text = 'You cannot negotiate peace with this player for another {1_Num} {1_Num: plural 1?turn; other?turns;} because of a deal you made with another player.'
+WHERE Tag = 'TXT_KEY_DIPLO_NEGOTIATE_PEACE_BLOCKED_TT';
+
+UPDATE Language_en_US
+SET Text = '{1_Progress}/{2_Threshold}, {3_Turns} {3_Turns: plural 1?Turn; other?Turns;} Remaining'
+WHERE Tag = 'TXT_KEY_GPLIST_PROGRESS';
+
+UPDATE Language_en_US
+SET Text = '{1_ReligionIcon} {2_NumFollowers} {2_NumFollowers: plural 1?Follower; other?Followers;} {3_PressureString}'
+WHERE Tag = 'TXT_KEY_RELIGION_TOOLTIP_LINE';
+
+UPDATE Language_en_US
+SET Text = '{1_ReligionIcon} {2_NumFollowers} {2_NumFollowers: plural 1?Follower; other?Followers;} {3_PressureString} ({4_Num} trade routes)'
+WHERE Tag = 'TXT_KEY_RELIGION_TOOLTIP_LINE_WITH_TRADE';
+
+UPDATE Language_en_US
+SET Text = 'After this action is performed [COLOR_POSITIVE_TEXT]{2_NumFollowers}[ENDCOLOR] {2_NumFollowers: plural 1?Citizens; other?Citizens;} will be following [COLOR_POSITIVE_TEXT]{1_ReligionName}[ENDCOLOR].'
+WHERE Tag = 'TXT_KEY_MISSION_SPREAD_RELIGION_RESULT';
+
+UPDATE Language_en_US
+SET Text = 'All city-states around the world hold elections simultaneously every {1_Num} Turns. The next election will be in {2_Num} {2_Num: plural 1?Turn; other?Turns;}.'
+WHERE Tag = 'TXT_KEY_EO_CITY_STATE_ELECTION';
+
+UPDATE Language_en_US
+SET Text = '{TXT_KEY_CITY_STATE_QUEST_CONTEST_TECHS_FORMAL} So far, you have the lead with [COLOR_POSITIVE_TEXT]{1_PlayerScore}[ENDCOLOR] {1_PlayerScore: plural 1?Technology; other?Technologies;}.'
+WHERE Tag = 'TXT_KEY_CITY_STATE_QUEST_CONTEST_TECHS_WINNING_FORMAL';
+
+UPDATE Language_en_US
+SET Text = '{TXT_KEY_CITY_STATE_QUEST_CONTEST_TECHS_FORMAL} So far, the leader has {1_LeaderScore}  {1_LeaderScore: plural 1?Technology; other?Technologies;} and you have [COLOR_POSITIVE_TEXT]{2_PlayerScore}[ENDCOLOR].'
+WHERE Tag = 'TXT_KEY_CITY_STATE_QUEST_CONTEST_TECHS_LOSING_FORMAL';
+
+UPDATE Language_en_US
+SET Text = '{1_Num} [ICON_TOURISM] Tourism from {2_Num} [ICON_GREAT_WORK] {2_Num: plural 1?Great Work; other?Great Works;}'
+WHERE Tag = 'TXT_KEY_CO_CITY_TOURISM_GREAT_WORKS';
+
+UPDATE Language_en_US
+SET Text = '{1_Num} [ICON_TOURISM] Tourism from buildings purchased with [ICON_PEACE] Faith'
+WHERE Tag = 'TXT_KEY_CO_CITY_TOURISM_FAITH_BUILDINGS';
+
+
+
+

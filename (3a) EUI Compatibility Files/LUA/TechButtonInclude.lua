@@ -350,7 +350,7 @@ end
 --	RETURNS: the # of small buttons added
 -- ===========================================================================
 
-function AddSmallButtonsToTechButton( thisTechButtonInstance, tech, maxSmallButtons, textureSize, startingButtonNum )
+function AddSmallButtonsToTechButton( thisTechButtonInstance, tech, maxSmallButtons, textureSize, startingButtonNum, playerOverrideID )
 
 	local techType = tech and tech.Type
 
@@ -369,7 +369,11 @@ function AddSmallButtonsToTechButton( thisTechButtonInstance, tech, maxSmallButt
 	local leaderID = -1;
 	local traitType = "";
 	if(Game ~= nil) then
-		thisPlayer = Players[Game.GetActivePlayer()];
+		if(playerOverrideID ~= nil) then
+			thisPlayer = Players[playerOverrideID];
+		else
+			thisPlayer = Players[Game.GetActivePlayer()];
+		end
 		if thisPlayer ~= nil then
 			leaderID = thisPlayer:GetLeaderType();
 			for leaderTraits in DB.Query( "SELECT TraitType FROM Leader_Traits INNER JOIN Leaders on Leaders.Type = LeaderType WHERE Leaders.ID = " .. leaderID ) do
@@ -580,7 +584,12 @@ function AddSmallButtonsToTechButton( thisTechButtonInstance, tech, maxSmallButt
 		end
 	end
 
-	local playerID = Game.GetActivePlayer();	
+	local playerID;
+	if (playerOverrideID ~= nil) then
+		playerID = playerOverrideID;
+	else
+		playerID = Game.GetActivePlayer();
+	end
 	local player = Players[playerID];
 	local civType = GameInfo.Civilizations[player:GetCivilizationType()].Type;
 	
@@ -602,20 +611,23 @@ function AddSmallButtonsToTechButton( thisTechButtonInstance, tech, maxSmallButt
 				break
 			end
 		end
-		--Why did we remove this...? there was no reason to.. anyway
-		if (GameInfo.Builds[row.BuildType].ImprovementType ~= nil and GameInfo.Improvements[GameInfo.Builds[row.BuildType].ImprovementType].CivilizationType ~= nil and GameInfo.Improvements[GameInfo.Builds[row.BuildType].ImprovementType].CivilizationType == civType) then
-			if not addSmallActionButton( {IconIndex = GameInfo.Builds[row.BuildType].IconIndex, IconAtlas = GameInfo.Builds[row.BuildType].IconAtlas, Description = ""}, "", "TXT_KEY_BUILD_COST_REDUCTION", GameInfo.Builds[row.BuildType].Description, DisplayPercentage(row.TimeChange/(GameInfo.Builds[row.BuildType].Time or 100)) ) then
-				break
-			end
-		else
-			if (GameInfo.Builds[row.BuildType].ImprovementType ~= nil and GameInfo.Improvements[GameInfo.Builds[row.BuildType].ImprovementType].CivilizationType == nil) then
-				if not addSmallActionButton( {IconIndex = GameInfo.Builds[row.BuildType].IconIndex, IconAtlas = GameInfo.Builds[row.BuildType].IconAtlas, Description = ""}, "", "TXT_KEY_BUILD_COST_REDUCTION", GameInfo.Builds[row.BuildType].Description, DisplayPercentage(row.TimeChange/(GameInfo.Builds[row.BuildType].Time or 100)) ) then
+
+		local eImprovement = GameInfo.Builds[row.BuildType].ImprovementType
+		local pImprovement = GameInfo.Improvements[eImprovement]
+		if pImprovement then
+			local eCivilization = pImprovement.CivilizationType;
+			if eCivilization and eCivilization == civType and not pImprovement.GraphicalOnly then
+				if not addSmallActionButton({
+						IconIndex = GameInfo.Builds[row.BuildType].IconIndex,
+						IconAtlas = GameInfo.Builds[row.BuildType].IconAtlas,
+						Description = "",
+					}, "", "TXT_KEY_BUILD_COST_REDUCTION", GameInfo.Builds[row.BuildType].Description,
+					DisplayPercentage(row.TimeChange/(GameInfo.Builds[row.BuildType].Time or 100))) then
 					break
 				end
 			end
 		end
-
-	end 
+	end
 
 	if (tonumber(tech.EmbarkedMoveChange) or 0) > 0 then
 		addSmallActionButton( {IconIndex = 14, IconAtlas = "UNIT_ACTION_GOLD_ATLAS", Description = ""}, "", "TXT_KEY_FASTER_EMBARKED_MOVEMENT" )
@@ -787,7 +799,7 @@ function AddSmallButtonsToTechButton( thisTechButtonInstance, tech, maxSmallButt
 	local improvementTypesChanged = {}
 	for row in GameInfo.Improvement_TechYieldChanges( thisTechType ) do
 		local thisImprovement = GameInfo.Improvements[ row.ImprovementType ]
-		if thisImprovement and (not thisImprovement.CivilizationType or thisImprovement.CivilizationType == civType) then
+		if thisImprovement and (not thisImprovement.CivilizationType or thisImprovement.CivilizationType == civType) and not thisImprovement.GraphicalOnly then
 			improvementTypesChanged[ row.ImprovementType or -1 ] = true
 		end
 	end

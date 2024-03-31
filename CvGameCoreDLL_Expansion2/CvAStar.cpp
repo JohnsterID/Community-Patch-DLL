@@ -338,7 +338,7 @@ int CvAStar::udFunc(CvAStarConst2Func func, const CvAStarNode* param1, const CvA
 // private method - not threadsafe!
 bool CvAStar::FindPathWithCurrentConfiguration(int iXstart, int iYstart, int iXdest, int iYdest, const SPathFinderUserData& data)
 {
-	if (data.ePathType != m_sData.ePathType)
+	if (data.ePath != m_sData.ePath)
 		return false;
 
 	if (!IsInitialized(iXstart, iYstart, iXdest, iYdest))
@@ -424,7 +424,7 @@ bool CvAStar::FindPathWithCurrentConfiguration(int iXstart, int iYstart, int iXd
 	saiRuntimeHistogram[iBin]++;
 
 	CvUnit* pUnit = m_sData.iUnitID > 0 ? GET_PLAYER(m_sData.ePlayer).getUnit(m_sData.iUnitID) : NULL;
-	if ( timer.GetDeltaInSeconds()>0.2 && data.ePathType==PT_UNIT_MOVEMENT )
+	if ( timer.GetDeltaInSeconds()>0.2 && data.ePath==PT_UNIT_MOVEMENT )
 	{
 		//debug hook
 		int iStartIndex = GC.getMap().plotNum(m_iXstart, m_iYstart);
@@ -441,7 +441,7 @@ bool CvAStar::FindPathWithCurrentConfiguration(int iXstart, int iYstart, int iXd
 
 		//in some cases we have no destination plot, so exhaustion is not always a "fail"
 		CvString msg = CvString::format("Run %d: Path type %d %s (%s from %d,%d to %d,%d - flags %d), tested %d, processed %d nodes in %d rounds (%d%% of map) in %.2f ms\n",
-			m_iCurrentGenerationID, m_sData.ePathType, bSuccess ? "found" : "not found", pUnit ? pUnit->getName().c_str() : "unknown",
+			m_iCurrentGenerationID, m_sData.ePath, bSuccess ? "found" : "not found", pUnit ? pUnit->getName().c_str() : "unknown",
 			m_iXstart, m_iYstart, m_iXdest, m_iYdest, m_sData.iFlags, m_iTestedNodes, m_iProcessedNodes, m_iRounds,
 			(100 * m_iProcessedNodes) / iNumPlots, timer.GetDeltaInSeconds() * 1000);
 		OutputDebugString( msg.c_str() );
@@ -469,7 +469,7 @@ bool CvAStar::FindPathWithCurrentConfiguration(int iXstart, int iYstart, int iXd
 			else
 			{
 				pLog->Msg(CvString::format("# %s from %d,%d to %d,%d for player %d, type %d, flags %d\n",
-					GetName(), m_iXstart, m_iYstart, m_iXdest, m_iYdest, m_sData.ePlayer, m_sData.ePathType, m_sData.iFlags).c_str());
+					GetName(), m_iXstart, m_iYstart, m_iXdest, m_iYdest, m_sData.ePlayer, m_sData.ePath, m_sData.iFlags).c_str());
 			}
 
 #ifdef STACKWALKER
@@ -1945,9 +1945,6 @@ int InfluenceDestValid(int iToX, int iToY, const SPathFinderUserData& data, cons
 	if (!pFromPlot || !pToPlot)
 		return FALSE;
 
-	if(plotDistance(*pFromPlot,*pToPlot) > data.iMaxTurns)
-		return FALSE;
-
 	//can only claim ocean tiles after we can cross oceans
 	if (pToPlot->isDeepWater() && data.ePlayer != NO_PLAYER)
 	{
@@ -2038,9 +2035,6 @@ int InfluenceValid(const CvAStarNode* parent, const CvAStarNode* node, const SPa
 	if (!pOrigin || !pToPlot)
 		return FALSE;
 
-	if(plotDistance(*pOrigin,*pToPlot) > data.iMaxTurns)
-		return FALSE;
-
 	//can only claim ocean tiles after we can cross oceans
 	if (pToPlot->isDeepWater() && data.ePlayer!=NO_PLAYER)
 	{
@@ -2076,8 +2070,8 @@ int CityConnectionGetExtraChildren(const CvAStarNode* node, const CvAStar* finde
 	const CvCityConnections::SingleCityConnectionStore& cityConnections = kPlayer.GetCityConnections()->GetDirectConnectionsFromCity(pFirstCity);
 	for (CvCityConnections::SingleCityConnectionStore::const_iterator it=cityConnections.begin(); it!=cityConnections.end(); ++it)
 	{
-		//we only care about water connections here because they are not normal routes
-		if (it->second & CvCityConnections::CONNECTION_HARBOR)
+		//we only care about water and air connections here because they are not normal routes
+		if (it->second & (CvCityConnections::CONNECTION_HARBOR | CvCityConnections::CONNECTION_AIRPORT))
 		{
 			CvCity* pSecondCity = GET_PLAYER(PlayerTypes(it->first.first)).getCity(it->first.second);
 			if (pSecondCity && !pSecondCity->IsRazing())
@@ -2096,7 +2090,7 @@ int CityConnectionLandValid(const CvAStarNode* parent, const CvAStarNode* node, 
 		return TRUE;
 
 	PlayerTypes ePlayer = data.ePlayer;
-	RouteTypes eRoute = data.eRouteType;
+	RouteTypes eRoute = data.eRoute;
 
 	CvPlot* pNewPlot = GC.getMap().plotUnchecked(node->m_iX, node->m_iY);
 	CvPlayer& kPlayer = GET_PLAYER(ePlayer);
@@ -2184,77 +2178,44 @@ int CityConnectionWaterValid(const CvAStarNode* parent, const CvAStarNode* node,
 
 //	--------------------------------------------------------------------------------
 /// Prefer building routes that can have villages.
-static int BuildRouteVillageBonus(CvPlayer* pPlayer, CvPlot* pPlot, RouteTypes eRouteType, CvBuilderTaskingAI* eBuilderTaskingAi)
+static int BuildRouteVillageBonus(CvPlot* pPlot, RouteTypes eRouteType, CvBuilderTaskingAI* eBuilderTaskingAi)
 {
-	// If we're not the owner of this plot, bail out
-	if (!pPlot->isOwned() || pPlot->getOwner() != pPlayer->GetID())
+	if (!MOD_BALANCE_VP)
 		return 0;
 
-	// We will not build a route here so no village bonus applies
-	if (eBuilderTaskingAi->GetSameRouteBenefitFromTrait(pPlot, eRouteType))
-		return 0;
-
-	// No villages on resources
-	if (pPlot->getResourceType() != NO_RESOURCE)
-		return 0;
-
-	int iBonus = 0;
-
+	// If we have a town or village here, give a big bonus
 	ImprovementTypes eImprovement = pPlot->getImprovementType();
 	if (eImprovement != NO_IMPROVEMENT)
 	{
 		CvImprovementEntry* pkImprovementInfo = GC.getImprovementInfo(eImprovement);
+
 		if (pkImprovementInfo != NULL)
 		{
-			for (int iI = 0; iI < NUM_YIELD_TYPES; iI++)
+			int iYieldChangeTotal = 0;
+			for (int iI = 0; iI <= YIELD_FAITH; iI++)
 			{
 				YieldTypes eYield = (YieldTypes)iI;
-
-				// Heavily prioritize building routes over existing villages/towns
-				iBonus += pkImprovementInfo->GetRouteYieldChanges(eRouteType, eYield);
+				int iYieldChanges = pkImprovementInfo->GetRouteYieldChanges(eRouteType, eYield);
+				if (iYieldChanges > 0)
+				{
+					iYieldChangeTotal += iYieldChanges;
+				}
 			}
-		}
 
-		// If this improvement was built by a Great Person, we don't want to build a village here
-		if (pkImprovementInfo->IsCreatedByGreatPerson())
-			return iBonus;
+			if (iYieldChangeTotal > 0)
+				return 70 + iYieldChangeTotal;
+
+			// If this is a great person improvement, we don't want to replace it (unless it's a town)
+			if (pkImprovementInfo->IsCreatedByGreatPerson())
+				return 0;
+		}
 	}
 
-	int iBestBonus = 0;
-	int iPotentialVillageBonus;
-	for (int iI = 0; iI < GC.getNumBuildInfos(); iI++)
-	{
-		BuildTypes eBuild = (BuildTypes)iI;
-		CvBuildInfo* pkBuild = GC.getBuildInfo(eBuild);
-		if (!pkBuild)
-			continue;
+	if (eBuilderTaskingAi->WillNeverBuildVillageOnPlot(pPlot, eRouteType, false/*bIgnoreUnowned*/))
+		return 0;
 
-		// Set bTestEra to true as a hack to ensure that we consider villages even if we can not build the improvement yet
-		if (!pPlayer->canBuild(pPlot, eBuild, true))
-			continue;
-
-		eImprovement = (ImprovementTypes)pkBuild->getImprovement();
-		if (eImprovement == NO_IMPROVEMENT)
-			continue;
-
-		CvImprovementEntry* pkImprovementInfo = GC.getImprovementInfo(eImprovement);
-		if (pkImprovementInfo == NULL)
-			continue;
-
-		iPotentialVillageBonus = 0;
-
-		for (int iYield = 0; iYield < NUM_YIELD_TYPES; iYield++)
-		{
-			YieldTypes eYield = (YieldTypes)iYield;
-
-			iPotentialVillageBonus += pkImprovementInfo->GetRouteYieldChanges(eRouteType, eYield);
-		}
-
-		if (iPotentialVillageBonus > iBestBonus)
-			iBestBonus = iPotentialVillageBonus;
-	}
-
-	return iBonus + iBestBonus;
+	// Villages and towns can be built pretty much anywhere
+	return 2;
 }
 
 //	--------------------------------------------------------------------------------
@@ -2263,28 +2224,63 @@ int BuildRouteCost(const CvAStarNode* /*parent*/, const CvAStarNode* node, const
 {
 	CvPlot* pPlot = GC.getMap().plotUnchecked(node->m_iX, node->m_iY);
 	CvPlayer* pPlayer = &GET_PLAYER(data.ePlayer);
-	CvBuilderTaskingAI* eBuilderTaskingAi = pPlayer->GetBuilderTaskingAI();
-	RouteTypes eRouteType = data.eRouteType;
-	BuildTypes eBuildType = data.eBuildType;
+	CvBuilderTaskingAI* eBuilderTaskingAI = pPlayer->GetBuilderTaskingAI();
+	RouteTypes eRoute = data.eRoute;
+	BuildTypes eBuild = data.eBuild;
 	int iCost = 0;
 
-	if(pPlot->isCity() || eBuilderTaskingAi->GetRouteTypeWantedAtPlot(pPlot) >= eRouteType || eBuilderTaskingAi->GetRouteTypeNeededAtPlot(pPlot) >= eRouteType || eBuilderTaskingAi->GetSameRouteBenefitFromTrait(pPlot, eRouteType))
+	// cities have a free road we can use
+	if (pPlot->isCity())
+		return 0;
+
+	bool bGetSameRouteBenefitFromTrait = pPlayer->GetSameRouteBenefitFromTrait(pPlot, eRoute);
+	bool bPlannedShortcutRoute = bGetSameRouteBenefitFromTrait || eBuilderTaskingAI->IsRoutePlanned(pPlot, eRoute, PURPOSE_SHORTCUT);
+	bool bPlannedCapitalRoute = bGetSameRouteBenefitFromTrait || (data.eRoutePurpose == PURPOSE_CONNECT_CAPITAL && eBuilderTaskingAI->IsRoutePlanned(pPlot, eRoute, PURPOSE_CONNECT_CAPITAL));
+	int iVillageBonus = data.eRoutePurpose == PURPOSE_SHORTCUT && !bGetSameRouteBenefitFromTrait && !bPlannedShortcutRoute ? BuildRouteVillageBonus(pPlot, eRoute, eBuilderTaskingAI) : 0;
+
+	if (!bPlannedCapitalRoute && eRoute == ROUTE_ROAD)
 	{
-		// if we are planning to or have already built a road here, or get a free road here from our trait, provide a discount (cities always have a road)
-		iCost = PATH_BASE_COST * 7 / 12;
+		bPlannedCapitalRoute = eBuilderTaskingAI->IsRoutePlanned(pPlot, ROUTE_RAILROAD, PURPOSE_CONNECT_CAPITAL);
 	}
-	else if ((eBuilderTaskingAi->WantRouteAtPlot(pPlot) || eBuilderTaskingAi->NeedRouteAtPlot(pPlot)) && !eBuilderTaskingAi->GetSameRouteBenefitFromTrait(pPlot, ROUTE_ROAD))
+
+	// if we only care about reaching the destination, and no other bonuses, heavily reuse existing planned roads and features
+	if (data.eRoutePurpose == PURPOSE_CONNECT_CAPITAL)
 	{
-		// if we are planning to build a lower tier route here, provide a smaller discount
-		iCost = PATH_BASE_COST * 3 / 4;
+		if (bPlannedCapitalRoute)
+		{
+			if (bGetSameRouteBenefitFromTrait)
+				return 0;
+			else if (pPlot->getRouteType() >= eRoute || pPlot->getBuildProgress(eBuild) > 0)
+				return 1;
+			else
+				return 5;
+		}
+		if (bPlannedShortcutRoute)
+		{
+			return 20;
+		}
 	}
-	else if (pPlot->getRouteType() >= ROUTE_ROAD)
+	if (bGetSameRouteBenefitFromTrait)
+	{
+		iCost = PATH_BASE_COST / 3;
+	}
+	else if (bPlannedShortcutRoute)
+	{
+		// if we are planning to build a road here, provide a discount
+		iCost = (PATH_BASE_COST * 5) / 12;
+	}
+	else if (pPlot->getRouteType() >= eRoute && !pPlot->IsRoutePillaged())
+	{
+		// if there is already a road here, provide a smaller discount
+		iCost = (PATH_BASE_COST * 8) / 12;
+	}
+	else if (pPlot->getBuildProgress(eBuild) > 0) {
+		// if we are currently building a road here, provide a smaller discount
+		iCost = (PATH_BASE_COST * 8) / 12;
+	}
+	else if (pPlot->getRouteType() >= ROUTE_ROAD || pPlayer->GetSameRouteBenefitFromTrait(pPlot, ROUTE_ROAD) || pPlot->IsRoutePillaged())
 	{
 		// if there is already any kind of road here, provide a smaller discount
-		iCost = PATH_BASE_COST - 1;
-	}
-	else if (pPlot->getBuildProgress(eBuildType) > 0) {
-		// if we are currently building a road here, provide a smaller discount
 		iCost = PATH_BASE_COST - 1;
 	}
 	else
@@ -2292,62 +2288,20 @@ int BuildRouteCost(const CvAStarNode* /*parent*/, const CvAStarNode* node, const
 		iCost = PATH_BASE_COST;
 	}
 
-	//too dangerous, might be severed any time
-	if (pPlot->getOwner() == NO_PLAYER && pPlot->IsAdjacentOwnedByTeamOtherThan(pPlayer->getTeam(), false, false, true, true))
-		iCost *= 3;
+	if (!bGetSameRouteBenefitFromTrait && !pPlayer->IsPlotSafeForRoute(pPlot, false /*bIncludeAdjacent*/))
+	{
+		if (pPlot->IsAdjacentOwnedByTeamOtherThan(pPlayer->getTeam(), false, false, true, true))
+		{
+			iCost += 1;
+		}
+	}
 
-	if (data.bBenefitsVillages)
-		iCost -= BuildRouteVillageBonus(pPlayer, pPlot, eRouteType, eBuilderTaskingAi);
+	iCost -= iVillageBonus;
 
 	if (iCost < 0)
 		iCost = 0;
 
 	return iCost;
-}
-
-static bool IsSafeForRoute(CvPlot* pPlot, CvPlayer* pPlayer, RouteTypes eRoute)
-{
-	TeamTypes ePlotTeam = pPlot->getTeam();
-	TeamTypes ePlayerTeam = pPlayer->getTeam();
-	PlayerTypes ePlotOwner = pPlot->getOwner();
-
-	//Free routes from traits are always safe
-	if (pPlayer->GetBuilderTaskingAI()->GetSameRouteBenefitFromTrait(pPlot, eRoute))
-		return TRUE;
-
-	// Our plots and surrounding plots are safe
-	if (ePlotTeam == ePlayerTeam || pPlot->isAdjacentTeam(pPlayer->getTeam(), false))
-	{
-		return true;
-	}
-
-	// Our vassal's plots and surrounding plots are safe
-	if (GET_TEAM(ePlotTeam).IsVassal(ePlayerTeam) || pPlot->isAdjacentOwnedByVassal(ePlayerTeam, false))
-	{
-		return true;
-	}
-
-	// City state plots and surrounding plots are safe
-	if (ePlotOwner != NO_PLAYER && GET_PLAYER(ePlotOwner).isMinorCiv() && !GET_PLAYER(ePlotOwner).GetMinorCivAI()->IsAtWarWithPlayersTeam(pPlayer->GetID()))
-	{
-		return true;
-	}
-	CvPlot** aPlotsToCheck = GC.getMap().getNeighborsUnchecked(pPlot);
-	PlayerTypes eAdjacentOwner;
-	for (int iI = 0; iI < NUM_DIRECTION_TYPES; iI++)
-	{
-		CvPlot* pAdjacentPlot = aPlotsToCheck[iI];
-		if (pAdjacentPlot != NULL)
-		{
-			eAdjacentOwner = pAdjacentPlot->getOwner();
-			if (eAdjacentOwner != NO_PLAYER && GET_PLAYER(eAdjacentOwner).isMinorCiv() && !GET_PLAYER(eAdjacentOwner).GetMinorCivAI()->IsAtWarWithPlayersTeam(pPlayer->GetID()))
-			{
-				return true;
-			}
-		}
-	}
-
-	return false;
 }
 
 //	--------------------------------------------------------------------------------
@@ -2358,16 +2312,16 @@ int BuildRouteValid(const CvAStarNode* parent, const CvAStarNode* node, const SP
 		return TRUE;
 
 	PlayerTypes ePlayer = data.ePlayer;
-	CvPlayer& thisPlayer = GET_PLAYER(ePlayer);
-	bool bThisPlayerIsMinor = thisPlayer.isMinorCiv();
+	CvPlayer& kPlayer = GET_PLAYER(ePlayer);
+	bool bThisPlayerIsMinor = kPlayer.isMinorCiv();
 
 	//can we build it?
-	RouteTypes eRoute = data.eRouteType;
-	if (eRoute != ROUTE_ANY && eRoute > thisPlayer.getBestRoute())
+	RouteTypes eRoute = data.eRoute;
+	if (eRoute != ROUTE_ANY && eRoute > kPlayer.getBestRoute())
 		return FALSE;
 
 	CvPlot* pNewPlot = GC.getMap().plotUnchecked(node->m_iX, node->m_iY);
-	if(!bThisPlayerIsMinor && !(pNewPlot->isRevealed(thisPlayer.getTeam())))
+	if(!bThisPlayerIsMinor && !(pNewPlot->isRevealed(kPlayer.getTeam())))
 		return FALSE;
 
 	if(pNewPlot->isWater())
@@ -2376,8 +2330,11 @@ int BuildRouteValid(const CvAStarNode* parent, const CvAStarNode* node, const SP
 	if(!pNewPlot->isValidMovePlot(ePlayer))
 		return FALSE;
 
+	if (pNewPlot->GetPlannedRouteState(ePlayer) == ROAD_PLANNING_EXCLUDE && !pNewPlot->isCity())
+		return FALSE;
+
 	PlayerTypes ePlotOwnerPlayer = pNewPlot->getOwner();
-	if(ePlotOwnerPlayer != NO_PLAYER && pNewPlot->getTeam() != thisPlayer.getTeam() && !GET_TEAM(pNewPlot->getTeam()).IsVassal(thisPlayer.getTeam()))
+	if(ePlotOwnerPlayer != NO_PLAYER && pNewPlot->getTeam() != kPlayer.getTeam() && !GET_TEAM(pNewPlot->getTeam()).IsVassal(kPlayer.getTeam()))
 	{
 		PlayerTypes eMajorPlayer = NO_PLAYER;
 		PlayerTypes eMinorPlayer = NO_PLAYER;
@@ -2398,11 +2355,14 @@ int BuildRouteValid(const CvAStarNode* parent, const CvAStarNode* node, const SP
 		}
 	}
 
+	if ((ePlotOwnerPlayer == NO_PLAYER || ePlotOwnerPlayer == ePlayer) && kPlayer.GetSameRouteBenefitFromTrait(pNewPlot, eRoute))
+		return true;
+
 	//if the plot and its parent are both too far from our borders, don't build here
-	if (!IsSafeForRoute(pNewPlot, &thisPlayer, eRoute))
+	if (!kPlayer.IsPlotSafeForRoute(pNewPlot, true /*bIncludeAdjacent*/))
 	{
 		CvPlot* pFromPlot = GC.getMap().plotUnchecked(parent->m_iX, parent->m_iY);
-		if (!IsSafeForRoute(pFromPlot, &thisPlayer, eRoute))
+		if (!kPlayer.IsPlotSafeForRoute(pFromPlot, true /*bIncludeAdjacent*/))
 			return FALSE;
 	}
 
@@ -2483,7 +2443,7 @@ CvTwoLayerPathFinder::CvTwoLayerPathFinder()
 	m_ppaaPartialMoveNodes = NULL;
 
 	//this is our default path type
-	m_sData.ePathType = PT_UNIT_MOVEMENT;
+	m_sData.ePath = PT_UNIT_MOVEMENT;
 	SetFunctionPointers(PathDestValid, PathHeuristic, PathCost, PathValid, NULL, UnitPathInitialize, UnitPathUninitialize);
 
 #if defined(MOD_BALANCE_CORE)
@@ -2687,7 +2647,7 @@ bool CvTwoLayerPathFinder::Configure(const SPathFinderUserData& config)
 			GET_PLAYER(config.ePlayer).GetPlotDanger(*pUnit->plot(), pUnit, UnitIdContainer(), 0);
 	}
 
-	switch(config.ePathType)
+	switch(config.ePath)
 	{
 	case PT_UNIT_MOVEMENT:
 		SetFunctionPointers(PathDestValid, PathHeuristic, PathCost, PathValid, NULL, UnitPathInitialize, UnitPathUninitialize);
@@ -2698,7 +2658,7 @@ bool CvTwoLayerPathFinder::Configure(const SPathFinderUserData& config)
 		return false;
 	}
 
-	m_sData.ePathType = config.ePathType;
+	m_sData.ePath = config.ePath;
 	return true;
 }
 
@@ -2740,7 +2700,7 @@ bool CvStepFinder::AddStopNodeIfRequired(const CvAStarNode*, const CvAStarNode*)
 //////////////////////////////////////////////////////////////////////////
 bool CvStepFinder::Configure(const SPathFinderUserData& config)
 {
-	switch(config.ePathType)
+	switch(config.ePath)
 	{
 	case PT_GENERIC_SAME_AREA:
 		SetFunctionPointers(StepDestValid, StepHeuristic, StepCost, StepValid, NULL, NULL, NULL);
@@ -2811,7 +2771,7 @@ bool CvStepFinder::Configure(const SPathFinderUserData& config)
 		return false;
 	}
 
-	m_sData.ePathType = config.ePathType;
+	m_sData.ePath = config.ePath;
 	return true;
 }
 
@@ -3444,7 +3404,7 @@ int TradePathWaterValid(const CvAStarNode* parent, const CvAStarNode* node, cons
 		//only single plot canals on plots without resource
 		//not that this is asymmetric, we can build a canal into a city but not out of a city ... shouldn't matter too much
 		if (pPrevPlot->isWater() && !pNewPlot->isWater() && pNewPlot->getOwner() == pCacheData->GetPlayer())
-			return pNewPlot->getResourceType() == NO_RESOURCE;
+			return pNewPlot->getResourceType(pCacheData->GetTeam()) == NO_RESOURCE;
 	}
 
 	return FALSE;
@@ -3700,7 +3660,7 @@ bool IsPlotConnectedToPlot(PlayerTypes ePlayer, CvPlot* pFromPlot, CvPlot* pToPl
 	if (ePlayer==NO_PLAYER || pFromPlot==NULL || pToPlot==NULL)
 		return false;
 
-	SPathFinderUserData data(ePlayer, bAllowHarbors ? PT_CITY_CONNECTION_MIXED : PT_CITY_CONNECTION_LAND, NO_BUILD, eRestrictRoute, false);
+	SPathFinderUserData data(ePlayer, bAllowHarbors ? PT_CITY_CONNECTION_MIXED : PT_CITY_CONNECTION_LAND, NO_BUILD, eRestrictRoute, NO_ROUTE_PURPOSE);
 	data.iFlags = bAssumeOpenBorders ? CvUnit::MOVEFLAG_IGNORE_RIGHT_OF_PASSAGE : 0; //slight misuse but who cares
 
 	SPath result;
@@ -3715,90 +3675,90 @@ bool IsPlotConnectedToPlot(PlayerTypes ePlayer, CvPlot* pFromPlot, CvPlot* pToPl
 //convenience constructor
 SPathFinderUserData::SPathFinderUserData(const CvUnit* pUnit, int _iFlags, int _iMaxTurns)
 {
-	ePathType = PT_UNIT_MOVEMENT;
+	ePath = PT_UNIT_MOVEMENT;
 	iFlags = _iFlags;
 	iMaxTurns = _iMaxTurns;
 	ePlayer = pUnit ? pUnit->getOwner() : NO_PLAYER;
 	eEnemy = NO_PLAYER;
 	iUnitID = pUnit ? pUnit->GetID() : 0;
-	eBuildType = NO_BUILD;
-	eRouteType = NO_ROUTE;
+	eBuild = NO_BUILD;
+	eRoute = NO_ROUTE;
 	iMaxNormalizedDistance = INT_MAX;
 	iMinMovesLeft = 0;
 	iStartMoves = pUnit ? pUnit->getMoves() : 0;
-	bBenefitsVillages = false;
+	eRoutePurpose = NO_ROUTE_PURPOSE;
 }
 
 //	---------------------------------------------------------------------------
 //convenience constructor
 SPathFinderUserData::SPathFinderUserData(PlayerTypes _ePlayer, PathType _ePathType)
 {
-	ePathType = _ePathType;
+	ePath = _ePathType;
 	iFlags = 0;
 	iMaxTurns = INT_MAX;
 	ePlayer = _ePlayer;
 	eEnemy = NO_PLAYER;
 	iUnitID = 0;
-	eBuildType = NO_BUILD;
-	eRouteType = NO_ROUTE;
+	eBuild = NO_BUILD;
+	eRoute = NO_ROUTE;
 	iMaxNormalizedDistance = INT_MAX;
 	iMinMovesLeft = 0;
 	iStartMoves = 0;
-	bBenefitsVillages = false;
+	eRoutePurpose = NO_ROUTE_PURPOSE;
 }
 
 //	---------------------------------------------------------------------------
 //convenience constructor
 SPathFinderUserData::SPathFinderUserData(PlayerTypes _ePlayer, PathType _ePathType, int _iMaxTurns)
 {
-	ePathType = _ePathType;
+	ePath = _ePathType;
 	iFlags = 0;
 	iMaxTurns = _iMaxTurns;
 	ePlayer = _ePlayer;
 	eEnemy = NO_PLAYER;
 	iUnitID = 0;
-	eBuildType = NO_BUILD;
-	eRouteType = NO_ROUTE;
+	eBuild = NO_BUILD;
+	eRoute = NO_ROUTE;
 	iMaxNormalizedDistance = INT_MAX;
 	iMinMovesLeft = 0;
 	iStartMoves = 0;
-	bBenefitsVillages = false;
+	eRoutePurpose = NO_ROUTE_PURPOSE;
 }
 
 //	---------------------------------------------------------------------------
 //convenience constructor
 SPathFinderUserData::SPathFinderUserData(PlayerTypes _ePlayer, PathType _ePathType, PlayerTypes _eEnemy, int _iMaxTurns)
 {
-	ePathType = _ePathType;
+	ePath = _ePathType;
 	iFlags = 0;
 	iMaxTurns = _iMaxTurns;
 	ePlayer = _ePlayer;
 	eEnemy = _eEnemy;
 	iUnitID = 0;
-	eBuildType = NO_BUILD;
-	eRouteType = NO_ROUTE;
+	eBuild = NO_BUILD;
+	eRoute = NO_ROUTE;
 	iMaxNormalizedDistance = INT_MAX;
 	iMinMovesLeft = 0;
 	iStartMoves = 0;
-	bBenefitsVillages = false;
+	eRoutePurpose = NO_ROUTE_PURPOSE;
 }
 
 //	---------------------------------------------------------------------------
 //convenience constructor
-SPathFinderUserData::SPathFinderUserData(PlayerTypes _ePlayer, PathType _ePathType, BuildTypes _eBuildType, RouteTypes _eRouteType, bool _bBenefitsVillages)
+SPathFinderUserData::SPathFinderUserData(PlayerTypes _ePlayer, PathType _ePathType, BuildTypes _eBuildType, RouteTypes _eRouteType, RoutePurpose _eRoutePurpose)
 {
-	ePathType = _ePathType;
+	ePath = _ePathType;
 	iFlags = 0;
 	iMaxTurns = INT_MAX;
 	ePlayer = _ePlayer;
 	eEnemy = NO_PLAYER;
 	iUnitID = 0;
-	eBuildType = _eBuildType;
-	eRouteType = _eRouteType;
+	eBuild = _eBuildType;
+	eRoute = _eRouteType;
 	iMaxNormalizedDistance = INT_MAX;
 	iMinMovesLeft = 0;
 	iStartMoves = 0;
-	bBenefitsVillages = _bBenefitsVillages;
+	eRoutePurpose = _eRoutePurpose;
 }
 
 CvPlot * SPath::get(int i) const

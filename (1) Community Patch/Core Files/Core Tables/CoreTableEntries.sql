@@ -201,6 +201,8 @@ ALTER TABLE Buildings ADD COLUMN 'FoodBonusPerCityMajorityFollower' INTEGER DEFA
 ALTER TABLE Buildings ADD PlayerBorderGainlessPillage BOOLEAN DEFAULT 0;
 ALTER TABLE Buildings ADD CityGainlessPillage BOOLEAN DEFAULT 0;
 
+-- Allows city connections via the air
+ALTER TABLE Buildings ADD AllowsAirRoutes BOOLEAN DEFAULT 0;
 
 -- Building, Belief, UA
 -- Increase to border growth expansion rate
@@ -286,7 +288,7 @@ ALTER TABLE GameSpeeds ADD COLUMN 'StartingHappiness' INTEGER DEFAULT 0;
 -- Value by which all instant yields are modified for different game speeds
 ALTER TABLE GameSpeeds ADD COLUMN 'InstantYieldPercent' INTEGER DEFAULT 100;
 
--- Value by which difficulty bonuses are modified for different game speeds
+-- Value by which instant yields from difficulty bonuses are modified for different game speeds
 ALTER TABLE GameSpeeds ADD COLUMN 'DifficultyBonusPercent' INTEGER DEFAULT 100;
 UPDATE GameSpeeds SET DifficultyBonusPercent = 67 WHERE Type = 'GAMESPEED_QUICK';
 UPDATE GameSpeeds SET DifficultyBonusPercent = 100 WHERE Type = 'GAMESPEED_STANDARD';
@@ -348,7 +350,7 @@ ALTER TABLE Traits ADD COLUMN 'NoOpenTrade' BOOLEAN DEFAULT 0;
 
 ALTER TABLE Traits ADD COLUMN 'FreeCapitalBuilding' TEXT DEFAULT NULL;
 
--- Combat Bonus vs Higher Pop Civilization.
+-- Combat Bonus vs Higher Pop Civilization. (non-functional)
 
 ALTER TABLE Traits ADD COLUMN 'CombatBonusVsHigherPop' INTEGER DEFAULT 0;
 
@@ -1210,13 +1212,13 @@ ALTER TABLE UnitPromotions ADD COLUMN 'GiveInvisibility' BOOLEAN DEFAULT 0;
 -- Unit only gives these effects at the start of the turn (works for GiveExperiencePercent, GiveCombatMod, GiveDefenseMod, GiveInvisibility, GiveOutsideFriendlyLandsModifier, GiveHPHealedIfEnemyKilled, GiveExtraAttacks)
 ALTER TABLE UnitPromotions ADD COLUMN 'GiveOnlyOnStartingTurn' BOOLEAN DEFAULT 0;
 
--- Unit gains Combat modifier when near cities. Requires IsNearbyPromotion and NearbyRange Set on this Promotion.
+-- Unit gains Combat modifier when near cities. Requires NearbyRange Set on this Promotion.
 ALTER TABLE UnitPromotions ADD NearbyCityCombatMod INTEGER DEFAULT 0;
 
--- Unit gains Combat modifier when near friendly cities. Requires IsNearbyPromotion and NearbyRange Set on this Promotion.
+-- Unit gains Combat modifier when near friendly cities. Requires NearbyRange Set on this Promotion.
 ALTER TABLE UnitPromotions ADD NearbyFriendlyCityCombatMod INTEGER DEFAULT 0;
 
--- Unit gains Combat modifier when near enemy cities. Requires IsNearbyPromotion and NearbyRange Set on this Promotion.
+-- Unit gains Combat modifier when near enemy cities. Requires NearbyRange Set on this Promotion.
 ALTER TABLE UnitPromotions ADD NearbyEnemyCityCombatMod INTEGER DEFAULT 0;
 
 -- Unit Gives extra healing to nearby units? Must have set IsNearbyPromotion, NearbyRange, and GiveDomain for this promotion.
@@ -1436,7 +1438,7 @@ ALTER TABLE Projects ADD COLUMN 'GoldMedianModifier' INTEGER DEFAULT 0;
 ALTER TABLE Projects ADD COLUMN 'ScienceMedianModifier' INTEGER DEFAULT 0;
 ALTER TABLE Projects ADD COLUMN 'CultureMedianModifier' INTEGER DEFAULT 0;
 ALTER TABLE Projects ADD COLUMN 'ReligiousUnrestModifier' INTEGER DEFAULT 0;
-ALTER TABLE Projects ADD COLUMN 'EspionageMod' INTEGER DEFAULT 0;
+ALTER TABLE Projects ADD COLUMN 'SpySecurityModifier' INTEGER DEFAULT 0;
 
 ALTER TABLE Projects ADD COLUMN 'InfluenceAllRequired' BOOLEAN DEFAULT 0;
 ALTER TABLE Projects ADD COLUMN 'IdeologyRequired' BOOLEAN DEFAULT 0;

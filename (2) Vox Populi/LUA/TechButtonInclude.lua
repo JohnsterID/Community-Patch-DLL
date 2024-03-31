@@ -15,9 +15,9 @@ else
 	defaultErrorTextureSheet = "UnitActions.dds";
 end
 
-local validUnitBuilds = nil;
-local validBuildingBuilds = nil;
-local validImprovementBuilds = nil;
+local validUnitBuilds = {};
+local validBuildingBuilds = {};
+local validImprovementBuilds = {};
 
 local g_bResearchAgreementTrading = Game.IsOption("GAMEOPTION_RESEARCH_AGREEMENTS");
 local g_bNoTechTrading = Game.IsOption("GAMEOPTION_NO_TECH_TRADING");
@@ -42,10 +42,6 @@ function GetTechPedia( void1, void2, button )
 end
 
 function GatherInfoAboutUniqueStuff( civType )
-
-	validUnitBuilds = {};
-	validBuildingBuilds = {};
-	validImprovementBuilds = {};
 
 	-- put in the default units for any civ
 	for thisUnitClass in GameInfo.UnitClasses() do
@@ -80,18 +76,16 @@ function GatherInfoAboutUniqueStuff( civType )
 	end
 	
 	-- add in support for unique improvements
-	for thisImprovement in GameInfo.Improvements() do
-		if thisImprovement.CivilizationType == civType or thisImprovement.CivilizationType == nil then
-			validImprovementBuilds[thisImprovement.Type] = thisImprovement.Type;	
-		else
-			validImprovementBuilds[thisImprovement.Type] = nil;	
+	for row in GameInfo.Improvements() do
+		if (not row.CivilizationType or row.CivilizationType == civType) and not row.GraphicalOnly then
+			validImprovementBuilds[row.Type] = row.Type;
 		end
 	end
 	
 end
 
 
-function AddSmallButtonsToTechButton( thisTechButtonInstance, tech, maxSmallButtons, textureSize )
+function AddSmallButtonsToTechButton( thisTechButtonInstance, tech, maxSmallButtons, textureSize, playerOverrideID)
 	-- This has a few assumptions, the main one being that the small buttons are named "B1", "B2", "B3"... and that GatherInfoAboutUniqueStuff() has been called before this
 	
 	-- get some info we need
@@ -99,7 +93,11 @@ function AddSmallButtonsToTechButton( thisTechButtonInstance, tech, maxSmallButt
 	local leaderID = -1;
 	local traitType = "";
 	if(Game ~= nil) then
-		thisPlayer = Players[Game.GetActivePlayer()];
+		if(playerOverrideID ~= nil) then
+			thisPlayer = Players[playerOverrideID];
+		else
+			thisPlayer = Players[Game.GetActivePlayer()];
+		end
 		if thisPlayer ~= nil then
 			leaderID = thisPlayer:GetLeaderType();
 			for leaderTraits in DB.Query( "SELECT TraitType FROM Leader_Traits INNER JOIN Leaders on Leaders.Type = LeaderType WHERE Leaders.ID = " .. leaderID ) do
@@ -257,7 +255,12 @@ function AddSmallButtonsToTechButton( thisTechButtonInstance, tech, maxSmallButt
 		end
 	end	
 
-	local playerID = Game.GetActivePlayer();	
+	local playerID;
+	if (playerOverrideID ~= nil) then
+		playerID = playerOverrideID;
+	else
+		playerID = Game.GetActivePlayer();
+	end
 	local player = Players[playerID];
 	local civType = GameInfo.Civilizations[player:GetCivilizationType()].Type;
 
@@ -696,7 +699,7 @@ function AddSmallButtonsToTechButton( thisTechButtonInstance, tech, maxSmallButt
 		local improvementType = row.ImprovementType;
 
 		local improvement = GameInfo.Improvements[row.ImprovementType];
-		if improvement and (not improvement.CivilizationType or improvement.CivilizationType == civType) then
+		if improvement and (not improvement.CivilizationType or improvement.CivilizationType == civType) and not improvement.GraphicalOnly then
 
 			if(yieldChanges[improvementType] == nil) then
 				yieldChanges[improvementType] = {};

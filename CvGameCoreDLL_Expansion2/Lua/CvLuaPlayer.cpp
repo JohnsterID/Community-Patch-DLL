@@ -419,6 +419,9 @@ void CvLuaPlayer::PushMethods(lua_State* L, int t)
 	Method(GetUnitSupplyFromExpendedGreatPeople);
 	Method(ChangeUnitSupplyFromExpendedGreatPeople);
 
+	Method(GetWarDuration);
+	Method(GetLongestWarDuration);
+
 	Method(GetUnhappinessFromUnits);
 	Method(ChangeUnhappinessFromUnits);
 
@@ -900,7 +903,7 @@ void CvLuaPlayer::PushMethods(lua_State* L, int t)
 
 	Method(GetSpecialistExtraYield);
 
-	Method(FindPathLength);
+	Method(FindTechPathLength);
 
 	Method(GetQueuePosition);
 	Method(ClearResearchQueue);
@@ -1188,7 +1191,6 @@ void CvLuaPlayer::PushMethods(lua_State* L, int t)
 	Method(CanSpyStageCoup);
 	Method(GetAvailableSpyRelocationCities);
 	Method(CanMoveSpyTo);
-	Method(ChangeCounterspyMission);
 	Method(GetNumTechsToSteal);
 	Method(GetIntrigueMessages);
 	Method(HasRecentIntrigueAbout);
@@ -1215,6 +1217,7 @@ void CvLuaPlayer::PushMethods(lua_State* L, int t)
 	Method(GetInternationalTradeRoutePolicyBonus);
 	Method(GetInternationalTradeRouteOtherTraitBonus);
 	Method(GetInternationalTradeRouteRiverModifier);
+	Method(GetTradeConnectionDiplomatModifierTimes100);
 	Method(GetTradeRouteTurns);
 	Method(GetTradeConnectionDistanceValueModifierTimes100);
 	Method(GetTradeRouteTurns);
@@ -1505,10 +1508,8 @@ void CvLuaPlayer::PushMethods(lua_State* L, int t)
 	Method(IsGlobalQuest);
 	Method(IsPersonalQuest);
 
-	// Debug methods for routes
-	Method(GetMainRouteTiles);
-	Method(GetShortcutRouteTiles);
-	Method(GetStrategicRouteTiles);
+	Method(IsInstantYieldNotificationDisabled);
+	Method(SetInstantYieldNotificationDisabled);
 }
 //------------------------------------------------------------------------------
 void CvLuaPlayer::HandleMissingInstance(lua_State* L)
@@ -4469,6 +4470,29 @@ int CvLuaPlayer::lGetUnhappinessFromWarWeariness(lua_State* L)
 	return 1;
 }
 
+int CvLuaPlayer::lGetWarDuration(lua_State* L)
+{
+	CvPlayerAI* pkPlayer = GetInstance(L);
+	const PlayerTypes ePlayer = (PlayerTypes)lua_tointeger(L, 2);
+	const int iResult = pkPlayer->GetPlayerNumTurnsAtWar(ePlayer);
+	lua_pushinteger(L, iResult);
+	return 1;
+}
+
+int CvLuaPlayer::lGetLongestWarDuration(lua_State* L)
+{
+	CvPlayerAI* pkPlayer = GetInstance(L);
+	int iResult = 0;
+	for (int iI = 0; iI < MAX_PLAYERS; iI++)
+	{
+		PlayerTypes ePlayer = (PlayerTypes)iI;
+		iResult = max(iResult, pkPlayer->GetPlayerNumTurnsAtWar(ePlayer));
+	}
+
+	lua_pushinteger(L, iResult);
+	return 1;
+}
+
 int CvLuaPlayer::lGetTechSupplyReduction(lua_State* L)
 {
 	CvPlayerAI* pkPlayer = GetInstance(L);
@@ -5126,6 +5150,23 @@ int CvLuaPlayer::lGetInternationalTradeRouteRiverModifier(lua_State* L)
 	kTradeConnection.m_eDomain = eDomain;
 
 	int iResult = pPlayerTrade->GetTradeConnectionRiverValueModifierTimes100(kTradeConnection, YIELD_GOLD, bOrigin);
+	lua_pushinteger(L, iResult);
+	return 1;	
+}
+//------------------------------------------------------------------------------
+int CvLuaPlayer::lGetTradeConnectionDiplomatModifierTimes100(lua_State* L)
+{
+	CvPlayerAI* pkPlayer = GetInstance(L);
+	CvPlayerTrade* pPlayerTrade = pkPlayer->GetTrade();
+	CvCity* pOriginCity = CvLuaCity::GetInstance(L, 2, true);
+	CvCity* pDestCity = CvLuaCity::GetInstance(L, 3, true);
+	const DomainTypes eDomain = LuaToTradeDomain(L, 4);
+
+	TradeConnection kTradeConnection;
+	kTradeConnection.SetCities(pOriginCity,pDestCity);
+	kTradeConnection.m_eDomain = eDomain;
+
+	int iResult = pPlayerTrade->GetTradeConnectionDiplomatModifierTimes100(kTradeConnection, YIELD_GOLD);
 	lua_pushinteger(L, iResult);
 	return 1;	
 }
@@ -7867,8 +7908,9 @@ int CvLuaPlayer::lGetNumUnitsSupplied(lua_State* L)
 int CvLuaPlayer::lGetNumUnitsSuppliedByHandicap(lua_State* L)
 {
 	CvPlayerAI* pkPlayer = GetInstance(L);
-	const int iResult = pkPlayer->GetNumUnitsSuppliedByHandicap(true);
-	lua_pushinteger(L, iResult);
+	bool bIgnoreReduction = lua_toboolean(L, 2);
+
+	lua_pushinteger(L, pkPlayer->GetNumUnitsSuppliedByHandicap(bIgnoreReduction));
 	return 1;
 }
 //------------------------------------------------------------------------------
@@ -7876,8 +7918,9 @@ int CvLuaPlayer::lGetNumUnitsSuppliedByHandicap(lua_State* L)
 int CvLuaPlayer::lGetNumUnitsSuppliedByCities(lua_State* L)
 {
 	CvPlayerAI* pkPlayer = GetInstance(L);
-	const int iResult = pkPlayer->GetNumUnitsSuppliedByCities(true);
-	lua_pushinteger(L, iResult);
+	bool bIgnoreReduction = lua_toboolean(L, 2);
+
+	lua_pushinteger(L, pkPlayer->GetNumUnitsSuppliedByCities(bIgnoreReduction));
 	return 1;
 }
 //------------------------------------------------------------------------------
@@ -7885,8 +7928,9 @@ int CvLuaPlayer::lGetNumUnitsSuppliedByCities(lua_State* L)
 int CvLuaPlayer::lGetNumUnitsSuppliedByPopulation(lua_State* L)
 {
 	CvPlayerAI* pkPlayer = GetInstance(L);
-	const int iResult = pkPlayer->GetNumUnitsSuppliedByPopulation(true);
-	lua_pushinteger(L, iResult);
+	bool bIgnoreReduction = lua_toboolean(L, 2);
+
+	lua_pushinteger(L, pkPlayer->GetNumUnitsSuppliedByPopulation(bIgnoreReduction));
 	return 1;
 }
 //------------------------------------------------------------------------------
@@ -10160,12 +10204,10 @@ int CvLuaPlayer::lGetSpecialistExtraYield(lua_State* L)
 	return 1;
 }
 //------------------------------------------------------------------------------
-//int findPathLength(TechTypes  eTech, bool bCost);
-// If bCost is false, then it returns number of techs that need to be researched to acquire eTech
-// If bCost is true, then it returns the cost of a currently researched tech
-int CvLuaPlayer::lFindPathLength(lua_State* L)
+//int findTechPathLength(TechTypes  eTech);
+int CvLuaPlayer::lFindTechPathLength(lua_State* L)
 {
-	return BasicLuaMethod(L, &CvPlayerAI::findPathLength);
+	return BasicLuaMethod(L, &CvPlayerAI::findTechPathLength);
 }
 //------------------------------------------------------------------------------
 //int getQueuePosition( TechTypes  eTech );
@@ -11807,36 +11849,29 @@ int CvLuaPlayer::lGetRecommendedWorkerPlots(lua_State* L)
 	if(pWorkerUnit == NULL)
 		return 0;
 
-	//fake the reachable plots, ignore all other workers
-	map<int, ReachablePlots> allplots;
-	SPathFinderUserData data(pWorkerUnit, 0, 3);
-	allplots[pWorkerUnit->GetID()] = GC.GetPathFinder().GetPlotsInReach(pWorkerUnit->plot(), data);
+	BuilderDirective assignedDirective = pkPlayer->GetBuilderTaskingAI()->GetAssignedDirective(pWorkerUnit);
 
-	BuilderDirective aDirective = pkPlayer->GetBuilderTaskingAI()->EvaluateBuilder(pWorkerUnit,allplots);
-	if(aDirective.m_eDirective == BuilderDirective::NUM_DIRECTIVES)
-		return 0;
-
-	//don't look at me ... this is just for stupid lua
-	const size_t cuiMaxDirectives = 3;
-	const size_t cuiDirectiveSize = 1;
-
-	lua_createtable(L, cuiMaxDirectives, 0);
-	int iPositionIndex = lua_gettop(L);
-	int i = 1;
-
-	for(uint ui = 0; ui < cuiDirectiveSize && i < cuiMaxDirectives; ui++)
+	if (assignedDirective.m_eBuild != NO_BUILD)
 	{
-		lua_createtable(L, 0, 2);
-		CvLuaPlot::Push(L, GC.getMap().plot(aDirective.m_sX, aDirective.m_sY));
-		lua_setfield(L, -2, "plot");
-		lua_pushinteger(L, aDirective.m_eBuild);
-		lua_setfield(L, -2, "buildType");
+		lua_createtable(L, 0, 0);
+		int iCount = 1;
 
-		lua_rawseti(L, iPositionIndex, i);
-		i++;
+		CvPlot* pPlot = GC.getMap().plot(assignedDirective.m_sX, assignedDirective.m_sY);
+		if (pPlot)
+		{
+			lua_createtable(L, 0, 0);
+			const int t = lua_gettop(L);
+			CvLuaPlot::Push(L, GC.getMap().plot(assignedDirective.m_sX, assignedDirective.m_sY));
+			lua_setfield(L, t, "plot");
+			lua_pushinteger(L, assignedDirective.m_eBuild);
+			lua_setfield(L, t, "buildType");
+			lua_rawseti(L, -2, iCount++);
+		}
+
+		return 1;
 	}
 
-	return 1;
+	return 0;
 }
 
 typedef CvWeightedVector<CvPlot*> WeightedPlotVector;
@@ -16450,16 +16485,6 @@ int CvLuaPlayer::lCanMoveSpyTo(lua_State* L)
 	return 1;
 }
 //------------------------------------------------------------------------------
-int CvLuaPlayer::lChangeCounterspyMission(lua_State* L)
-{
-	CvPlayerAI* pkThisPlayer = GetInstance(L);
-	uint spyID = (uint)lua_tointeger(L, 2);
-	CityEventChoiceTypes eNewMission = (CityEventChoiceTypes)lua_tointeger(L, 3);
-	CvPlayerEspionage* pkPlayerEspionage = pkThisPlayer->GetEspionage();
-	pkPlayerEspionage->ChangeCounterspyMission(spyID, eNewMission);
-	return 1;
-}
-//------------------------------------------------------------------------------
 int CvLuaPlayer::lGetNumTechsToSteal(lua_State* L)
 {
 	CvPlayerAI* pkThisPlayer = GetInstance(L);
@@ -18317,79 +18342,22 @@ int CvLuaPlayer::lIsPersonalQuest(lua_State* L)
 	return 1;
 }
 
-int CvLuaPlayer::lGetMainRouteTiles(lua_State* L)
+int CvLuaPlayer::lIsInstantYieldNotificationDisabled(lua_State* L)
 {
 	CvPlayerAI* pkPlayer = GetInstance(L);
-	set<int> mainRoutePlots = pkPlayer->GetBuilderTaskingAI()->GetMainRoutePlots();
+	const InstantYieldType eInstantYield = (InstantYieldType)lua_tointeger(L, 2);
 
-	lua_createtable(L, 0, 0);
-	int iCount = 1;
-
-	for (set<int>::iterator it = mainRoutePlots.begin(); it != mainRoutePlots.end(); ++it)
-	{
-		CvPlot* pPlot = GC.getMap().plotByIndex(*it);
-		if (pPlot)
-		{
-			lua_createtable(L, 0, 0);
-			const int t = lua_gettop(L);
-			lua_pushinteger(L, pPlot->getX());
-			lua_setfield(L, t, "x");
-			lua_pushinteger(L, pPlot->getY());
-			lua_setfield(L, t, "y");
-			lua_rawseti(L, -2, iCount++);
-		}
-	}
+	const bool bResult = pkPlayer->IsInstantYieldNotificationDisabled(eInstantYield);
+	lua_pushboolean(L, bResult);
 	return 1;
 }
 
-int CvLuaPlayer::lGetShortcutRouteTiles(lua_State* L)
+int CvLuaPlayer::lSetInstantYieldNotificationDisabled(lua_State* L)
 {
 	CvPlayerAI* pkPlayer = GetInstance(L);
-	set<int> shortcutRoutePlots = pkPlayer->GetBuilderTaskingAI()->GetShortcutRoutePlots();
+	const InstantYieldType eInstantYield = (InstantYieldType)lua_tointeger(L, 2);
+	const bool bNewValue = (InstantYieldType)lua_toboolean(L, 3);
 
-	lua_createtable(L, 0, 0);
-	int iCount = 1;
-
-	for (set<int>::iterator it = shortcutRoutePlots.begin(); it != shortcutRoutePlots.end(); ++it)
-	{
-		CvPlot* pPlot = GC.getMap().plotByIndex(*it);
-		if (pPlot)
-		{
-			lua_createtable(L, 0, 0);
-			const int t = lua_gettop(L);
-			lua_pushinteger(L, pPlot->getX());
-			lua_setfield(L, t, "x");
-			lua_pushinteger(L, pPlot->getY());
-			lua_setfield(L, t, "y");
-			lua_rawseti(L, -2, iCount++);
-		}
-	}
-
-	return 1;
-}
-
-int CvLuaPlayer::lGetStrategicRouteTiles(lua_State* L)
-{
-	CvPlayerAI* pkPlayer = GetInstance(L);
-	set<int> strategicRoutePlots = pkPlayer->GetBuilderTaskingAI()->GetStrategicRoutePlots();
-
-	lua_createtable(L, 0, 0);
-	int iCount = 1;
-
-	for (set<int>::iterator it = strategicRoutePlots.begin(); it != strategicRoutePlots.end(); ++it)
-	{
-		CvPlot* pPlot = GC.getMap().plotByIndex(*it);
-		if (pPlot)
-		{
-			lua_createtable(L, 0, 0);
-			const int t = lua_gettop(L);
-			lua_pushinteger(L, pPlot->getX());
-			lua_setfield(L, t, "x");
-			lua_pushinteger(L, pPlot->getY());
-			lua_setfield(L, t, "y");
-			lua_rawseti(L, -2, iCount++);
-		}
-	}
-
+	pkPlayer->SetInstantYieldNotificationDisabled(eInstantYield, bNewValue);
 	return 1;
 }

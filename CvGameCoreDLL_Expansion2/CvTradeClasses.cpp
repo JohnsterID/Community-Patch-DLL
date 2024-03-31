@@ -298,7 +298,7 @@ void CvGameTrade::UpdateTradePathCache(PlayerTypes ePlayer1)
 		//now for land routes
 		int iMaxNormDistLand = kPlayer1.GetTrade()->GetTradeRouteRange(DOMAIN_LAND, pOriginCity);
 		data.iMaxNormalizedDistance = iMaxNormDistLand;
-		data.ePathType = PT_TRADE_LAND;
+		data.ePath = PT_TRADE_LAND;
 
 		//get all paths
 		map<int,SPath> landpaths = GC.GetStepFinder().GetMultiplePaths(pCityPlot, vDestPlots, data);
@@ -3391,6 +3391,43 @@ int CvPlayerTrade::GetTradeConnectionRiverValueModifierTimes100(const TradeConne
 
 	return iModifier;
 }
+
+//	--------------------------------------------------------------------------------
+int CvPlayerTrade::GetTradeConnectionDiplomatModifierTimes100(const TradeConnection& kTradeConnection, YieldTypes eYield)
+{
+	if (!MOD_BALANCE_VP)
+		return 0;
+
+	int iModifier = 0;
+	if (eYield == YIELD_GOLD)
+	{
+		CvCity* pOriginCity = CvGameTrade::GetOriginCity(kTradeConnection);
+		CvCity* pDestCity = CvGameTrade::GetDestCity(kTradeConnection);
+		CvAssert(pOriginCity != NULL);
+		CvAssert(pDestCity != NULL);
+		if (pOriginCity && pDestCity)
+		{
+			PlayerTypes eOriginPlayer = pOriginCity->getOwner();
+			PlayerTypes eDestPlayer = pDestCity->getOwner();
+
+			CvCity* pDestCapital = GET_PLAYER(eDestPlayer).getCapitalCity();
+			if (pDestCapital && GET_PLAYER(eDestPlayer).isMajorCiv())
+			{
+				CvPlayerEspionage* pOriginPlayerEspionage = GET_PLAYER(eOriginPlayer).GetEspionage();
+				if (pOriginPlayerEspionage && pOriginPlayerEspionage->IsAnySchmoozing(pDestCapital))
+				{
+					CvCityEspionage* pDestCapitalEspionage = pDestCapital->GetCityEspionage();
+					if (pDestCapitalEspionage)
+					{
+						iModifier += pDestCapitalEspionage->GetDiplomatTradeBonus(eOriginPlayer);
+					}
+				}
+			}
+		}
+	}
+
+	return iModifier;
+}
 #if defined(MOD_BALANCE_CORE)
 //	--------------------------------------------------------------------------------
 int CvPlayerTrade::GetTradeConnectionOpenBordersModifierTimes100(const TradeConnection& kTradeConnection, YieldTypes eYield, bool bAsOriginPlayer)
@@ -3575,6 +3612,7 @@ int CvPlayerTrade::GetTradeConnectionValueTimes100 (const TradeConnection& kTrad
 					int iDomainModifier = GetTradeConnectionDomainValueModifierTimes100(kTradeConnection, eYield);
 					int iResourceModifier = MOD_BALANCE_CORE_RESOURCE_MONOPOLIES ? GetTradeConnectionResourceValueTimes100(kTradeConnection, eYield, bAsOriginPlayer) : 0;
 					int iOriginRiverModifier = GetTradeConnectionRiverValueModifierTimes100(kTradeConnection, eYield, bAsOriginPlayer);
+					int iDiplomatModifier = GetTradeConnectionDiplomatModifierTimes100(kTradeConnection, eYield);
 					int iCorporationModifier = GetTradeConnectionCorporationModifierTimes100(kTradeConnection, eYield, bAsOriginPlayer);
 					int iOpenBordersModifier = GetTradeConnectionOpenBordersModifierTimes100(kTradeConnection, eYield, bAsOriginPlayer);
 
@@ -3600,6 +3638,7 @@ int CvPlayerTrade::GetTradeConnectionValueTimes100 (const TradeConnection& kTrad
 					iModifier += iDomainModifier;
 					iModifier += iResourceModifier;
 					iModifier += iOriginRiverModifier;
+					iModifier += iDiplomatModifier;
 					iModifier += iCorporationModifier;
 					iModifier += iOpenBordersModifier;
 
@@ -3954,6 +3993,7 @@ int CvPlayerTrade::GetTradeConnectionValueTimes100 (const TradeConnection& kTrad
 						int iDistanceModifier = GetTradeConnectionDistanceValueModifierTimes100(kTradeConnection);
 						int iDomainModifier = GetTradeConnectionDomainValueModifierTimes100(kTradeConnection, eYield);
 						int iDestRiverModifier = GetTradeConnectionRiverValueModifierTimes100(kTradeConnection, eYield, false);
+						int iDestDiplomatModifier = GetTradeConnectionDiplomatModifierTimes100(kTradeConnection, eYield);
 						int iTraitBonus = GetTradeConnectionOtherTraitValueTimes100(kTradeConnection, eYield, false);
 #if defined(HH_MOD_API_TRADEROUTE_MODIFIERS)
 						int iPolicyModifier = GetTradeConnectionPolicyModifierTimes100(kTradeConnection, eYield, false /*bAsOriginPlayer*/);
@@ -3970,6 +4010,7 @@ int CvPlayerTrade::GetTradeConnectionValueTimes100 (const TradeConnection& kTrad
 						iModifier -= iDistanceModifier;
 						iModifier += iDomainModifier;
 						iModifier += iDestRiverModifier;
+						iModifier += iDestDiplomatModifier;
 #if defined(HH_MOD_API_TRADEROUTE_MODIFIERS)
 						iModifier += iPolicyModifier;
 #endif
@@ -6843,7 +6884,7 @@ int CvTradeAI::ScoreInternalTR(const TradeConnection& kTradeConnection, const st
 				CvBuildingEntry* pBuildingInfo = GC.getBuildingInfo(eBuilding);
 				if(pBuildingInfo)
 				{
-					CvBuildingClassInfo* pInfo = GC.getBuildingClassInfo((BuildingClassTypes)pBuildingInfo->GetBuildingClassType());
+					CvBuildingClassInfo* pInfo = GC.getBuildingClassInfo(pBuildingInfo->GetBuildingClassType());
 					if (pInfo && pInfo->getMaxGlobalInstances() == 1)
 					{
 						iScore *= 20;
@@ -7290,13 +7331,17 @@ void CvTradeAI::GetPrioritizedTradeRoutes(TradeConnectionList& aTradeConnectionL
 	int iCityLoop = 0;
 	for (CvCity* pCity = m_pPlayer->firstCity(&iCityLoop); pCity != NULL; pCity = m_pPlayer->nextCity(&iCityLoop))
 	{
-		UnitTypes eUnit = pCity->getProductionUnit();
-		if (eUnit != -1)
+		if(pCity->isProductionSpaceshipPart())
 		{
-			CvUnitEntry *pkUnit = GC.GetGameUnits()->GetEntry(eUnit);
-			if (pkUnit)
+			apProductionTargetCities.push_back(pCity);
+		}
+		else if (m_pPlayer->GetDiplomacyAI()->IsGoingForSpaceshipVictory() && m_pPlayer->GetDiplomacyAI()->IsCloseToSpaceshipVictory())
+		{
+			// is this a city in which we want to build spaceship parts in the near future?
+			vector<CvCity*> vCitiesForSpaceship = m_pPlayer->GetCoreCitiesForSpaceshipProduction();
+			if (vCitiesForSpaceship.size() > 0)
 			{
-				if (pkUnit->GetSpaceshipProject() != NO_PROJECT)
+				if (find(vCitiesForSpaceship.begin(), vCitiesForSpaceship.end(), pCity) != vCitiesForSpaceship.end())
 				{
 					apProductionTargetCities.push_back(pCity);
 				}

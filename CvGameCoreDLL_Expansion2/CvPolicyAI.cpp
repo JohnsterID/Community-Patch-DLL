@@ -693,11 +693,14 @@ void CvPolicyAI::DoChooseIdeology(CvPlayer *pPlayer)
 void CvPolicyAI::DoConsiderIdeologySwitch(CvPlayer* pPlayer)
 {
 	// Gather basic Ideology info
+	PolicyBranchTypes eCurrentIdeology = pPlayer->GetPlayerPolicies()->GetLateGamePolicyTree();
+	if (eCurrentIdeology == NO_POLICY_BRANCH_TYPE)
+		return;
+
 	bool bVUnhappy = pPlayer->IsEmpireVeryUnhappy();
 	bool bSUnhappy = pPlayer->IsEmpireSuperUnhappy();
 	int iPublicOpinionUnhappiness = pPlayer->GetCulture()->GetPublicOpinionUnhappiness();
 	PolicyBranchTypes ePreferredIdeology = pPlayer->GetCulture()->GetPublicOpinionPreferredIdeology();
-	PolicyBranchTypes eCurrentIdeology = pPlayer->GetPlayerPolicies()->GetLateGamePolicyTree();
 
 	if (GET_TEAM(pPlayer->getTeam()).IsVassalOfSomeone() && pPlayer->GetPlayerPolicies()->GetLateGamePolicyTree() != NO_POLICY_BRANCH_TYPE)
 	{
@@ -1034,7 +1037,7 @@ Firaxis::Array< int, NUM_YIELD_TYPES > CvPolicyAI::WeightPolicyAttributes(CvPlay
 			iNumCities++;
 		else if (pPlayerTraits->IsSmaller())
 			iNumCities--;
-		if (GC.getGame().getGameTurn() <= 125)
+		if (GC.getGame().getGameTurn() <= GC.getGame().getEstimateEndTurn() / 4)
 		{
 			//Estimation, because early game we assume we'll expand.
 			iNumCities = (3 + iNumCities);
@@ -3792,7 +3795,7 @@ Firaxis::Array< int, NUM_YIELD_TYPES > CvPolicyAI::WeightPolicyAttributes(CvPlay
 			CvUnitClassInfo* pkUnitClassInfo = GC.getUnitClassInfo(eUnitClass);
 			if (pkUnitClassInfo)
 			{
-				const UnitTypes eUnit = (UnitTypes)pPlayer->GetSpecificUnitType(eUnitClass);
+				const UnitTypes eUnit = pPlayer->GetSpecificUnitType(eUnitClass);
 				CvUnitEntry* pUnitEntry = GC.getUnitInfo(eUnit);
 				if (pUnitEntry && pUnitEntry->GetPolicyType() == ePolicy)
 				{
@@ -4593,7 +4596,7 @@ Firaxis::Array< int, NUM_YIELD_TYPES > CvPolicyAI::WeightPolicyAttributes(CvPlay
 
 int CvPolicyAI::WeighPolicy(CvPlayer* pPlayer, PolicyTypes ePolicy)
 {
-	if (ePolicy == NO_POLICY)
+	if (ePolicy == NO_POLICY || pPlayer == NULL)
 		return 0;
 
 	int iWeight = m_PolicyAIWeights.GetWeight(ePolicy);
@@ -4729,7 +4732,7 @@ int CvPolicyAI::WeighPolicy(CvPlayer* pPlayer, PolicyTypes ePolicy)
 				}
 				else if (GC.getFlavorTypes((FlavorTypes)iFlavor) == "FLAVOR_EXPANSION" )
 				{
-					iWeight += iFlavorValue;
+						iWeight += iFlavorValue;
 				}
 				else if (GC.getFlavorTypes((FlavorTypes)iFlavor) == "FLAVOR_PRODUCTION")
 				{
@@ -4917,6 +4920,9 @@ int CvPolicyAI::WeighPolicy(CvPlayer* pPlayer, PolicyTypes ePolicy)
 /// Priority for opening up this branch
 int CvPolicyAI::WeighBranch(CvPlayer* pPlayer, PolicyBranchTypes eBranch)
 {
+	if (eBranch == NO_POLICY_BRANCH_TYPE || pPlayer == NULL)
+		return 0;
+
 	int iWeight = 0;
 
 	CvPolicyBranchEntry* pkPolicyBranchInfo = GC.getPolicyBranchInfo(eBranch);

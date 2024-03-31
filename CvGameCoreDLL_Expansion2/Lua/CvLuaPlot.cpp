@@ -20,6 +20,7 @@
 #include "CvLuaCity.h"
 #include "CvLuaPlot.h"
 #include "CvLuaUnit.h"
+#include "CvLuaPlayer.h"
 #include "../CvGameCoreUtils.h"
 
 #pragma warning(disable:4800 ) //forcing value to bool 'true' or 'false'
@@ -56,6 +57,7 @@ void CvLuaPlot::PushMethods(lua_State* L, int t)
 	Method(UpdateFog);
 	Method(UpdateVisibility);
 	Method(IsAdjacentToArea);
+	Method(IsAdjacentToLandmass);
 	Method(ShareAdjacentArea);
 	Method(IsAdjacentToLand);
 	Method(IsAdjacentToShallowWater);
@@ -158,6 +160,7 @@ void CvLuaPlot::PushMethods(lua_State* L, int t)
 	Method(WaterArea);
 	Method(GetArea);
 	Method(SetArea);
+	Method(GetLandmass);
 	Method(GetFeatureVariety);
 
 	Method(GetOwnershipDuration);
@@ -305,6 +308,13 @@ void CvLuaPlot::PushMethods(lua_State* L, int t)
 	Method(GetCityPurchaseID);
 	Method(SetCityPurchaseID);
 	Method(GetAirUnitsTooltip);
+
+	Method(GetPlannedRouteState);
+	Method(SetPlannedRouteState);
+
+	Method(IsMainRoutePlan);
+	Method(IsShortcutRoutePlan);
+	Method(IsStrategicRoutePlan);
 
 	Method(AddMessage);
 	Method(AddPopupMessage);
@@ -531,6 +541,12 @@ int CvLuaPlot::lIsAdjacentToArea(lua_State* L)
 	lua_pushboolean(L, bResult);
 
 	return 1;
+}
+//------------------------------------------------------------------------------
+//bool isAdjacentToLandmass(int iLandmass);
+int CvLuaPlot::lIsAdjacentToLandmass(lua_State* L)
+{
+	return BasicLuaMethod(L, &CvPlot::isAdjacentToLandmass);
 }
 //------------------------------------------------------------------------------
 //bool shareAdjacentArea(CyPlot* pPlot);
@@ -1185,6 +1201,12 @@ int CvLuaPlot::lSetArea(lua_State* L)
 	return BasicLuaMethod(L, &CvPlot::setArea);
 }
 //------------------------------------------------------------------------------
+//int getLandmass();
+int CvLuaPlot::lGetLandmass(lua_State* L)
+{
+	return BasicLuaMethod(L, &CvPlot::getLandmass);
+}
+//------------------------------------------------------------------------------
 //int getFeatureVariety();
 int CvLuaPlot::lGetFeatureVariety(lua_State* L)
 {
@@ -1630,7 +1652,7 @@ int CvLuaPlot::lCalculateNatureYield(lua_State* L)
 	CvPlot* pkPlot = GetInstance(L); CHECK_PLOT_VALID(pkPlot);
 	const YieldTypes eIndex = (YieldTypes)lua_tointeger(L, 2);
 	const PlayerTypes ePlayer = (PlayerTypes)lua_tointeger(L, 2);
-	const int iResult = pkPlot->calculateNatureYield(eIndex, ePlayer, pkPlot->getPlotCity());
+	const int iResult = pkPlot->calculateNatureYield(eIndex, ePlayer, pkPlot->getFeatureType(), pkPlot->getResourceType(GET_PLAYER(ePlayer).getTeam()), pkPlot->getPlotCity());
 	lua_pushinteger(L, iResult);
 	return 1;
 }
@@ -1660,7 +1682,12 @@ int CvLuaPlot::lCalculateImprovementYieldChange(lua_State* L)
 	if (lua_gettop(L) == 6)
 		eRoute = (RouteTypes)lua_tointeger(L, 6);
 
-	const int iResult = pkPlot->calculateImprovementYield(eYield, ePlayer, eImprovement, pkPlot->getEffectiveOwningCity(), bOptimal, eRoute);
+	if (eRoute == NUM_ROUTE_TYPES)
+		eRoute = pkPlot->getRouteType();
+	if (pkPlot->IsRoutePillaged())
+		eRoute = NO_ROUTE;
+
+	const int iResult = pkPlot->calculateImprovementYield(eYield, ePlayer, eImprovement, eRoute, pkPlot->getFeatureType(), pkPlot->getResourceType(GET_PLAYER(ePlayer).getTeam()), false, pkPlot->getEffectiveOwningCity(), bOptimal);
 	lua_pushinteger(L, iResult);
 	return 1;
 }
@@ -1699,7 +1726,7 @@ int CvLuaPlot::lGetYieldWithBuild(lua_State* L)
 
 		const CvReligion* pReligion = (eMajority != NO_RELIGION) ? GC.getGame().GetGameReligions()->GetReligion(eMajority, pOwningCity->getOwner()) : 0;
 		const CvBeliefEntry* pBelief = (eSecondaryPantheon != NO_BELIEF) ? GC.GetGameBeliefs()->GetEntry(eSecondaryPantheon) : 0;
-		int iResult = pkPlot->getYieldWithBuild(eBuild, eYield, bUpgrade, ePlayer, pOwningCity, pReligion, pBelief);
+		int iResult = pkPlot->getYieldWithBuild(eBuild, eYield, bUpgrade, false, ePlayer, pOwningCity, pReligion, pBelief);
 #if defined(MOD_RELIGION_PERMANENT_PANTHEON)
 		// Mod for civs keeping their pantheon belief forever
 		if (MOD_RELIGION_PERMANENT_PANTHEON)
@@ -1712,7 +1739,7 @@ int CvLuaPlot::lGetYieldWithBuild(lua_State* L)
 				{
 					if (pReligion == NULL || (pReligion != NULL && !pReligion->m_Beliefs.IsPantheonBeliefInReligion(ePantheonBelief, eMajority, pOwningCity->getOwner()))) // check that the our religion does not have our belief, to prevent double counting
 					{
-						iResult += pkPlot->getYieldWithBuild(eBuild, eYield, bUpgrade, ePlayer, pOwningCity, pPantheon, NULL);
+						iResult += pkPlot->getYieldWithBuild(eBuild, eYield, bUpgrade, false, ePlayer, pOwningCity, pPantheon, NULL);
 					}
 				}
 			}
@@ -1723,7 +1750,7 @@ int CvLuaPlot::lGetYieldWithBuild(lua_State* L)
 	}
 	else
 	{
-		const int iResult = pkPlot->getYieldWithBuild(eBuild, eYield, bUpgrade, ePlayer, NULL, NULL, NULL);
+		const int iResult = pkPlot->getYieldWithBuild(eBuild, eYield, bUpgrade, false, ePlayer, NULL, NULL, NULL);
 		lua_pushinteger(L, iResult);
 		return 1;
 	}
@@ -2245,6 +2272,56 @@ int CvLuaPlot::lGetAirUnitsTooltip(lua_State* L)
 	}
 
 	lua_pushstring(L, AirTT.c_str());
+	return 1;
+}
+
+//------------------------------------------------------------------------------
+//void GetPlannedRouteState(PlayerTypes ePlayer);
+int CvLuaPlot::lGetPlannedRouteState(lua_State* L)
+{
+	return BasicLuaMethod(L, &CvPlot::GetPlannedRouteState);
+}
+
+//------------------------------------------------------------------------------
+//void SetPlannedRouteState(PlayerTypes ePlayer, RoutePlanTypes eRoutePlanType);
+int CvLuaPlot::lSetPlannedRouteState(lua_State* L)
+{
+	return BasicLuaMethod(L, &CvPlot::SetPlannedRouteState);
+}
+
+//------------------------------------------------------------------------------
+//bool IsMainRouteTile(PlayerTypes ePlayer);
+int CvLuaPlot::lIsMainRoutePlan(lua_State* L)
+{
+	CvPlot* pPlot = GetInstance(L);
+	PlayerTypes ePlayer = (PlayerTypes)lua_tointeger(L, 2);
+
+	bool bResult = GET_PLAYER(ePlayer).GetBuilderTaskingAI()->IsMainRoutePlot(pPlot);
+	lua_pushboolean(L, bResult);
+	return 1;
+}
+
+//------------------------------------------------------------------------------
+//bool IsShortcutRouteTile(PlayerTypes ePlayer);
+int CvLuaPlot::lIsShortcutRoutePlan(lua_State* L)
+{
+	CvPlot* pPlot = GetInstance(L);
+	PlayerTypes ePlayer = (PlayerTypes)lua_tointeger(L, 2);
+
+	bool bResult = GET_PLAYER(ePlayer).GetBuilderTaskingAI()->IsShortcutRoutePlot(pPlot);
+	lua_pushboolean(L, bResult);
+	return 1;
+}
+
+//------------------------------------------------------------------------------
+//bool IsStrategicRouteTile(PlayerTypes ePlayer);
+int CvLuaPlot::lIsStrategicRoutePlan(lua_State* L)
+{
+	CvPlot* pPlot = GetInstance(L);
+	PlayerTypes ePlayer = (PlayerTypes)lua_tointeger(L, 2);
+
+	bool bResult = GET_PLAYER(ePlayer).GetBuilderTaskingAI()->IsStrategicRoutePlot(pPlot);
+	lua_pushboolean(L, bResult);
 	return 1;
 }
 

@@ -124,10 +124,24 @@ void CvUnitCombat::GenerateMeleeCombatInfo(CvUnit& kAttacker, CvUnit* pkDefender
 		int iAttackerDamageInflicted = kAttacker.getCombatDamage(iAttackerStrength, iDefenderStrength, /*bIncludeRand*/ bIncludeRand, /*bAttackerIsCity*/ false, /*bDefenderIsCity*/ true);
 		int iDefenderDamageInflicted = kAttacker.getCombatDamage(iDefenderStrength, iAttackerStrength, /*bIncludeRand*/ bIncludeRand, /*bAttackerIsCity*/ true, /*bDefenderIsCity*/ false);
 
-#if defined(MOD_BALANCE_CORE)
+		int iGarrisonShare = 0;
+		CvUnit* pGarrison = pkCity->GetGarrisonedUnit();
+		if (MOD_BALANCE_CORE_MILITARY)
+		{
+			// If there is a garrison, the unit absorbs part of the damage!
+			if (pGarrison)
+			{
+				// Make sure there are no rounding errors
+				iGarrisonShare = (iAttackerDamageInflicted * 2 * pGarrison->GetMaxHitPoints()) / (pkCity->GetMaxHitPoints() + 2 * pGarrison->GetMaxHitPoints());
+			}
+		}
 		if(kAttacker.getForcedDamageValue() != 0)
 		{
 			iDefenderDamageInflicted = kAttacker.getForcedDamageValue();
+		}
+		else if (iAttackerDamageInflicted - iGarrisonShare - pkCity->getDamageReductionFlat() > pkCity->GetMaxHitPoints() - pkCity->getDamage())
+		{
+			iDefenderDamageInflicted = (iDefenderDamageInflicted * (pkCity->GetMaxHitPoints() - pkCity->getDamage())) / (iAttackerDamageInflicted - iGarrisonShare);
 		}
 		if(kAttacker.getChangeDamageValue() != 0)
 		{
@@ -135,41 +149,25 @@ void CvUnitCombat::GenerateMeleeCombatInfo(CvUnit& kAttacker, CvUnit* pkDefender
 			if (iDefenderDamageInflicted <= 0)
 				iDefenderDamageInflicted = 0;
 		}
-#endif
 
-#if defined(MOD_BALANCE_CORE_MILITARY)
-		//if there is a garrison, the unit absorbs part of the damage!
-		CvUnit* pGarrison = pkCity->GetGarrisonedUnit();
-		if(pGarrison)
+		if (MOD_BALANCE_CORE_MILITARY && iGarrisonShare > 0)
 		{
-			//make sure there are no rounding errors
-			int iGarrisonShare = (iAttackerDamageInflicted*2*pGarrison->GetMaxHitPoints()) / (pkCity->GetMaxHitPoints()+2*pGarrison->GetMaxHitPoints());
-			
-			/*
-			//garrison can not be killed, only reduce to 10 hp
-			iGarrisonShare = min(iGarrisonShare,pGarrison->GetCurrHitPoints()-10);
-			*/
+			iAttackerDamageInflicted -= iGarrisonShare;
 
-			if (iGarrisonShare>0)
+			//add the garrison as a bystander
+			int iDamageMembers = 0;
+			CvCombatMemberEntry* pkDamageEntry = AddCombatMember(pkCombatInfo->getDamageMembers(), &iDamageMembers, pkCombatInfo->getMaxDamageMemberCount(), pGarrison);
+			if(pkDamageEntry)
 			{
-				iAttackerDamageInflicted -= iGarrisonShare;
-
-				//add the garrison as a bystander
-				int iDamageMembers = 0;
-				CvCombatMemberEntry* pkDamageEntry = AddCombatMember(pkCombatInfo->getDamageMembers(), &iDamageMembers, pkCombatInfo->getMaxDamageMemberCount(), pGarrison);
-				if(pkDamageEntry)
-				{
 #if defined(MOD_EVENTS_BATTLES)
-					BATTLE_JOINED(pGarrison, BATTLE_UNIT_COUNT, false); // Bit of a fudge, as BATTLE_UNIT_COUNT happens to correspond to BATTLEUNIT_BYSTANDER
+				BATTLE_JOINED(pGarrison, BATTLE_UNIT_COUNT, false); // Bit of a fudge, as BATTLE_UNIT_COUNT happens to correspond to BATTLEUNIT_BYSTANDER
 #endif
-					pkDamageEntry->SetDamage(iGarrisonShare);
-					pkDamageEntry->SetFinalDamage(std::min(iGarrisonShare + pGarrison->getDamage(), pGarrison->GetMaxHitPoints()));
-					pkDamageEntry->SetMaxHitPoints(pGarrison->GetMaxHitPoints());
-					pkCombatInfo->setDamageMemberCount(iDamageMembers);
-				}
+				pkDamageEntry->SetDamage(iGarrisonShare);
+				pkDamageEntry->SetFinalDamage(std::min(iGarrisonShare + pGarrison->getDamage(), pGarrison->GetMaxHitPoints()));
+				pkDamageEntry->SetMaxHitPoints(pGarrison->GetMaxHitPoints());
+				pkCombatInfo->setDamageMemberCount(iDamageMembers);
 			}
 		}
-#endif
 
 		// City can have flat damage reduction
 		if (pkCity->getDamageReductionFlat() != 0) {
@@ -252,6 +250,11 @@ void CvUnitCombat::GenerateMeleeCombatInfo(CvUnit& kAttacker, CvUnit* pkDefender
 		{
 			iDefenderDamageInflicted   = kAttacker.getForcedDamageValue();
 		}
+		else if (iAttackerDamageInflicted > pkDefender->GetCurrHitPoints())
+		{
+			iDefenderDamageInflicted = (iDefenderDamageInflicted * pkDefender->GetCurrHitPoints()) / iAttackerDamageInflicted;
+		}
+
 		if(pkDefender->getForcedDamageValue() != 0)
 		{
 			iAttackerDamageInflicted= pkDefender->getForcedDamageValue();
@@ -2598,11 +2601,11 @@ void CvUnitCombat::GenerateNuclearCombatInfo(CvUnit& kAttacker, CvPlot& plot, Cv
 			{
 				if (GET_TEAM((TeamTypes)iI).IsVassalOfSomeone())
 				{
-					GET_PLAYER((PlayerTypes)kAttacker.getOwner()).GetDiplomacyAI()->DeclareWar(GET_TEAM((TeamTypes)iI).GetMaster());
+					GET_PLAYER(kAttacker.getOwner()).GetDiplomacyAI()->DeclareWar(GET_TEAM((TeamTypes)iI).GetMaster());
 				}
 				else
 				{
-					GET_PLAYER((PlayerTypes)kAttacker.getOwner()).GetDiplomacyAI()->DeclareWar((TeamTypes)iI);
+					GET_PLAYER(kAttacker.getOwner()).GetDiplomacyAI()->DeclareWar((TeamTypes)iI);
 				}
 
 				if (iPlotTeam == iI) 
@@ -2802,9 +2805,9 @@ uint CvUnitCombat::ApplyNuclearExplosionDamage(const CvCombatMemberEntry* pkDama
 					pkUnit->kill(false, eAttackerOwner);
 				}
 
-				if (GET_PLAYER((PlayerTypes)kEntry.GetPlayer()).isMajorCiv() && GET_PLAYER((PlayerTypes)kEntry.GetPlayer()).isAlive())
+				if (GET_PLAYER(kEntry.GetPlayer()).isMajorCiv() && GET_PLAYER(kEntry.GetPlayer()).isAlive())
 				{
-					if (std::find(vAffectedPlayers.begin(), vAffectedPlayers.end(), (PlayerTypes)kEntry.GetPlayer()) == vAffectedPlayers.end())
+					if (std::find(vAffectedPlayers.begin(), vAffectedPlayers.end(), kEntry.GetPlayer()) == vAffectedPlayers.end())
 						vAffectedPlayers.push_back(kEntry.GetPlayer());
 				}
 			}

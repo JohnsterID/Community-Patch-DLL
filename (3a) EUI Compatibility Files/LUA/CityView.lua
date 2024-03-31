@@ -953,9 +953,6 @@ local function SetupBuildingList( city, buildings, buildingIM )
 						+ city:GetBuildingYieldChangeFromCorporationFranchises(buildingClassID, yieldID)
 						+ cityOwner:GetPolicyBuildingClassYieldChange(buildingClassID, yieldID)
 
-			if GameInfo.Yields[yieldID].Type == "YIELD_CULTURE" then
-				buildingCultureRate = buildingCultureRate + city:GetBuildingClassCultureChange(buildingClassID )
-			end
 			-- Yield modifiers from the building
 			buildingYieldModifier = Game.GetBuildingYieldModifier( buildingID, yieldID )
 						+ cityOwner:GetPolicyBuildingClassYieldModifier( buildingClassID, yieldID )
@@ -1275,7 +1272,8 @@ end
 local function OnSelectionMouseExit( orderID, itemID )
 	-- Only care about buildings 
 	if orderID ~= OrderTypes.ORDER_CONSTRUCT then return end
-	print('No longer hovering over itemID', itemID)
+
+	--print('No longer hovering over itemID', itemID)
 	
 	if g_HoverBuildingID == itemID then 
 		Events.ClearHexHighlightStyle("BoostedResourcePlot")
@@ -1531,12 +1529,11 @@ end)
 			turnsRemaining = city:GetUnitProductionTurnsLeft( itemID, queuedItemNumber )
 			portraitOffset, portraitAtlas = UI_GetUnitPortraitIcon( itemID, cityOwnerID )
 			isReallyRepeat = isRepeat
-			-- Vox Populi invested
-			cashInvested = city:GetUnitInvestment(itemID)
-			-- Vox Populi gold button
-			canBuyWithGoldPQ = cityIsCanPurchase( city, true, true, itemID, -1, -1, g_yieldCurrency )
-			goldCostPQ = cityIsCanPurchase( city, false, false, itemID, -1, -1, g_yieldCurrency )
-						and city:GetUnitPurchaseCost( itemID )
+			-- Vox Populi: cannot invest in units
+			cashInvested = 0
+			-- Vox Populi: don't show buy buttons for units in the queue
+			canBuyWithGoldPQ = false
+			goldCostPQ = false
 		elseif orderID == OrderTypes.ORDER_CONSTRUCT then
 			itemInfo = GameInfo.Buildings
 			turnsRemaining = city:GetBuildingProductionTurnsLeft( itemID, queuedItemNumber )
@@ -2485,7 +2482,7 @@ local function UpdateCityViewNow()
 					buildings = specialistBuildings
 				elseif greatWorkCount > 0 then
 					buildings = greatWorkBuildings
-				elseif greatWorkCount == 0 then		-- compatibility with Firaxis code exploit for invisibility
+				elseif greatWorkCount == 0 and building.IsDummy == 0 then		-- compatibility with Firaxis code exploit for invisibility
 					buildings = otherBuildings
 				end
 				if buildings then
@@ -2689,7 +2686,7 @@ local function UpdateCityViewNow()
 
 		local cityGrowth = city:GetFoodTurnsLeft()
 		local foodPerTurnTimes100 = city:FoodDifferenceTimes100()
-		if city:IsFoodProduction() or foodPerTurnTimes100 == 0 then
+		if foodPerTurnTimes100 == 0 then
 			Controls.CityGrowthLabel:LocalizeAndSetText( "TXT_KEY_CITYVIEW_STAGNATION_TEXT" )
 		elseif foodPerTurnTimes100 < 0 then
 			Controls.CityGrowthLabel:LocalizeAndSetText( "TXT_KEY_CITYVIEW_STARVATION_TEXT" )

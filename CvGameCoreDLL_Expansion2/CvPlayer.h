@@ -2245,6 +2245,9 @@ public:
 	bool IsRefuseResearchAgreementTrade();
 	void SetRefuseResearchAgreementTrade(bool refuseTrade);
 
+	bool IsInstantYieldNotificationDisabled(InstantYieldType eInstantYield);
+	void SetInstantYieldNotificationDisabled(InstantYieldType eInstantYield, bool bNewValue);
+
 	bool IsResourceCityTradeable(ResourceTypes eResource, bool bCheckTeam = true) const;
 	bool IsResourceRevealed(ResourceTypes eResource, bool bCheckTeam = true) const;
 	CvImprovementEntry* GetResourceImprovement(ResourceTypes eResource, bool bCivSpecific = false) const;
@@ -2416,8 +2419,7 @@ public:
 
 	bool removeFromArmy(int iArmyID, int iID);
 
-	int findPathLengthNew(TechTypes eTech, int pTechs[] = NULL) const;
-	int findPathLength(TechTypes eTech, bool bCost = true) const;
+	int findTechPathLength(TechTypes eTech);
 	int getQueuePosition(TechTypes eTech) const;
 	void clearResearchQueue();
 	bool pushResearch(TechTypes eTech, bool bClear = false);
@@ -2684,6 +2686,7 @@ public:
 	void SetTurnsSinceSettledLastCity(int iValue);
 	void ChangeTurnsSinceSettledLastCity(int iChange);
 
+	int GetMinAcceptableSettleQuality() const;
 	bool HaveGoodSettlePlot(int iAreaID);
 	CvPlot* GetBestSettlePlot(const CvUnit* pUnit, CvAIOperation* pOpToIgnore=NULL, bool bForceLogging=false) const;
 	PlayerTypes GetPlayerWhoStoleMyFavoriteCitySite();
@@ -2720,6 +2723,13 @@ public:
 #if defined(MOD_PROMOTIONS_DEEP_WATER_EMBARKATION)
 	PromotionTypes GetDeepWaterEmbarkationPromotion() const;
 #endif
+
+	// spaceship planning
+	void LogSpaceshipPlanMessage(const CvString& strMsg);
+	vector<CvCity*> GetCoreCitiesForSpaceshipProduction();
+	int GetNumAluminumStillNeededForCoreCities();
+	int GetNumAluminumStillNeededForSpaceship();
+	int GetNumSpaceshipPartsBuildableNow(bool bIncludeCurrentlyInProduction = false);
 
 	void DoAnnounceReligionAdoption();
 	// End New Religion Stuff
@@ -2916,7 +2926,8 @@ public:
 	virtual void AI_doTurnPost() = 0;
 	virtual void AI_doTurnUnitsPre() = 0;
 	virtual void AI_doTurnUnitsPost() = 0;
-	virtual void AI_unitUpdate() = 0;
+	virtual void AI_doSpaceshipProduction() = 0;
+	virtual void AI_unitUpdate(bool bHomelandAINeedsUpdate) = 0;
 	virtual void AI_conquerCity(CvCity* pCity, bool bGift, bool bAllowSphereRemoval) = 0;
 	bool HasSameIdeology(PlayerTypes ePlayer) const;
 
@@ -2988,6 +2999,8 @@ public:
 	bool unlockedGrowthAnywhereThisTurn() const;
 
 	bool IsEarlyExpansionPhase() const;
+	bool IsPlotSafeForRoute(const CvPlot* pPlot, bool bIncludeAdjacent) const;
+	bool GetSameRouteBenefitFromTrait(const CvPlot* pPlot, RouteTypes eRoute) const;
 
 protected:
 	class ConqueredByBoolField
@@ -3527,6 +3540,11 @@ protected:
 
 	int m_iLastSliceMoved; // not serialized
 
+	vector<CvCity*> m_vCitiesForSpaceshipParts; // not serialized
+	int m_iCitiesForSpaceshipPartsUpdateTurn; // not serialized
+	vector<CvCity*> m_vCoreCitiesForSpaceshipProduction; // not serialized
+	int m_iCoreCitiesForSpaceshipProductionUpdateTurn; // not serialized
+
 
 	uint m_uiStartTime;  // XXX save these?
 
@@ -3539,7 +3557,7 @@ protected:
 	bool m_bPotentiallyAlive;
 	bool m_bTurnActive;
 	bool m_bAutoMoves;					// Signal that we can process the auto moves when ready.
-	bool						  m_bProcessedAutoMoves;		// Signal that we have processed the auto moves
+	bool m_bProcessedAutoMoves;		// Signal that we have processed the auto moves
 	bool m_bEndTurn;					// Signal that the player has completed their turn.  The turn will still be active until the auto-moves have been processed.
 	bool m_bDynamicTurnsSimultMode;
 	bool m_bPbemNewTurn;
@@ -3697,6 +3715,9 @@ protected:
 	bool m_refuseBrokeredWarTrade;
 	bool m_refuseBrokeredPeaceTrade;
 	bool m_refuseResearchAgreementTrade;
+
+	std::vector<bool> m_abInstantYieldNotificationsDisabled;
+
 
 	std::vector<bool> m_pabGetsScienceFromPlayer;
 
@@ -4476,6 +4497,7 @@ SYNC_ARCHIVE_VAR(int, m_iMilitarySeaMight)
 SYNC_ARCHIVE_VAR(int, m_iMilitaryAirMight)
 SYNC_ARCHIVE_VAR(int, m_iMilitaryLandMight)
 SYNC_ARCHIVE_VAR(std::vector<ResourceTypes>, m_vResourcesNotForSale)
+SYNC_ARCHIVE_VAR(std::vector<bool>, m_abInstantYieldNotificationsDisabled)
 SYNC_ARCHIVE_VAR(bool, m_refuseOpenBordersTrade)
 SYNC_ARCHIVE_VAR(bool, m_refuseEmbassyTrade)
 SYNC_ARCHIVE_VAR(bool, m_refuseDefensivePactTrade)

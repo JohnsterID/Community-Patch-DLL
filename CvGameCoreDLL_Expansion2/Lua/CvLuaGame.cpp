@@ -171,6 +171,7 @@ void CvLuaGame::RegisterMembers(lua_State* L)
 
 	Method(GetAIAutoPlay);
 	Method(SetAIAutoPlay);
+	Method(ChangeActivePlayer);
 
 	Method(IsScoreDirty);
 	Method(SetScoreDirty);
@@ -411,6 +412,8 @@ void CvLuaGame::RegisterMembers(lua_State* L)
 	Method(DoRepealResolution);
 	Method(IsBeliefValid);
 	Method(ScoreBelief);
+	Method(ScorePolicy);
+	Method(ScorePolicyBranch);
 
 	Method(IsAchievementUnlocked);
 	Method(GetSteamStat);
@@ -1237,6 +1240,18 @@ int CvLuaGame::lGetAIAutoPlay(lua_State* L)
 int CvLuaGame::lSetAIAutoPlay(lua_State* L)
 {
 	return BasicLuaMethod(L, &CvGame::setAIAutoPlay);
+}
+int CvLuaGame::lChangeActivePlayer(lua_State* L)
+{
+	const PlayerTypes eNewPlayer = toValue<PlayerTypes>(L, 2);
+	PlayerTypes eActivePlayer = CvPreGame::activePlayer();
+	if (eNewPlayer != eActivePlayer)
+	{
+		CvPreGame::setSlotStatus(CvPreGame::activePlayer(), SS_COMPUTER);
+		CvPreGame::setSlotStatus(eNewPlayer, SS_TAKEN);
+		GC.getGame().setActivePlayer(eNewPlayer, false /*bForceHotSeat*/, true /*bAutoplaySwitch*/);
+	}
+	return 1;
 }
 //------------------------------------------------------------------------------
 //bool isScoreDirty();
@@ -3264,9 +3279,30 @@ int CvLuaGame::lScoreBelief(lua_State* L)
 	{
 		CvBeliefEntry* pBelief = GC.GetGameBeliefs()->GetEntry(eBeliefType);
 		if (pBelief)
-			iScore = GET_PLAYER(ePlayer).GetReligionAI()->ScoreBelief(pBelief);
+		{
+			CvWeightedVector<int> viPlotWeights = GET_PLAYER(ePlayer).GetReligionAI()->CalculatePlotWeightsForBeliefSelection(/*bConsiderExpansion*/ pBelief->IsPantheonBelief());
+			iScore = GET_PLAYER(ePlayer).GetReligionAI()->ScoreBelief(pBelief, viPlotWeights);
+		}
 	}
 
+	lua_pushinteger(L, iScore);
+	return 1;
+}
+
+int CvLuaGame::lScorePolicy(lua_State* L)
+{
+	const PlayerTypes ePlayer = static_cast<PlayerTypes>(luaL_checkint(L, 1));
+	const PolicyTypes ePolicyType = static_cast<PolicyTypes>(luaL_checkint(L, 2));
+	int iScore = (ePlayer != NO_PLAYER) ? GET_PLAYER(ePlayer).GetPlayerPolicies()->ScorePolicy(ePolicyType) : 0;
+	lua_pushinteger(L, iScore);
+	return 1;
+}
+
+int CvLuaGame::lScorePolicyBranch(lua_State* L)
+{
+	const PlayerTypes ePlayer = static_cast<PlayerTypes>(luaL_checkint(L, 1));
+	const PolicyBranchTypes ePolicyBranchType = static_cast<PolicyBranchTypes>(luaL_checkint(L, 2));
+	int iScore = (ePlayer!=NO_PLAYER) ? GET_PLAYER(ePlayer).GetPlayerPolicies()->ScorePolicyBranch(ePolicyBranchType) : 0;
 	lua_pushinteger(L, iScore);
 	return 1;
 }
@@ -3462,7 +3498,7 @@ int CvLuaGame::lGetLongestCityConnectionPlots(lua_State* L)
 		int iLoop1;
 		int iLoop2;
 
-		SPathFinderUserData data(ePlayer, PT_CITY_CONNECTION_LAND, NO_BUILD, ROUTE_RAILROAD, false);
+		SPathFinderUserData data(ePlayer, PT_CITY_CONNECTION_LAND, NO_BUILD, ROUTE_RAILROAD, NO_ROUTE_PURPOSE);
 
 		for (pFirstCity = GET_PLAYER(ePlayer).firstCity(&iLoop1); pFirstCity != NULL; pFirstCity = GET_PLAYER(ePlayer).nextCity(&iLoop1))
 		{

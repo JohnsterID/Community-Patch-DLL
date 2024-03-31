@@ -433,6 +433,8 @@ void CvLuaCity::PushMethods(lua_State* L, int t)
 
 	Method(IsBlockaded);
 	Method(IsMined);
+	Method(IsBorderObstacleLand);
+	Method(IsBorderObstacleWater);
 
 	Method(GetWeLoveTheKingDayCounter);
 	Method(SetWeLoveTheKingDayCounter);
@@ -560,6 +562,7 @@ void CvLuaCity::PushMethods(lua_State* L, int t)
 	Method(RangeCombatDamage);
 	Method(GetAirStrikeDefenseDamage);
 	Method(GetMultiAttackBonusCity);
+	Method(GetRangeStrikeModifierFromEspionage);
 
 	Method(IsWorkingPlot);
 	Method(AlterWorkingPlot);
@@ -1128,7 +1131,7 @@ int CvLuaCity::lGetPurchaseUnitTooltip(lua_State* L)
 	const UnitTypes eUnit = (UnitTypes) lua_tointeger(L, 2);
 
 	// City Production Modifier
-	pkCity->canTrain(eUnit, false, false, false, false, &toolTip);
+	pkCity->canTrain(eUnit, false, false, false, true, &toolTip);
 
 	int iMaxSupplyPenalty = /*70*/ GD_INT_GET(MAX_UNIT_SUPPLY_PRODMOD);
 	int iSupplyPenaltyPerUnit = /*10 in CP, 5 in VP*/ GD_INT_GET(PRODUCTION_PENALTY_PER_UNIT_OVER_SUPPLY);
@@ -2088,7 +2091,9 @@ int CvLuaCity::lPurchase(lua_State* L)
 	const YieldTypes ePurchaseYield = (YieldTypes) lua_tointeger(L, 5);
 
 	// TODO: throw error for non-gold/faith ePurchaseYield input?
-	pkCity->Purchase(eUnitType, eBuildingType, eProjectType, ePurchaseYield);
+	pkCity->PurchaseUnit(eUnitType, ePurchaseYield);
+	pkCity->PurchaseBuilding(eBuildingType, ePurchaseYield);
+	pkCity->PurchaseProject(eProjectType, ePurchaseYield);
 
 	return 0;
 }
@@ -4314,6 +4319,16 @@ int CvLuaCity::lIsMined(lua_State* L)
 	return 1;
 }
 
+int CvLuaCity::lIsBorderObstacleLand(lua_State* L)
+{
+	return BasicLuaMethod(L, &CvCity::IsBorderObstacleLand);
+}
+
+int CvLuaCity::lIsBorderObstacleWater(lua_State* L)
+{
+	return BasicLuaMethod(L, &CvCity::IsBorderObstacleWater);
+}
+
 //------------------------------------------------------------------------------
 //int GetWeLoveTheKingDayCounter();
 int CvLuaCity::lGetWeLoveTheKingDayCounter(lua_State* L)
@@ -5334,6 +5349,35 @@ int CvLuaCity::lGetMultiAttackBonusCity(lua_State* L)
 	{
 		int iTempModifier = GET_PLAYER(pkCity->getOwner()).GetPlayerTraits()->GetMultipleAttackBonus() * pkUnit->GetNumTimesAttackedThisTurn(pkCity->getOwner());
 		iModifier += iTempModifier;
+	}
+
+	lua_pushinteger(L, iModifier);
+	return 1;
+}
+//------------------------------------------------------------------------------
+int CvLuaCity::lGetRangeStrikeModifierFromEspionage(lua_State* L)
+{
+	CvCity* pCity = GetInstance(L);
+
+	// Only major civs can have this modifier
+	if (pCity->getOwner() >= static_cast<PlayerTypes>(MAX_MAJOR_CIVS))
+		return 0;
+
+	int iModifier = 0;
+	CvCityEspionage* pCityEspionage = pCity->GetCityEspionage();
+	if (pCityEspionage)
+	{
+		CityEventChoiceTypes eSpyFocus = pCityEspionage->GetCounterSpyFocus();
+		if (eSpyFocus != NO_EVENT_CHOICE_CITY)
+		{
+			CvModEventCityChoiceInfo* pEventChoiceInfo = GC.getCityEventChoiceInfo(eSpyFocus);
+			if (pEventChoiceInfo)
+			{
+				iModifier += pEventChoiceInfo->getCityDefenseModifierBase();
+				if (pEventChoiceInfo->getCityDefenseModifier() != 0)
+					iModifier += pEventChoiceInfo->getCityDefenseModifier() * (pCityEspionage->GetCounterSpyRank() + 1);
+			}
+		}
 	}
 
 	lua_pushinteger(L, iModifier);

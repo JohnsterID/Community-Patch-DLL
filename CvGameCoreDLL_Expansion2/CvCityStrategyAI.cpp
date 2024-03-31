@@ -308,6 +308,11 @@ void CvCityStrategyAI::Reset()
 	m_eMostDeficientYield = NO_YIELD;
 	m_eMostAbundantYield = NO_YIELD;
 
+	for (int iI = 0; iI < NUM_YIELD_TYPES; iI++)
+	{
+		m_aiYieldModifier[iI] = 0;
+	}
+
 	// Reset sub AI objects
 	m_pBuildingProductionAI->Reset();
 	m_pUnitProductionAI->Reset();
@@ -552,24 +557,24 @@ void CvCityStrategyAI::SetTurnCityStrategyAdopted(AICityStrategyTypes eStrategy,
 }
 
 /// Get the sub-object tracking building production
-CvBuildingProductionAI* CvCityStrategyAI::GetBuildingProductionAI()
+CvBuildingProductionAI* CvCityStrategyAI::GetBuildingProductionAI() const
 {
 	return m_pBuildingProductionAI;
 }
 
 /// Get the sub-object tracking unit production
-CvUnitProductionAI* CvCityStrategyAI::GetUnitProductionAI()
+CvUnitProductionAI* CvCityStrategyAI::GetUnitProductionAI() const
 {
 	return m_pUnitProductionAI;
 }
 
 /// Get the sub-object tracking project production
-CvProjectProductionAI* CvCityStrategyAI::GetProjectProductionAI()
+CvProjectProductionAI* CvCityStrategyAI::GetProjectProductionAI() const
 {
 	return m_pProjectProductionAI;
 }
 
-CvProcessProductionAI* CvCityStrategyAI::GetProcessProductionAI()
+CvProcessProductionAI* CvCityStrategyAI::GetProcessProductionAI() const
 {
 	return m_pProcessProductionAI;
 }
@@ -626,42 +631,55 @@ CvString CvCityStrategyAI::GetProductionLogFileName(CvString& playerName, CvStri
 }
 
 /// Determines if the yield is below a sustainable amount
-YieldTypes CvCityStrategyAI::GetMostDeficientYield()
+YieldTypes CvCityStrategyAI::GetMostDeficientYield() const
 {
 	return m_eMostDeficientYield;
 }
 /// Determines if the yield is the best
-YieldTypes CvCityStrategyAI::GetMostAbundantYield()
+YieldTypes CvCityStrategyAI::GetMostAbundantYield() const
 {
 	return m_eMostAbundantYield;
+}
+
+int CvCityStrategyAI::GetYieldModifierTimes100(YieldTypes eYield) const
+{
+	CvAssertMsg(eYield > NO_YIELD, "Illegal yield");
+	CvAssertMsg(eYield < NUM_YIELD_TYPES, "Illegal yield");
+
+	return 100 + m_aiYieldModifier[eYield];
 }
 
 /// Get the average value of the yield for this city
 void CvCityStrategyAI::PrecalcYieldStats()
 {
-	vector<float> expectedYieldPerPop;
+	vector<float> expectedYieldPerPop100;
 	//add the values in the order of the yield enum
-	expectedYieldPerPop.push_back(100 * /*0.5*/ GD_FLOAT_GET(AI_CITYSTRATEGY_YIELD_DEFICIENT_FOOD));  // food is different because we include consumption
-	expectedYieldPerPop.push_back(100 * /*1.0*/ GD_FLOAT_GET(AI_CITYSTRATEGY_YIELD_DEFICIENT_PRODUCTION));
-	expectedYieldPerPop.push_back(100 * /*1.5*/ GD_FLOAT_GET(AI_CITYSTRATEGY_YIELD_DEFICIENT_GOLD));
-	expectedYieldPerPop.push_back(100 * /*2.5*/ GD_FLOAT_GET(AI_CITYSTRATEGY_YIELD_DEFICIENT_SCIENCE));
-	expectedYieldPerPop.push_back(100 * /*2.5*/ GD_FLOAT_GET(AI_CITYSTRATEGY_YIELD_DEFICIENT_CULTURE));
-	expectedYieldPerPop.push_back(100 * /*2.5*/ GD_FLOAT_GET(AI_CITYSTRATEGY_YIELD_DEFICIENT_FAITH));
+	expectedYieldPerPop100.push_back(100 * /*0.5*/ GD_FLOAT_GET(AI_CITYSTRATEGY_YIELD_DEFICIENT_FOOD));  // food is different because we include consumption
+	expectedYieldPerPop100.push_back(100 * /*1.0*/ GD_FLOAT_GET(AI_CITYSTRATEGY_YIELD_DEFICIENT_PRODUCTION));
+	expectedYieldPerPop100.push_back(100 * /*1.5*/ GD_FLOAT_GET(AI_CITYSTRATEGY_YIELD_DEFICIENT_GOLD));
+	expectedYieldPerPop100.push_back(100 * /*2.5*/ GD_FLOAT_GET(AI_CITYSTRATEGY_YIELD_DEFICIENT_SCIENCE));
+	expectedYieldPerPop100.push_back(100 * /*2.5*/ GD_FLOAT_GET(AI_CITYSTRATEGY_YIELD_DEFICIENT_CULTURE));
+	expectedYieldPerPop100.push_back(100 * /*2.5*/ GD_FLOAT_GET(AI_CITYSTRATEGY_YIELD_DEFICIENT_FAITH));
 
 	vector< OptionWithScore<YieldTypes> > deviations;
-	for (int iI = 0; iI <= YIELD_FAITH; iI++)
+	for (int iI = 0; iI < NUM_YIELD_TYPES; iI++)
 	{
 		YieldTypes eYield = (YieldTypes) iI;
-		int iYield = m_pCity->getYieldRateTimes100(eYield, false);
+		int iYieldTimes100 = m_pCity->getYieldRateTimes100(eYield, false);
 
 		//consider excess food only
 		if (eYield == YIELD_FOOD)
-			iYield -= (m_pCity->foodConsumptionTimes100());
+			iYieldTimes100 -= (m_pCity->foodConsumptionTimes100());
 		
-		int iYieldPerPop100 = (iYield*100) / max(1, m_pCity->getPopulation());
-		int iDeviation = iYieldPerPop100 - (int)expectedYieldPerPop[iI];
+		int iYieldPerPop100 = iYieldTimes100 / max(1, m_pCity->getPopulation());
+		int iExpectedYield100 = iI <= YIELD_FAITH ? (int)expectedYieldPerPop100[iI] : 100;
 
-		deviations.push_back( OptionWithScore<YieldTypes>(eYield,iDeviation) );
+		int iDelta = iExpectedYield100 - iYieldPerPop100;
+
+		if (iI <= YIELD_FAITH)
+			deviations.push_back( OptionWithScore<YieldTypes>(eYield,-iDelta) );
+
+		m_aiYieldModifier[iI] = iDelta > 0 ? iDelta : 0;
 	}
 
 	//this sorts in descending order
@@ -758,23 +776,19 @@ void CvCityStrategyAI::ChooseProduction(BuildingTypes eIgnoreBldg, UnitTypes eIg
 	// Loop through adding the available units
 	for(int iUnitLoop = 0; iUnitLoop < GC.GetGameUnits()->GetNumUnits(); iUnitLoop++)
 	{
-		// Puppets and automated cities cannot build units
-		if (CityStrategyAIHelpers::IsTestCityStrategy_IsPuppetAndAnnexable(m_pCity) || m_pCity->isHumanAutomated())
-		{
-			continue;
-		}
-
 		// Make sure this unit can be built now
 		if ((UnitTypes)iUnitLoop != eIgnoreUnit && m_pCity->canTrain((UnitTypes)iUnitLoop, (m_pCity->isProductionUnit() && (UnitTypes)iUnitLoop == m_pCity->getProductionUnit())))
 		{
+			// Automated cities won't build units except workers and work boats, or any other civilian with a work rate
+			CvUnitEntry* pUnitEntry = GC.getUnitInfo((UnitTypes)iUnitLoop);
+			if (m_pCity->isHumanAutomated())
+				if (!MOD_BALANCE_VP || pUnitEntry->GetWorkRate() == 0 || pUnitEntry->GetCombat() > 0 || pUnitEntry->GetRangedCombat() > 0)
+					continue;
+
 			buildable.m_eBuildableType = CITY_BUILDABLE_UNIT;
 			buildable.m_iIndex = iUnitLoop;
 			buildable.m_iTurnsToConstruct = GetCity()->getProductionTurnsLeft((UnitTypes)iUnitLoop, 0);
 			int iTempWeight = m_pUnitProductionAI->GetWeight((UnitTypes)iUnitLoop);
-
-			//dirty hack to allow barbarian cities to build units ... barbarians don't use flavors, so their weights are all zero
-			if (m_pCity->getOwner() == BARBARIAN_PLAYER)
-				iTempWeight = max(iTempWeight, 1);
 
 			if(iTempWeight > 0)
 			{
@@ -1185,7 +1199,7 @@ CvCityBuildable CvCityStrategyAI::ChooseHurry(bool bUnitOnly, bool bFaithPurchas
 		eUnitForOperation = m_pCity->GetUnitForOperation();
 		if (eUnitForOperation != NO_UNIT)
 		{
-			CvUnitEntry* pUnitEntry = GC.getUnitInfo((UnitTypes)eUnitForOperation);
+			CvUnitEntry* pUnitEntry = GC.getUnitInfo(eUnitForOperation);
 			if (pUnitEntry)
 			{
 				bool bCanSupply = kPlayer.GetNumUnitsToSupply() < kPlayer.GetNumUnitsSupplied(); // this also works when we're at the limit
@@ -1212,7 +1226,7 @@ CvCityBuildable CvCityStrategyAI::ChooseHurry(bool bUnitOnly, bool bFaithPurchas
 		eUnitForArmy = kPlayer.GetMilitaryAI()->GetUnitTypeForArmy(GetCity());
 		if (eUnitForArmy != NO_UNIT)
 		{
-			CvUnitEntry* pUnitEntry = GC.getUnitInfo((UnitTypes)eUnitForArmy);
+			CvUnitEntry* pUnitEntry = GC.getUnitInfo(eUnitForArmy);
 			if (pUnitEntry)
 			{
 				bool bCanSupply = kPlayer.GetNumUnitsToSupply() < kPlayer.GetNumUnitsSupplied(); // this also works when we're at the limit
@@ -2321,12 +2335,6 @@ bool CityStrategyAIHelpers::IsTestCityStrategy_SmallCity(CvCity* pCity)
 /// "Medium City" City Strategy: Sizes 7 to 14
 bool CityStrategyAIHelpers::IsTestCityStrategy_MediumCity(CvCity* pCity)
 {
-	// Never consider the capital to be a medium city (so with late game starts at least one city retains high flavors for SPACESHIP, etc.)
-	if (pCity->isCapital())
-	{
-		return false;
-	}
-
 	if (pCity->getPopulation() >= /*7*/ GD_INT_GET(AI_CITYSTRATEGY_MEDIUM_CITY_POP_THRESHOLD) &&
 		pCity->getPopulation() < /*15*/ GD_INT_GET(AI_CITYSTRATEGY_LARGE_CITY_POP_THRESHOLD))
 	{
@@ -2765,7 +2773,7 @@ bool CityStrategyAIHelpers::IsTestCityStrategy_PocketCity(CvCity* pCity)
 	}
 
 	//could we build a route?
-	SPathFinderUserData data(pCity->getOwner(), PT_BUILD_ROUTE, NO_BUILD, ROUTE_ANY, false);
+	SPathFinderUserData data(pCity->getOwner(), PT_BUILD_ROUTE, NO_BUILD, ROUTE_ANY, NO_ROUTE_PURPOSE);
 	return !GC.GetStepFinder().DoesPathExist(pCapitalCity->getX(), pCapitalCity->getY(), pCity->getX(), pCity->getY(), data);
 }
 #endif
@@ -3654,7 +3662,7 @@ int CityStrategyAIHelpers::GetBuildingYieldValue(CvCity *pCity, BuildingTypes eB
 		{
 			iFlatYield += (pkBuildingInfo->GetBuildingClassYieldChange(pkLoopBuilding->GetBuildingClassType(), eYield) * kPlayer.getNumCities());
 
-			if (pCity->GetCityBuildings()->GetNumBuildingClass((BuildingClassTypes)pkLoopBuilding->GetBuildingClassType()) > 0)
+			if (pCity->GetCityBuildings()->GetNumBuildingClass(pkLoopBuilding->GetBuildingClassType()) > 0)
 			{
 				iFlatYield += (pkBuildingInfo->GetBuildingClassLocalYieldChange(pkLoopBuilding->GetBuildingClassType(), eYield) * 5);
 			}

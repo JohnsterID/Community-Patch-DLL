@@ -65,10 +65,10 @@
 			<Text>{1_Num} NP: {2_Text}</Text>
 		</Row>
 		<Row Tag="TXT_KEY_EO_PASSIVE_BONUSES_UNLOCKED">
-			<Text>Your spy has collected [COLOR_CYAN]{1_Num} Network Points[ENDCOLOR]. This has [COLOR_CYAN]unlocked[ENDCOLOR] the following passive bonuses:[NEWLINE][NEWLINE][COLOR_CYAN]{2_PassiveBonuses}[ENDCOLOR]</Text>
+			<Text>Your spy has collected [COLOR_CYAN]{1_Num} Network Points[ENDCOLOR]. This has unlocked the following passive bonuses:[NEWLINE][NEWLINE]{2_PassiveBonuses}</Text>
 		</Row>
 		<Row Tag="TXT_KEY_EO_PASSIVE_BONUSES_UNLOCKED_FROM_EARLIER">
-			<Text>The highest number of Network Points once collected by your spy during their stay in this city is [COLOR_CYAN]{1_Num}[ENDCOLOR]. This has [COLOR_CYAN]unlocked[ENDCOLOR] the following passive bonuses:[NEWLINE][NEWLINE][COLOR_CYAN]{2_PassiveBonuses}[ENDCOLOR]</Text>
+			<Text>The highest number of Network Points once collected by your spy during their stay in this city is [COLOR_CYAN]{1_Num}[ENDCOLOR]. This has unlocked the following passive bonuses:[NEWLINE][NEWLINE]{2_PassiveBonuses}</Text>
 		</Row>
 		<Row Tag="TXT_KEY_EO_PASSIVE_BONUSES_UNLOCKED_NOTHING_YET">
 			<Text>Your spy has collected [COLOR_CYAN]{1_Num} Network Points[ENDCOLOR] so far. Keep the spy in the city to collect more Network Points and unlock passive bonuses.</Text>
@@ -125,10 +125,49 @@
 			<Text>Diplomat Bonuses</Text>
 		</Row>
 		<Row Tag="TXT_KEY_EO_DIPLOMAT_TOOLTIP">
-			<Text>View unlocked passive bonuses and access intelligence information gathered by {1_Rank} {2_Spy} [COLOR_NEGATIVE_TEXT](not implemented yet)[ENDCOLOR]</Text>
+			<Text>View unlocked passive bonuses and access intelligence information gathered by {1_Rank} {2_Spy} [COLOR_NEGATIVE_TEXT][ENDCOLOR]</Text>
 		</Row>
 		<Row Tag="TXT_KEY_EO_DIPLOMAT_TRAVELING_TOOLTIP">
 			<Text>Once {1_Rank} {2_Spy} has arrived in {3_City}, they will start collecting Network Points. Network Points unlock passive bonuses and grant access to intelligence information about the other civilization while {1_Rank} {2_Spy} is schmoozing as a Diplomat in the city.</Text>
+		</Row>
+		<Row Tag="TXT_KEY_EO_PASSIVE_BONUSES_UNLOCKED_DIPLOMAT">
+			<Text>Your diplomat has collected [COLOR_CYAN]{1_Num} Network Points[ENDCOLOR]. This has unlocked the following bonuses:[NEWLINE][NEWLINE]{2_PassiveBonuses}</Text>
+		</Row>
+		<Row Tag="TXT_KEY_VIEW_TECH_SCREEN">
+			<Text>View Tech Screen</Text>
+		</Row>
+		<Row Tag="TXT_KEY_VIEW_TECH_SCREEN_NOT_ENOUGH_NP">
+			<Text>You need to have collected at least {1_Num} Network Points to view the tech screen.</Text>
+		</Row>
+		<Row Tag="TXT_KEY_EO_VIEW_POLICY_SCREEN">
+			<Text>View Policy Screen</Text>
+		</Row>
+		<Row Tag="TXT_KEY_EO_VIEW_POLICY_SCREEN_NOT_ENOUGH_NP">
+			<Text>You need to have collected at least {1_Num} Network Points to view the policy screen.</Text>
+		</Row>
+		<Row Tag="TXT_KEY_EO_VIEW_UNIT_LIST">
+			<Text>View Unit List</Text>
+		</Row>
+		<Row Tag="TXT_KEY_EO_VIEW_UNIT_LIST_NOT_ENOUGH_NP">
+			<Text>You need to have collected at least {1_Num} Network Points to view the list of the military units.</Text>
+		</Row>
+		<Row Tag="TXT_KEY_EO_NUMBER_UNITS">
+			<Text># Units</Text>
+		</Row>
+		<Row Tag="TXT_KEY_EO_UNIT_LIST">
+			<Text>Unit List</Text>
+		</Row>
+		<Row Tag="TXT_KEY_EO_VIEW_TRADE_DEALS">
+			<Text>View Active Trade Deals</Text>
+		</Row>
+		<Row Tag="TXT_KEY_EO_VIEW_TRADE_DEALS_NOT_ENOUGH_NP">
+			<Text>You need to have collected at least {1_Num} Network Points to view the active trade deals.</Text>
+		</Row>
+		<Row Tag="TXT_KEY_EO_ACTIVE_TRADE_DEALS">
+			<Text>Active Trade Deals</Text>
+		</Row>
+		<Row Tag="TXT_KEY_CHOOSE_INTERNATIONAL_TRADE_ROUTE_ITEM_TT_DIPLOMAT_MODIFIER">
+			<Text>Diplomat present: +{1_Num}%</Text>
 		</Row>
 		<!-- City Security -->
 		<Row Tag="TXT_KEY_EO_CITY_SECURITY_BASE_TT">
@@ -326,7 +365,7 @@
 			<Text>They want you to liberate the city of {1_CityName:textkey}.</Text>
 		</Row>
 		<Row Tag="TXT_KEY_CITY_STATE_QUEST_HORDE_FORMAL">
-			<Text>Protect them from a barbarian horde!</Text>
+			<Text>Protect them from a barbarian horde! If there are barbarians next to the city when the quest ends, the city will be [COLOR_NEGATIVE_TEXT]sacked[ENDCOLOR]!</Text>
 		</Row>
 		<Row Tag="TXT_KEY_CITY_STATE_QUEST_REBELLION_FORMAL">
 			<Text>A revolution against their ally is occurring!</Text>
@@ -671,11 +710,11 @@
 		<Row Tag="TXT_KEY_TECH_SUPPLY">
 			<Text>Tech Reduction</Text>
 		</Row>
-		<Row Tag="TXT_KEY_UNIT_SUPPLY_REMAINING_TOOLTIP">
-			<Text>Number of Military Units: {11_Num} ({2_Num} Military Supply Used)[NEWLINE]Total Military Supply: {1_Num}[NEWLINE][COLOR_NEGATIVE_TEXT]War Weariness Supply Cap Reduction: {6_Num}%[ENDCOLOR][NEWLINE][NEWLINE]Military Supply Base Values:[NEWLINE]  [ICON_BULLET]+{4_Num} from owned [ICON_CITY_STATE] Cities[NEWLINE]  [ICON_BULLET]+{3_Num} from total [ICON_CITIZEN] Population[NEWLINE]  [ICON_BULLET]+{5_Num} from [ICON_CHECKBOX] Difficulty Level[NEWLINE]  [ICON_BULLET]+{10_Num} from [ICON_GREAT_GENERAL]/[ICON_GREAT_ADMIRAL] Great People[NEWLINE][NEWLINE][NEWLINE]Military Supply Reductions:[NEWLINE]  [ICON_BULLET] -{8_Num} from [ICON_RESEARCH] Tech Level[NEWLINE]  [ICON_BULLET] -{7_Num} from [ICON_WAR] War Weariness[NEWLINE][NEWLINE]Military Unit [ICON_GOLD]/[ICON_PEACE] Costs increased by {9_Num}% due to [ICON_WAR] War Weariness.[NEWLINE]Highest War Weariness: {12_CivName} (13_Num)%</Text>
-		</Row>
 		<Row Tag="TXT_KEY_UNIT_SUPPLY_REMAINING_TOOLTIP_NOT_WEARY">
-			<Text>Number of Military Units: {11_Num} ({2_Num} Military Supply Used)[NEWLINE]Total Military Supply: {1_Num}[NEWLINE][COLOR_NEGATIVE_TEXT]War Weariness Supply Cap Reduction: {6_Num}%[ENDCOLOR][NEWLINE][NEWLINE]Military Supply Base Values:[NEWLINE]  [ICON_BULLET]+{4_Num} from owned [ICON_CITY_STATE] Cities[NEWLINE]  [ICON_BULLET]+{3_Num} from total [ICON_CITIZEN] Population[NEWLINE]  [ICON_BULLET]+{5_Num} from [ICON_CHECKBOX] Difficulty Level[NEWLINE]  [ICON_BULLET]+{10_Num} from [ICON_GREAT_GENERAL]/[ICON_GREAT_ADMIRAL] Great People[NEWLINE][NEWLINE][NEWLINE]Military Supply Reductions:[NEWLINE]  [ICON_BULLET] -{8_Num} from [ICON_RESEARCH] Tech Level[NEWLINE]  [ICON_BULLET] -{7_Num} from [ICON_WAR] War Weariness[NEWLINE][NEWLINE]Military Unit [ICON_GOLD]/[ICON_PEACE] Costs increased by {9_Num}% due to [ICON_WAR] War Weariness.</Text>
+			<Text>Number of Military Units: {11_Num} ({2_Num} Military Supply Used)[NEWLINE]Total Military Supply: {1_Num}[NEWLINE][COLOR_NEGATIVE_TEXT]War Weariness Supply Cap Reduction: {6_Num}%[ENDCOLOR][NEWLINE][NEWLINE]Military Supply Values:[NEWLINE]  [ICON_BULLET]+{4_Num} from [ICON_CITY_STATE] Cities ([ICON_WAR] {12_Num} - {13_Num} from [ICON_RESEARCH] Tech Maintenance)[NEWLINE]  [ICON_BULLET]+{3_Num} from [ICON_CITIZEN] Population ([ICON_SILVER_FIST] {14_Num} - {15_Num} from [ICON_RESEARCH] Tech Maintenance)[NEWLINE]  [ICON_BULLET]+{5_Num} from [ICON_CHECKBOX] Difficulty Level ([ICON_CAPITAL] {16_Num} - {17_Num} from [ICON_RESEARCH] Era Level)[NEWLINE]  [ICON_BULLET]+{10_Num} from [ICON_GREAT_GENERAL]/[ICON_GREAT_ADMIRAL] Great People[NEWLINE][NEWLINE][NEWLINE]Military Supply Reductions:[NEWLINE]  [ICON_BULLET] -{8_Num} from [ICON_RESEARCH] Total Tech Level[NEWLINE]  [ICON_BULLET] -{7_Num} from [ICON_WAR] War Weariness[NEWLINE][NEWLINE]Military Unit [ICON_GOLD]/[ICON_PEACE] Costs increased by {9_Num}% due to [ICON_WAR] War Weariness.</Text>
+		</Row>
+		<Row Tag="TXT_KEY_UNIT_SUPPLY_REMAINING_TOOLTIP">
+			<Text>{TXT_KEY_UNIT_SUPPLY_REMAINING_TOOLTIP_NOT_WEARY}[NEWLINE]Highest War Weariness: {18_CivName} {19_Num}%</Text>
 		</Row>
 
 		<!-- Trade Route picker -->
@@ -913,9 +952,6 @@
 		</Row>
 
 		<!-- Combat simulator -->
-		<Row Tag="TXT_KEY_EUPANEL_BONUS_VS_CLASS_CBP">
-			<Text>Bonus VS Mounted Units</Text>
-		</Row>
 		<Row Tag="TXT_KEY_EUPANEL_CITY_BLOCKADED">
 			<Text>Blockaded</Text>
 		</Row>
@@ -946,9 +982,6 @@
 		<Row Tag="TXT_KEY_EUPANEL_ENEMY_CITY_BELIEF_BONUS_CBP">
 			<Text>Crusader Zeal</Text>
 		</Row>
-		<Row Tag="TXT_KEY_EUPANEL_TRAIT_LOW_POP_BONUS">
-			<Text>Lower Population than Enemy</Text>
-		</Row>
 		<Row Tag="TXT_KEY_EUPANEL_BONUS_PER_ADJACENT_UNIT_COMBAT">
 			<Text>Bonus from Adjacent Units</Text>
 		</Row>
@@ -957,6 +990,9 @@
 		</Row>
 		<Row Tag="TXT_KEY_EUPANEL_MONOPOLY_POWER_DEFENSE">
 			<Text>Resource Monopoly</Text>
+		</Row>
+		<Row Tag="TXT_KEY_EUPANEL_COUNTERSPY_DEFENSE">
+			<Text>Counterspy Bonus</Text>
 		</Row>
 
 		<!-- Unit panel -->
@@ -989,6 +1025,12 @@
 		</Row>
 		<Row Tag="TXT_KEY_UPGRADE_HELP_DISABLED_PLAYER_UNITCLASS_LIMIT">
 			<Text>Only {1_Num} allowed per player.</Text>
+		</Row>
+		<Row Tag="TXT_KEY_UNIT_DELETE_DISABLED_GAME_OPTION">
+			<Text>Deleting units is disabled in this game.</Text>
+		</Row>
+		<Row Tag="TXT_KEY_UNIT_DELETE_DISABLED_ENEMIES">
+			<Text>You cannot delete a unit when there are enemies nearby.</Text>
 		</Row>
 		<Row Tag="TXT_KEY_UPGRADE_HELP_DISABLED_TEAM_UNITCLASS_LIMIT">
 			<Text>Only {1_Num} allowed per team.</Text>
@@ -1209,6 +1251,13 @@
 		</Row>
 		<Row Tag="TXT_KEY_CITY_MINED">
 			<Text>Enemy Naval Units and Embarked Units expend all [ICON_MOVES] Movement when entering water territory owned by this City. Units ending their turn in Ocean tiles owned by this City take [COLOR_NEGATIVE_TEXT]5 Damage[ENDCOLOR].</Text>
+		</Row>
+		<Row Tag="TXT_KEY_CITY_HAS_OBSTACLE">
+			<Text>Enemy Land Units expend all [ICON_MOVES] Movement when entering land territory owned by this City.</Text>
+		</Row>
+		<!-- water not used atm -->
+		<Row Tag="TXT_KEY_CITY_HAS_OBSTACLE_WATER">
+			<Text>Enemy Naval Units and Embarked Units expend all [ICON_MOVES] Movement when entering water territory owned by this City.</Text>
 		</Row>
 		<Row Tag="TXT_KEY_CITY_HAS_AIRPORT">
 			<Text>Allows [COLOR_POSITIVE_TEXT]Airlifts[ENDCOLOR] to or from this City. Increased Air Unit Capacity of the City. +10 [ICON_STRENGTH] Damage to Enemy Air Units during Air Strikes on the City.</Text>
@@ -1819,7 +1868,7 @@
 			<Text>[ICON_BULLET] [COLOR_POSITIVE_TEXT][ICON_WAR] Weariness:[ENDCOLOR] They are utterly exhausted.</Text>
 		</Row>
 		<Row Tag="TXT_KEY_WAR_WEARINESS_US_PERCENT">
-			<Text>[COLOR_NEGATIVE_TEXT]Our War Weariness: {1_Num}%[ENDCOLOR]</Text>
+			<Text>[COLOR_NEGATIVE_TEXT]Our War Weariness: {1_Num}% after {2_Num} turns[ENDCOLOR]</Text>
 		</Row>
 
 		<!-- Discussion/Dialogue options -->
@@ -2101,6 +2150,9 @@
 		<!-- Plot tooltip -->
 		<Row Tag="TXT_KEY_PLOTROLL_EMBASSY">
 			<Text>of {1_CivName:textkey}</Text>
+		</Row>
+		<Row Tag="TXT_KEY_PLOTROLL_EMBASSY_UNMET">
+			<Text>of Unmet Player</Text>
 		</Row>
 		<Row Tag="TXT_KEY_CITY_STATE_ARCHAEOLOGY_QUEST_LONG">
 			<Text>The City-State of {1_CivName:textkey} wants you to send an archaeologist to study this tile.</Text>
@@ -3163,13 +3215,13 @@
 			<Text>[NEWLINE] [ICON_BULLET] Event choice already active</Text>
 		</Row>
 		<Row Tag="TXT_KEY_ESPIONAGE_EVENT_ACTIVE">
-			<Text>[NEWLINE] [ICON_BULLET] Mission recently conducted here</Text>
+			<Text>[NEWLINE] [ICON_BULLET] Mission recently conducted here (blocked for {1_Num} more {1_Num: plural 1?turn; other?turns;})</Text>
 		</Row>
 		<Row Tag="TXT_KEY_EVENT_ACTIVE_RELATED">
 			<Text>[NEWLINE] [ICON_BULLET] Related event choice already active</Text>
 		</Row>
 		<Row Tag="TXT_KEY_ESPIONAGE_EVENT_ACTIVE_RELATED">
-			<Text>[NEWLINE] [ICON_BULLET] Related mission recently conducted here</Text>
+			<Text>[NEWLINE] [ICON_BULLET] Related mission recently conducted here (blocked for {1_Num} more {1_Num: plural 1?turn; other?turns;})</Text>
 		</Row>
 		<Row Tag="TXT_KEY_NEED_ACTIVE_CITY_EVENT">
 			<Text>[NEWLINE] [ICON_BULLET] Requires City Event that is not currently active</Text>

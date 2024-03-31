@@ -133,7 +133,7 @@ public:
 	{
 		m_iStrength = iValue;
 	};
-	void SetFullStrength(PlayerTypes eOwner, const CvUnitEntry& kUnitInfo, ReligionTypes eReligion, CvCity* pOriginCity);
+	void SetFullStrength(PlayerTypes eOwner, const CvUnitEntry& kUnitInfo, ReligionTypes eReligion);
 	bool IsFullStrength() const;
 
 private:
@@ -314,7 +314,7 @@ public:
 	bool jumpToNearestValidPlotWithinRange(int iRange, CvPlot* pStartPlot=NULL);
 
 	bool canScrap(bool bTestVisible = false) const;
-	void scrap();
+	void scrap(bool bDelay = true);
 	int GetScrapGold() const;
 
 	bool canGift(bool bTestVisible = false, bool bTestTransport = true) const;
@@ -455,6 +455,8 @@ public:
 #if defined(MOD_BALANCE_CORE)
 	bool canGetFreeLuxury() const;
 	bool createFreeLuxury();
+	int CreateFreeLuxuryCheckCopy();
+	int CreateFreeLuxuryCheck();
 #endif
 
 	int getNumExoticGoods() const;
@@ -496,6 +498,8 @@ public:
 	bool CanRemoveHeresy(const CvPlot* pPlot) const;
 	bool DoRemoveHeresy();
 
+	int GetNumFollowersAfterInquisitor() const;
+	ReligionTypes GetMajorityReligionAfterInquisitor() const;
 	int GetNumFollowersAfterSpread() const;
 	ReligionTypes GetMajorityReligionAfterSpread() const;
 	CvCity *GetSpreadReligionTargetCity() const;
@@ -706,9 +710,9 @@ public:
 	int GetGenericMeleeStrengthModifier(const CvUnit* pOtherUnit, const CvPlot* pBattlePlot, bool bAttacking,
 									bool bIgnoreUnitAdjacencyBoni, const CvPlot* pFromPlot = NULL, bool bQuickAndDirty = false) const;
 	int GetMaxAttackStrength(const CvPlot* pFromPlot, const CvPlot* pToPlot, const CvUnit* pDefender, 
-									bool bIgnoreUnitAdjacencyBoni = false, bool bQuickAndDirty = false) const;
+									bool bIgnoreUnitAdjacencyBoni = false, bool bQuickAndDirty = false, int iAssumeExtraDamage = 0) const;
 	int GetMaxDefenseStrength(const CvPlot* pInPlot, const CvUnit* pAttacker, const CvPlot* pFromPlot, 
-									bool bFromRangedAttack = false, bool bQuickAndDirty = false) const;
+									bool bFromRangedAttack = false, bool bQuickAndDirty = false, int iAssumeExtraDamage = 0) const;
 
 	int GetEmbarkedUnitDefense() const;
 
@@ -717,7 +721,7 @@ public:
 
 	int GetMaxRangedCombatStrength(const CvUnit* pOtherUnit, const CvCity* pCity, bool bAttacking, 
 									const CvPlot* pMyPlot = NULL, const CvPlot* pOtherPlot = NULL, 
-									bool bIgnoreUnitAdjacencyBoni = false, bool bQuickAndDirty = false) const;
+									bool bIgnoreUnitAdjacencyBoni = false, bool bQuickAndDirty = false, int iAssumeExtraDamage = 0) const;
 	int GetAirCombatDamage(const CvUnit* pDefender, const CvCity* pCity, bool bIncludeRand, int iAssumeExtraDamage = 0, 
 									const CvPlot* pTargetPlot = NULL, const CvPlot* pFromPlot = NULL, bool bQuickAndDirty = false) const;
 	int GetRangeCombatDamage(const CvUnit* pDefender, const CvCity* pCity, bool bIncludeRand, int iAssumeExtraDamage = 0, 

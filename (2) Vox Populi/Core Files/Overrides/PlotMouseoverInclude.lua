@@ -284,19 +284,11 @@ function GetResourceString(plot, bLongForm)
 		
 		local convertedKey = Memoize_LocaleLookup(pResource.Description);		
 		improvementStr = improvementStr .. pResource.IconString .. " " .. convertedKey;
-		
+
 		-- Resource Hookup info
-		if not pPlayer:IsResourceCityTradeable(resourceType) then
-			-- Default unlock tech
-			local iTechCityTrade = GameInfoTypes[pResource.TechCityTrade];
-			-- Check if the current player has an alternate unlock instead (we shall not check the team, because 1: niche case, 2: its complicated)
-			for pAltUnlock in DB.Query( "SELECT * FROM Trait_AlternateResourceTechs WHERE TraitType = '" .. eTrait .. "' AND ResourceType = '" .. pResource.Type .. "'" ) do
-				if pAltUnlock.TechCityTrade then
-					iTechCityTrade = GameInfoTypes[pAltUnlock.TechCityTrade];
-				end
-				break;
-			end
-			local techName = GameInfo.Technologies[iTechCityTrade].Description;
+		if not pPlayer:IsResourceImproveable(resourceType) then
+			local iTechImproveable = GameInfoTypes[pResource.TechImproveable];
+			local techName = GameInfo.Technologies[iTechImproveable].Description;
 			if (bLongForm) then
 				improvementStr = improvementStr .. " " .. Locale.ConvertTextKey( "TXT_KEY_PLOTROLL_REQUIRES_TECH_TO_USE", techName );
 			else
@@ -332,8 +324,12 @@ function GetImprovementString(plot)
 			improvementStr = improvementStr .." " .. Memoize_LocaleLookup("TXT_KEY_PLOTROLL_PILLAGED")
 		end
 		--CSD Addition - Embassy
-		if plot:IsImprovementEmbassy() then 
-			improvementStr = improvementStr .. " " .. Locale.ConvertTextKey("TXT_KEY_PLOTROLL_EMBASSY", pPlayer:GetCivilizationShortDescriptionKey());
+		if plot:IsImprovementEmbassy() then
+			if pPlayer and pTeam:IsHasMet(pPlayer:GetTeam()) then
+				improvementStr = improvementStr .. " " .. Locale.ConvertTextKey("TXT_KEY_PLOTROLL_EMBASSY", pPlayer:GetCivilizationShortDescriptionKey());
+			else
+				improvementStr = improvementStr .. " " .. Memoize_LocaleLookup("TXT_KEY_PLOTROLL_EMBASSY_UNMET");
+			end
 		end
 	end
 

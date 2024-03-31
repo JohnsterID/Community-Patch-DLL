@@ -67,6 +67,7 @@ protected:
 	static int lUpdateFog(lua_State* L);
 	static int lUpdateVisibility(lua_State* L);
 	static int lIsAdjacentToArea(lua_State* L);
+	static int lIsAdjacentToLandmass(lua_State* L);
 	static int lShareAdjacentArea(lua_State* L);
 	static int lIsAdjacentToLand(lua_State* L);
 	static int lIsAdjacentToShallowWater(lua_State* L);
@@ -169,6 +170,7 @@ protected:
 	static int lWaterArea(lua_State* L);
 	static int lGetArea(lua_State* L);
 	static int lSetArea(lua_State* L);
+	static int lGetLandmass(lua_State* L);
 	static int lGetFeatureVariety(lua_State* L);
 
 	static int lGetOwnershipDuration(lua_State* L);
@@ -318,6 +320,13 @@ protected:
 	static int lSetCityPurchaseID(lua_State* L);
 
 	static int lGetAirUnitsTooltip(lua_State* L);
+
+	static int lIsMainRoutePlan(lua_State* L);
+	static int lIsShortcutRoutePlan(lua_State* L);
+	static int lIsStrategicRoutePlan(lua_State* L);
+
+	static int lGetPlannedRouteState(lua_State* L);
+	static int lSetPlannedRouteState(lua_State* L);
 
 	LUAAPIEXTN(AddMessage, void, sMessage, iNotifyPlayer);
 	LUAAPIEXTN(AddPopupMessage, void, sMessage, fDelay, iNotifyPlayer);

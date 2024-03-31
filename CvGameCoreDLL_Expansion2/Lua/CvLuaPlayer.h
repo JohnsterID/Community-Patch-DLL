@@ -403,6 +403,9 @@ protected:
 	LUAAPIEXTN(GetUnhappinessFromWarWeariness, int);
 	LUAAPIEXTN(GetTechSupplyReduction, int);
 
+	LUAAPIEXTN(GetWarDuration, int);
+	LUAAPIEXTN(GetLongestWarDuration, int);
+
 	static int lGetUnitSupplyFromExpendedGreatPeople(lua_State* L);
 	static int lChangeUnitSupplyFromExpendedGreatPeople(lua_State* L);
 
@@ -983,7 +986,7 @@ protected:
 
 	static int lGetSpecialistExtraYield(lua_State* L);
 
-	static int lFindPathLength(lua_State* L);
+	static int lFindTechPathLength(lua_State* L);
 
 	static int lGetQueuePosition(lua_State* L);
 	static int lClearResearchQueue(lua_State* L);
@@ -1294,7 +1297,6 @@ protected:
 	static int lCanSpyStageCoup(lua_State* L);
 	static int lGetAvailableSpyRelocationCities(lua_State* L);
 	static int lCanMoveSpyTo(lua_State* L);
-	static int lChangeCounterspyMission(lua_State* L);
 	static int lGetNumTechsToSteal(lua_State* L);
 	static int lGetIntrigueMessages(lua_State* L);
 	static int lHasRecentIntrigueAbout(lua_State* L);
@@ -1324,6 +1326,7 @@ protected:
 	static int lGetInternationalTradeRoutePolicyBonus(lua_State* L);
 	static int lGetInternationalTradeRouteOtherTraitBonus(lua_State* L);
 	static int lGetInternationalTradeRouteRiverModifier(lua_State* L);
+	static int lGetTradeConnectionDiplomatModifierTimes100(lua_State* L);
 #if defined(MOD_BALANCE_CORE)
 	static int lGetTradeRouteTurns(lua_State* L);
 	static int lGetTradeConnectionDistanceValueModifierTimes100(lua_State* L);
@@ -1510,10 +1513,6 @@ protected:
 	static int lGetMilitaryLandMight(lua_State* L);
 #endif
 
-	static int lGetMainRouteTiles(lua_State* L);
-	static int lGetShortcutRouteTiles(lua_State* L);
-	static int lGetStrategicRouteTiles(lua_State* L);
-
 	LUAAPIEXTN(IsResourceNotForSale, bool, eResource);
 	LUAAPIEXTN(SetResourceAvailable, void, eResource);
 	LUAAPIEXTN(SetResourceNotForSale, void, eResource);
@@ -1538,6 +1537,9 @@ protected:
 
 	LUAAPIEXTN(IsGlobalQuest, bool, eQuest);
 	LUAAPIEXTN(IsPersonalQuest, bool, eQuest);
+
+	static int lIsInstantYieldNotificationDisabled(lua_State* L);
+	static int lSetInstantYieldNotificationDisabled(lua_State* L);
 };
 
 namespace CvLuaArgs

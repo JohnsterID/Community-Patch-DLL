@@ -1615,7 +1615,7 @@ bool CvAIOperationMilitary::CheckTransitionToNextStage()
 					int nVisible = 0;
 					for (CvUnit* pUnit = pThisArmy->GetFirstUnit(); pUnit; pUnit = pThisArmy->GetNextUnit(pUnit))
 					{
-						if (GET_PLAYER(m_eOwner).GetTacticalAI()->IsVisibleToPlayer(pUnit->plot(), GET_PLAYER(m_eEnemy).getTeam()))
+						if (pUnit->plot()->IsKnownVisibleToTeam(GET_PLAYER(m_eEnemy).getTeam()))
 							nVisible++;
 					}
 
@@ -2035,17 +2035,18 @@ CvPlot* CvAIOperationCivilianFoundCity::FindBestTargetForUnit(CvUnit* pUnit)
 	if (!pNewTarget)
 		return NULL;
 
+	int iNewScore = GET_PLAYER(m_eOwner).getPlotFoundValue(pNewTarget->getX(), pNewTarget->getY());
+	int iNewQ = GET_PLAYER(m_eOwner).GetSettlePlotQualityMeasure(pNewTarget);
+	if (iNewQ < GET_PLAYER(m_eOwner).GetMinAcceptableSettleQuality())
+		return NULL;
+
 	if (!GetTargetPlot())
 	{
-		int iNewScore = GET_PLAYER(m_eOwner).getPlotFoundValue(pNewTarget->getX(), pNewTarget->getY());
-		int iNewQ = GET_PLAYER(m_eOwner).GetSettlePlotQualityMeasure(pNewTarget);
 		LogOperationSpecialMessage(CvString::format("found target for settler, score %d (q%d)", iNewScore, iNewQ).c_str());
 	}
 	else if (pNewTarget != GetTargetPlot())
 	{
-		int iNewScore = GET_PLAYER(m_eOwner).getPlotFoundValue(pNewTarget->getX(), pNewTarget->getY());
 		int iOldScore = GET_PLAYER(m_eOwner).getPlotFoundValue(m_iTargetX, m_iTargetY);
-		int iNewQ = GET_PLAYER(m_eOwner).GetSettlePlotQualityMeasure(pNewTarget);
 		int iOldQ = GET_PLAYER(m_eOwner).GetSettlePlotQualityMeasure(GetTargetPlot());
 		LogOperationSpecialMessage(CvString::format("found better target for settler, old score %d (q%d), new score %d (q%d)", iOldScore, iOldQ, iNewScore, iNewQ).c_str());
 	}
@@ -3313,7 +3314,7 @@ CvPlot* OperationalAIHelpers::FindEnemiesNearHomelandPlot(PlayerTypes ePlayer, P
 		if (pLoopUnit->isInvisible(GET_PLAYER(ePlayer).getTeam(),false))
 			continue;
 
-		if (pLoopPlot->getOwner()!=ePlayer && GET_PLAYER(ePlayer).GetCityDistancePathLength(pLoopPlot)>4) 
+		if (pLoopPlot->getOwner()!=ePlayer && GET_PLAYER(ePlayer).GetCityDistancePathLength(pLoopPlot)>6) 
 			continue;
 
 		//a single unit is too volatile, check for a whole cluster

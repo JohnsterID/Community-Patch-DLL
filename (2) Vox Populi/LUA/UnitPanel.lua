@@ -19,6 +19,7 @@ local g_SecondaryOpen = false;
 local g_WorkerActionPanelOpen = false;
 
 local MaxDamage = GameDefines.MAX_HIT_POINTS;
+local g_UnitDeleteDisabled = GameDefines.UNIT_DELETE_DISABLED;
 
 local promotionsTexture = "Promotions512.dds";
 
@@ -1107,7 +1108,7 @@ function TipHandler( control )
 
 			-- Can't upgrade because we have too many of the upgraded units
 			-- (can't use IsUnitClassMaxedOut here as it also checks the city limit)
-			if pActivePlayer:GetUnitClassCount(eUnitClass) >= iMaxPlayerInstances then
+			if iMaxPlayerInstances >= 0 and pActivePlayer:GetUnitClassCount(eUnitClass) >= iMaxPlayerInstances then
 
 				-- Add spacing for all entries after the first
 				if bFirstEntry then
@@ -1294,6 +1295,24 @@ function TipHandler( control )
 			local majorityReligionName = Locale.Lookup(Game.GetReligionName(eMajorityReligion));
 			strToolTip = strToolTip .. Locale.ConvertTextKey("TXT_KEY_MISSION_MAJORITY_RELIGION", majorityReligionName);		
 		end
+	-- Inquisitors have special help text
+    elseif (action.Type == "MISSION_REMOVE_HERESY") then
+    
+		local iNumFollowers = unit:GetNumFollowersAfterInquisitor();
+		local religionName = Game.GetReligionName(unit:GetReligion());
+		
+        strToolTip = strToolTip .. Locale.ConvertTextKey("TXT_KEY_MISSION_REMOVE_HERESY_HELP");
+        strToolTip = strToolTip .. "[NEWLINE]----------------[NEWLINE]";
+        strToolTip = strToolTip .. Locale.ConvertTextKey("TXT_KEY_MISSION_SPREAD_RELIGION_RESULT", religionName, iNumFollowers);
+		strToolTip = strToolTip .. " ";  
+		    
+ 		local eMajorityReligion = unit:GetMajorityReligionAfterInquisitor();
+        if (eMajorityReligion < ReligionTypes.RELIGION_PANTHEON) then
+			strToolTip = strToolTip .. Locale.ConvertTextKey("TXT_KEY_MISSION_MAJORITY_RELIGION_NONE");
+		else
+			local majorityReligionName = Locale.Lookup(Game.GetReligionName(eMajorityReligion));
+			strToolTip = strToolTip .. Locale.ConvertTextKey("TXT_KEY_MISSION_MAJORITY_RELIGION", majorityReligionName);		
+		end
 
     -- Create Great Work has special help text
 	elseif (action.Type == "MISSION_CREATE_GREAT_WORK") then
@@ -1444,6 +1463,25 @@ function TipHandler( control )
 			end
 		end
 		
+	-- Great Admiral
+	elseif (action.Type == "MISSION_FREE_LUXURY") then
+		-- Add spacing for all entries after the first
+		if (bFirstEntry) then
+			bFirstEntry = false;
+		elseif (not bFirstEntry) then
+			strToolTip = strToolTip .. "[NEWLINE]";
+		end
+		
+		strToolTip = strToolTip .. "[NEWLINE]" .. Locale.Lookup("TXT_KEY_MISSION_FREE_LUXURY_HELP");
+		
+		if (not bDisabled) then
+			strToolTip = strToolTip .. "[NEWLINE]----------------[NEWLINE]";
+			if(unit:CreateFreeLuxuryCheckCopy() > 0) then
+				local resource = GameInfo.Resources[unit:CreateFreeLuxuryCheck()]
+				strToolTip = strToolTip .. "[COLOR_POSITIVE_TEXT]+" .. unit:CreateFreeLuxuryCheckCopy() .. resource.IconString .. " " .. Locale.ConvertTextKey(resource.Description)  .. "[ENDCOLOR]";
+			end
+		end
+		
     -- Help text
     elseif (action.Help and action.Help ~= "") then
 		
@@ -1463,18 +1501,20 @@ function TipHandler( control )
 		
 		strActionHelp = "";
 		
-		-- Add spacing for all entries after the first
-		if (bFirstEntry) then
-			bFirstEntry = false;
-		elseif (not bFirstEntry) then
+		local iGoldToScrap = unit:GetScrapGold();
+		if (iGoldToScrap > 0) then
 			strActionHelp = strActionHelp .. "[NEWLINE]";
+			strActionHelp = strActionHelp .. Locale.ConvertTextKey("TXT_KEY_SCRAP_HELP", iGoldToScrap);
 		end
 		
-		strActionHelp = strActionHelp .. "[NEWLINE]";
-		
-		local iGoldToScrap = unit:GetScrapGold();
-		
-		strActionHelp = strActionHelp .. Locale.ConvertTextKey("TXT_KEY_SCRAP_HELP", iGoldToScrap);
+		if (bDisabled) then
+			strActionHelp = strActionHelp .. "[NEWLINE][NEWLINE]";
+			local textKey =  (g_UnitDeleteDisabled == 1)
+				and "TXT_KEY_UNIT_DELETE_DISABLED_GAME_OPTION" 
+				or "TXT_KEY_UNIT_DELETE_DISABLED_ENEMIES";
+			strActionHelp = strActionHelp .. "[COLOR_WARNING_TEXT]" .. Locale.ConvertTextKey(textKey) .. "[ENDCOLOR]";
+ 
+		end;
 		
         strToolTip = strToolTip .. strActionHelp;
 	end

@@ -28,6 +28,7 @@
 #include "CvGame.h"
 #include "CvEnums.h"
 #include "CvSerialize.h"
+#include "CvHomelandAI.h"
 
 #pragma warning( disable: 4251 )		// needs to have dll-interface to be used by clients of class
 
@@ -114,12 +115,13 @@ public:
 
 	void updateCenterUnit();
 
-	void verifyUnitValidPlot(bool bWakeUp=false);
+	void verifyUnitValidPlot(PlayerTypes eForSpecificPlayer = NO_PLAYER, bool bWakeUp = false);
 
 	void nukeExplosion(int iDamageLevel, CvUnit* pNukeUnit = NULL);
 
 	bool isAdjacentToArea(int iAreaID) const;
 	bool isAdjacentToArea(const CvArea* pArea) const;
+	bool isAdjacentToLandmass(int iLandmassID) const;
 	bool shareAdjacentArea(const CvPlot* pPlot) const;
 	bool isAdjacent(const CvPlot* pPlot) const;
 	bool isDeepWater() const;
@@ -564,25 +566,25 @@ public:
 	int getYield(YieldTypes eIndex) const;
     void changeYield(YieldTypes eYield, int iChange);
 
-	int calculateNatureYield(YieldTypes eYield, PlayerTypes ePlayer, const CvCity* pOwningCity, bool bIgnoreFeature = false, bool bDisplay = false) const;
+	int calculateNatureYield(YieldTypes eYield, PlayerTypes ePlayer, FeatureTypes eFeature, ResourceTypes eResource, const CvCity* pOwningCity, bool bDisplay = false) const;
 
 	int calculateBestNatureYield(YieldTypes eYield, PlayerTypes ePlayer) const;
 	int calculateTotalBestNatureYield(PlayerTypes ePlayer) const;
 
-	int calculateImprovementYield(YieldTypes eYield, PlayerTypes ePlayer, ImprovementTypes eImprovement,  const CvCity* pOwningCity, bool bOptimal = false, RouteTypes eAssumeThisRoute = NUM_ROUTE_TYPES) const;
+	int calculateImprovementYield(YieldTypes eYield, PlayerTypes ePlayer, ImprovementTypes eImprovement, RouteTypes eRoute, FeatureTypes eFeature, ResourceTypes eResource, bool bIgnoreCityConnection,  const CvCity* pOwningCity, bool bOptimal = false) const;
 
 #if defined(MOD_RELIGION_PERMANENT_PANTHEON)
-	int calculatePlayerYield(YieldTypes eYield, int iCurrentYield, PlayerTypes ePlayer, ImprovementTypes eImprovement, const CvCity* pOwningCity, const CvReligion* pMajorityReligion, const CvBeliefEntry* pSecondaryPantheon, const CvReligion* pPlayerPantheon, bool bDisplay) const;
+	int calculatePlayerYield(YieldTypes eYield, int iCurrentYield, PlayerTypes ePlayer, ImprovementTypes eImprovement, FeatureTypes eFeature, ResourceTypes eResource, bool bIgnoreCityConnection, const CvCity* pOwningCity, const CvReligion* pMajorityReligion, const CvBeliefEntry* pSecondaryPantheon, const CvReligion* pPlayerPantheon, bool bDisplay) const;
 #else
-	int calculatePlayerYield(YieldTypes eYield, int iCurrentYield, PlayerTypes ePlayer, ImprovementTypes eImprovement, const CvCity* pOwningCity, const CvReligion* pMajorityReligion, const CvBeliefEntry* pSecondaryPantheon, bool bDisplay) const;
+	int calculatePlayerYield(YieldTypes eYield, int iCurrentYield, PlayerTypes ePlayer, ImprovementTypes eImprovement, FeatureTypes eFeature, ResourceTypes eResource, bool bIgnoreCityConnection, const CvCity* pOwningCity, const CvReligion* pMajorityReligion, const CvBeliefEntry* pSecondaryPantheon, bool bDisplay) const;
 #endif
 
-	int calculateReligionNatureYield(YieldTypes eYield, PlayerTypes ePlayer, const CvCity* pOwningCity, const CvReligion* pMajorityReligion, const CvBeliefEntry* pSecondaryPantheon) const;
-	int calculateReligionImprovementYield(YieldTypes eYield, PlayerTypes ePlayer, ImprovementTypes eImprovement, const CvCity* pOwningCity, const CvReligion* pMajorityReligion, const CvBeliefEntry* pSecondaryPantheon) const;
+	int calculateReligionNatureYield(YieldTypes eYield, PlayerTypes ePlayer, ImprovementTypes eImprovement, FeatureTypes eFeature, ResourceTypes eResource, const CvCity* pOwningCity, const CvReligion* pMajorityReligion, const CvBeliefEntry* pSecondaryPantheon) const;
+	int calculateReligionImprovementYield(YieldTypes eYield, PlayerTypes ePlayer, ImprovementTypes eImprovement, ResourceTypes eResource, const CvCity* pOwningCity, const CvReligion* pMajorityReligion, const CvBeliefEntry* pSecondaryPantheon) const;
 
-	int calculateYield(YieldTypes eYield, bool bDisplay = false, const CvCity* pOwningCity = NULL);
+	int calculateYield(YieldTypes eYield, bool bDisplay = false, const CvCity* pOwningCity=NULL);
 #if defined(MOD_RELIGION_PERMANENT_PANTHEON)
-	int calculateYieldFast(YieldTypes eYield, bool bDisplay, const CvCity* pOwningCity, const CvReligion* pMajorityReligion, const CvBeliefEntry* pSecondaryPantheon, const CvReligion* pPlayerPantheon = NULL);
+	int calculateYieldFast(YieldTypes eYield, bool bDisplay, const CvCity* pOwningCity, const CvReligion* pMajorityReligion, const CvBeliefEntry* pSecondaryPantheon, const CvReligion* pPlayerPantheon=NULL);
 #else
 	int calculateYieldFast(YieldTypes eYield, bool bDisplay, const CvCity* pOwningCity, const CvReligion* pMajorityReligion, const CvBeliefEntry* pSecondaryPantheon);
 #endif
@@ -597,9 +599,9 @@ public:
 #endif
 
 #if defined(MOD_RELIGION_PERMANENT_PANTHEON)
-	int getYieldWithBuild(BuildTypes eBuild, YieldTypes eYield, bool bWithUpgrade, PlayerTypes ePlayer, const CvCity* pOwningCity, const CvReligion* pMajorityReligion, const CvBeliefEntry* pSecondaryPantheon, const CvReligion* pPlayerPantheon = NULL) const;
+	int getYieldWithBuild(BuildTypes eBuild, YieldTypes eYield, bool bWithUpgrade, bool bIgnoreCityConnection, PlayerTypes ePlayer, const CvCity* pOwningCity, const CvReligion* pMajorityReligion, const CvBeliefEntry* pSecondaryPantheon, const CvReligion* pPlayerPantheon = NULL) const;
 #else
-	int getYieldWithBuild(BuildTypes eBuild, YieldTypes eYield, bool bWithUpgrade, PlayerTypes ePlayer, const CvCity* pOwningCity, const CvReligion* pMajorityReligion, const CvBeliefEntry* pSecondaryPantheon) const;
+	int getYieldWithBuild(BuildTypes eBuild, YieldTypes eYield, bool bWithUpgrade, bool bIgnoreCityConnection, PlayerTypes ePlayer, const CvCity* pOwningCity, const CvReligion* pMajorityReligion, const CvBeliefEntry* pSecondaryPantheon) const;
 #endif
 
 	int countNumAirUnits(TeamTypes eTeam, bool bNoSuicide = false) const;
@@ -664,6 +666,14 @@ public:
 	int getNumAdjacentNonrevealed(TeamTypes eTeam) const;
 	bool IsResourceForceReveal(TeamTypes eTeam) const;
 	void SetResourceForceReveal(TeamTypes eTeam, bool bValue);
+	RoutePlanTypes GetPlannedRouteState(PlayerTypes ePlayer) const;
+	void SetPlannedRouteState(PlayerTypes ePlayer, RoutePlanTypes eRoutePlanType);
+	void ChangeKnownAdjacentSight(TeamTypes eTeam, TeamTypes eMinorCivAlly, int iRange, DirectionTypes eFacingDirection);
+	int GetKnownVisibilityCount(TeamTypes eTeam) const;
+	bool IsKnownVisibleToEnemy(PlayerTypes ePlayer) const;
+	bool IsKnownVisibleToTeam(TeamTypes eTeam) const;
+	void IncreaseKnownVisibilityCount(TeamTypes eTeam, TeamTypes eTeam2=NO_TEAM);
+	void ResetKnownVisibility();
 #if defined(MOD_BALANCE_CORE)
 	bool IsTeamImpassable(TeamTypes eTeam) const;
 	void SetTeamImpassable(TeamTypes eTeam, bool bValue);
@@ -843,7 +853,8 @@ public:
 	bool IsFriendlyUnitAdjacent(TeamTypes eMyTeam, bool bCombatUnit) const;
 	int GetNumSpecificPlayerUnitsAdjacent(PlayerTypes ePlayer, const CvUnit* pUnitToExclude = NULL, const CvUnit* pExampleUnitType = NULL, bool bCombatOnly = true) const;
 
-	int GetDefenseBuildValue(PlayerTypes eOwner);
+	int GetStrategicValue(PlayerTypes ePlayer) const;
+	int GetDefenseBuildValue(PlayerTypes eOwner, BuildTypes eBuild=NO_BUILD, ImprovementTypes eImprovement=NO_IMPROVEMENT, SBuilderState sState=SBuilderState()) const;
 
 	void updateImpassable(TeamTypes eTeam = NO_TEAM);
 
@@ -932,10 +943,12 @@ protected:
 	uint8* m_aiPlayerCityRadiusCount;
 	uint8* m_aiVisibilityCount;
 	uint8* m_aiVisibilityCountThisTurnMax;
+	uint8* m_aiKnownVisibilityCount;
 	char* m_aiRevealedOwner;
 	char *m_aeRevealedImprovementType;
 	char *m_aeRevealedRouteType;
 	bool* m_abResourceForceReveal;
+	char* m_aeHumanPlannedRouteState;
 #if defined(MOD_BALANCE_CORE)
 	bool* m_abStrategicRoute;
 	bool* m_abIsImpassable;
