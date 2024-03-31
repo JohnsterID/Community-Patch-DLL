@@ -393,7 +393,7 @@ private:
 #define SYNC_ARCHIVE_BEGIN(containerType) \
 template<> inline const containerType& CvSyncArchive<containerType>::getContainer() const { \
     return *reinterpret_cast<const containerType*>( \
-        reinterpret_cast<const char*>(this) - (reinterpret_cast<const char*>(&((containerType*)NULL)->m_syncArchive) - reinterpret_cast<const char*>(NULL)) \
+        reinterpret_cast<const char*>(this) - (reinterpret_cast<const char*>(&((containerType*)0)->m_syncArchive) - reinterpret_cast<const char*>(0)) \
     ); \
 } \
 template<> inline containerType& CvSyncArchive<containerType>::getContainer() { \
@@ -423,7 +423,7 @@ public:
         static inline const SyncVarsType& GetStorage(const CvSyncVar<memberName##_Traits>& var) { \
             return *reinterpret_cast<const SyncVarsType*>( \
                 reinterpret_cast<const char*>(&var) - \
-                (reinterpret_cast<const char*>(&((SyncVarsType*)NULL)->memberName) - reinterpret_cast<const char*>(NULL)) \
+                (reinterpret_cast<const char*>(&((SyncVarsType*)0)->memberName) - reinterpret_cast<const char*>(0)) \
             ); \
         } \
 		static inline SyncVarsType& GetStorage(CvSyncVar<memberName##_Traits>& var) { \
