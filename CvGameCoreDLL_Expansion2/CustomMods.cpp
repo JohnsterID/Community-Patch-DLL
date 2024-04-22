@@ -590,15 +590,4 @@ void CheckSentinel(uint value)
 		return; //everything ok
 
 	CUSTOMLOG("Deserialization Error, check DeserializationCallstack.log\n");
-
-#if defined(STACKWALKER)
-	FILogFile* pLog=LOGFILEMGR.GetLog( "DeserializationCallstack.log", FILogFile::kDontTimeStamp );
-	if (pLog)
-	{
-		gStackWalker.SetLog(pLog);
-		gStackWalker.ShowCallstack(5);
-		gStackWalker.SetLog(NULL);
-		pLog->Msg("\r\n");
-	}
-#endif
 }

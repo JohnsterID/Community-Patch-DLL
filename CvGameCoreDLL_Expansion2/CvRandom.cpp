@@ -11,7 +11,6 @@
 #include "CvGlobals.h"
 #include "FCallStack.h"
 #include "FStlContainerSerialization.h"
-#include "stackwalker/StackWalker.h"
 
 // include this after all other headers!
 #include "LintFree.h"
@@ -114,15 +113,6 @@ unsigned long CvRandom::get(unsigned long ulNum, const char* pszLog)
 					sprintf_s(szOut, "%s, %d, max %lu, res %lu, seed %I64u, cc %d, rc %d, %s, %s\n", m_name.c_str(), kGame.getGameTurn(), 
 						ulNum, ul, ullNewSeed, m_ulCallCount, m_ulResetCount, m_bSynchronous ? "sync" : "async", (pszLog != NULL) ? pszLog : "Unknown");
 					pLog->Msg(szOut);
-
-#if defined(MOD_CORE_DEBUGGING)
-					if(false)
-					{
-						gStackWalker.SetLog(pLog);
-						gStackWalker.ShowCallstack(5);
-						gStackWalker.SetLog(NULL);
-					}
-#endif
 				}
 			}
 		}

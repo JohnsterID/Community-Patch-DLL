@@ -2280,21 +2280,6 @@ void CvUnit::kill(bool bDelay, PlayerTypes ePlayer /*= NO_PLAYER*/)
 	}
 #endif
 
-	/*
-	//callstack logging to investigate mysterious vanishing units
-	if (getDomainType() == DOMAIN_AIR && !isSuicide())
-	{
-		FILogFile* pLog=LOGFILEMGR.GetLog( "AirUnitKills.log", FILogFile::kDontTimeStamp );
-		if (pLog)
-		{
-			pLog->Msg(CvString::format("\n%s %d killed by %d\n",getName().c_str(),GetID(),ePlayer).c_str());
-			gStackWalker.SetLog(pLog);
-			gStackWalker.ShowCallstack(5,GetCurrentThread());
-			gStackWalker.SetLog(NULL);
-		}
-	}
-	*/
-
 	CvInterfacePtr<ICvUnit1> pDllThisUnit = GC.WrapUnitPointer(this);
 
 	if(IsSelected() && !bDelay)

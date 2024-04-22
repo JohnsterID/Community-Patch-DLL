@@ -10729,12 +10729,6 @@ vector<STacticalAssignment> TacticalAIHelpers::FindBestUnitAssignments(
 		for (size_t i = 0; i < vUnits.size(); i++)
 			strMsg += CvString::format("; %d", vUnits[i]->GetID());
 		GET_PLAYER(ePlayer).GetTacticalAI()->LogTacticalMessage(strMsg);
-
-#if defined(STACKWALKER)
-		gStackWalker.SetLog(GET_PLAYER(ePlayer).GetTacticalAI()->GetLogFile());
-		gStackWalker.ShowCallstack(5);
-		gStackWalker.SetLog(NULL);
-#endif
 	}
 #endif
 

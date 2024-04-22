@@ -125,10 +125,6 @@ void CvLuaScopedInstance<Derived, InstanceType>::Push(lua_State* L, InstanceType
 template<class Derived, class InstanceType>
 InstanceType* CvLuaScopedInstance<Derived, InstanceType>::GetInstance(lua_State* L, int idx, bool bErrorOnFail)
 {
-#ifdef STACKWALKER
-	gLuaState = L;
-#endif
-
 	const int stack_size = lua_gettop(L);
 	bool bFail = true;
 
