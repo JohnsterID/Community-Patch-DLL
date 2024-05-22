@@ -2406,34 +2406,96 @@ PlayerTypes GetCurrentPlayer()
 /************************************************************************************************/
 
 #pragma comment (lib, "dbghelp.lib")
-void CreateMiniDump(EXCEPTION_POINTERS *pep)
+// Helper function to generate a unique file name based on date and time
+void GenerateUniqueFileName(TCHAR* szFileName, size_t bufferSize)
 {
-
-	/* Open a file to store the minidump. */
-	HANDLE hFile = CreateFile(_T("CvMiniDump.dmp"), GENERIC_READ | GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-	if((hFile == NULL) || (hFile == INVALID_HANDLE_VALUE)) {
-		_tprintf(_T("CreateFile failed. Error: %lu \n"), GetLastError());
-		return;
-	}
-
-	/* Create the minidump. */
-	MINIDUMP_EXCEPTION_INFORMATION mdei;
-	mdei.ThreadId           = GetCurrentThreadId();
-	mdei.ExceptionPointers  = pep;
-	mdei.ClientPointers     = FALSE;
-
-	MINIDUMP_TYPE mdt       = MiniDumpNormal;
-
-	MiniDumpWriteDump(GetCurrentProcess(), GetCurrentProcessId(), hFile, mdt, (pep != NULL) ? &mdei : NULL, NULL, NULL);
-
-	CloseHandle(hFile);
+    SYSTEMTIME st;
+    GetLocalTime(&st);
+    _stprintf_s(szFileName, bufferSize, _T("CvMiniDump_%04d%02d%02d_%02d%02d%02d.dmp"),
+        st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
 }
 
-LONG WINAPI CustomFilter(EXCEPTION_POINTERS *ExceptionInfo)
+// Helper function to create a minidump file
+void CreateMiniDumpFile(EXCEPTION_POINTERS* pep)
 {
-	CreateMiniDump(ExceptionInfo);
-	return EXCEPTION_EXECUTE_HANDLER;
+    TCHAR szFileName[MAX_PATH];
+    GenerateUniqueFileName(szFileName, MAX_PATH);
+
+    // Open a file to store the minidump
+    HANDLE hFile = CreateFile(szFileName, GENERIC_READ | GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (hFile == NULL || hFile == INVALID_HANDLE_VALUE)
+    {
+        _tprintf(_T("CreateFile failed. Error: %lu \n"), GetLastError());
+        return;
+    }
+
+    // Create the minidump with specified flags
+    MINIDUMP_EXCEPTION_INFORMATION mdei;
+    mdei.ThreadId = GetCurrentThreadId();
+    mdei.ExceptionPointers = pep;
+    mdei.ClientPointers = FALSE;
+
+    MINIDUMP_TYPE mdt = static_cast<MINIDUMP_TYPE>(
+        MiniDumpWithFullMemory | MiniDumpWithHandleData | MiniDumpWithThreadInfo |
+        MiniDumpWithUnloadedModules | MiniDumpWithIndirectlyReferencedMemory |
+        MiniDumpWithCodeSegs | MiniDumpWithDataSegs
+    );
+
+    // Additional user stream information
+    // MINIDUMP_USER_STREAM_INFORMATION musi;
+    // MINIDUMP_USER_STREAM mus[1];
+    // char customInfo[] = "Custom metadata or additional context information";
+    // mus[0].Type = CommentStreamA;
+    // mus[0].Buffer = customInfo;
+    // mus[0].BufferSize = sizeof(customInfo);
+    // musi.UserStreamCount = 1;
+    // musi.UserStreamArray = mus;
+
+    BOOL success = MiniDumpWriteDump(GetCurrentProcess(), GetCurrentProcessId(), hFile, mdt, (pep != NULL) ? &mdei : NULL, NULL, NULL);
+    if (!success)
+    {
+        _tprintf(_T("MiniDumpWriteDump failed. Error: %lu \n"), GetLastError());
+    }
+
+    CloseHandle(hFile);
 }
+
+// Custom exception filter to trigger minidump creation
+LONG WINAPI CustomFilter(EXCEPTION_POINTERS* ExceptionInfo)
+{
+    // Check if a breakpoint exception occurred (0x80000003)
+    if (ExceptionInfo->ExceptionRecord->ExceptionCode == EXCEPTION_BREAKPOINT)
+    {
+        // Trigger minidump creation when a breakpoint is hit
+        CreateMiniDumpFile(ExceptionInfo);
+        return EXCEPTION_CONTINUE_SEARCH; // Continue searching for other exception handlers
+    }
+
+    // For other exceptions, create the minidump as usual
+    CreateMiniDumpFile(ExceptionInfo);
+
+    return EXCEPTION_EXECUTE_HANDLER;
+}
+
+// Function to trigger a manual minidump (user-mode dump control)
+void TriggerManualMiniDump()
+{
+    CONTEXT context;
+    RtlCaptureContext(&context);
+
+    EXCEPTION_RECORD exceptionRecord;
+    memset(&exceptionRecord, 0, sizeof(EXCEPTION_RECORD));
+    exceptionRecord.ExceptionAddress = _ReturnAddress();
+    exceptionRecord.ExceptionCode = EXCEPTION_BREAKPOINT;
+    exceptionRecord.ExceptionFlags = 0;
+
+    EXCEPTION_POINTERS exceptionPointers;
+    exceptionPointers.ContextRecord = &context;
+    exceptionPointers.ExceptionRecord = &exceptionRecord;
+
+    CreateMiniDumpFile(&exceptionPointers);
+}
+
 #endif
 
 //
