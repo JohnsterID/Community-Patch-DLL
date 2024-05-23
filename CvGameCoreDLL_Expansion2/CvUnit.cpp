@@ -134,6 +134,7 @@ CvUnit::CvUnit() :
 	, m_iX()
 	, m_iY()
 	, m_iLastMoveTurn()
+	, m_iCycleOrder()
 	, m_iDeployFromOperationTurn()
 	, m_iReconX()
 	, m_iReconY()
@@ -179,6 +180,7 @@ CvUnit::CvUnit() :
 	, m_iAlwaysHealCount()
 	, m_iHealOutsideFriendlyCount()
 	, m_iHillsDoubleMoveCount()
+	, m_iRiverDoubleMoveCount()
 #if defined(MOD_BALANCE_CORE)
 	, m_iMountainsDoubleMoveCount()
 	, m_iEmbarkFlatCostCount()
@@ -1230,6 +1232,7 @@ void CvUnit::initWithNameOffset(int iID, UnitTypes eUnit, int iNameOffset, UnitA
 	if(getOwner() == GC.getGame().getActivePlayer())
 	{
 		DLLUI->setDirty(GameData_DIRTY_BIT, true);
+		kPlayer.GetUnitCycler().AddUnit(GetID());
 	}
 
 	// Message for World Unit being born
@@ -1389,6 +1392,7 @@ void CvUnit::reset(int iID, UnitTypes eUnit, PlayerTypes eOwner, bool bConstruct
 	m_iX = INVALID_PLOT_COORD;
 	m_iY = INVALID_PLOT_COORD;
 	m_iLastMoveTurn = 0;
+	m_iCycleOrder = -1;
 	m_iDeployFromOperationTurn = -100;
 	m_iReconX = INVALID_PLOT_COORD;
 	m_iReconY = INVALID_PLOT_COORD;
@@ -1440,6 +1444,7 @@ void CvUnit::reset(int iID, UnitTypes eUnit, PlayerTypes eOwner, bool bConstruct
 	m_iAlwaysHealCount = 0;
 	m_iHealOutsideFriendlyCount = 0;
 	m_iHillsDoubleMoveCount = 0;
+	m_iRiverDoubleMoveCount = 0;
 #if defined(MOD_BALANCE_CORE)
 	m_iMountainsDoubleMoveCount = 0;
 	m_iEmbarkFlatCostCount = 0;
@@ -2257,7 +2262,7 @@ void CvUnit::kill(bool bDelay, PlayerTypes ePlayer /*= NO_PLAYER*/)
 		args->Push(GetID());  // unit being killed
 
 		bool bResult = false;
-		if(LuaSupport::CallTestAll(pkScriptSystem, "CanSaveUnit", args.get(), bResult))
+		if(LuaSupport::CallTestAny(pkScriptSystem, "CanSaveUnit", args.get(), bResult))
 		{
 			// Check the result.
 			if(bResult)
@@ -2678,6 +2683,7 @@ void CvUnit::kill(bool bDelay, PlayerTypes ePlayer /*= NO_PLAYER*/)
 	}
 
 	DLLUI->RemoveFromSelectionList(pDllThisUnit.get());
+	GET_PLAYER(getOwner()).GetUnitCycler().RemoveUnit(GetID());
 
 	// Killing a unit while in combat is not something we really expect to happen.
 	// It is *mostly* safe for it to happen, but combat systems must be able to gracefully handle the disapperance of a unit.
@@ -3954,6 +3960,11 @@ void CvUnit::DoLocationPromotions(bool bSpawn, CvPlot* pOldPlot, CvPlot* pNewPlo
 							setHasPromotion(ePromotion, true);
 						}
 					}
+				}
+				if (pNewPlot->IsRestoreMoves())
+				{
+					// Not using maxMoves() here since it shouldn't be affected by linked status and plot move changes (added below)
+					setMoves(baseMoves(isEmbarked()) * GD_INT_GET(MOVE_DENOMINATOR));
 				}
 				if (pNewPlot->GetPlotMovesChange() > 0)
 				{
@@ -5515,7 +5526,8 @@ void CvUnit::move(CvPlot& targetPlot, bool bShow)
 		setXY(targetPlot.getX(), targetPlot.getY(), true, true, bShow && targetPlot.isVisibleToWatchingHuman(), bShow);
 	}
 
-	changeMoves(-iMoveCost);
+	if (!targetPlot.IsRestoreMoves())
+		changeMoves(-iMoveCost);
 }
 
 bool CvUnit::EmergencyRebase()
@@ -10825,30 +10837,9 @@ bool CvUnit::foundCity()
 	CvPlayerAI& kPlayer = GET_PLAYER(getOwner());
 	CvPlayerAI& kActivePlayer = GET_PLAYER(eActivePlayer);
 
-#if defined(MOD_GLOBAL_RELIGIOUS_SETTLERS) && defined(MOD_BALANCE_CORE)
-	if (MOD_GLOBAL_RELIGIOUS_SETTLERS && GetReligionData()->GetReligion() > RELIGION_PANTHEON)
-	{
-		kPlayer.foundCity(getX(), getY(), GetReligionData()->GetReligion(), false, m_pUnitInfo);
-	} 
-	else 
-	{
-		kPlayer.foundCity(getX(), getY(), NO_RELIGION, true, m_pUnitInfo);
-#elif defined(MOD_GLOBAL_RELIGIOUS_SETTLERS)
-	if (MOD_GLOBAL_RELIGIOUS_SETTLERS && GetReligionData()->GetReligion() > RELIGION_PANTHEON)
-	{
-		kPlayer.foundCity(getX(), getY(), GetReligionData()->GetReligion());
-	}
-	else
-	{
-		kPlayer.foundCity(getX(), getY(), NO_RELIGION, true);
-#elif defined(MOD_BALANCE_CORE)
-		kPlayer.foundCity(getX(), getY(), m_pUnitInfo);
-#else
-		kPlayer.foundCity(getX(), getY());
-#endif
-#if defined(MOD_GLOBAL_RELIGIOUS_SETTLERS)
-	}
-#endif
+	ReligionTypes eReligion = (MOD_GLOBAL_RELIGIOUS_SETTLERS && GetReligionData()->GetReligion() > RELIGION_PANTHEON) ? GetReligionData()->GetReligion() : NO_RELIGION;
+	bool bForce = MOD_GLOBAL_RELIGIOUS_SETTLERS && eReligion == NO_RELIGION;
+	kPlayer.foundCity(getX(), getY(), eReligion, bForce, m_pUnitInfo);
 
 	if (IsCanAttack() && plot()->getPlotCity() != NULL) 
 	{
@@ -13699,25 +13690,8 @@ bool CvUnit::blastTourism()
 	// Show tourism spread
 	if (iTourismBlastAfterModifier > 0 && pPlot->GetActiveFogOfWarMode() == FOGOFWARMODE_OFF)
 	{
-		CvString strInfluenceText;
 		InfluenceLevelTypes eLevel = kUnitOwner.GetCulture()->GetInfluenceLevel(eOwner);
-
-		if (eLevel == INFLUENCE_LEVEL_UNKNOWN)
-			strInfluenceText = GetLocalizedText( "TXT_KEY_CO_UNKNOWN" );
-		else if (eLevel == INFLUENCE_LEVEL_EXOTIC)
-			strInfluenceText = GetLocalizedText( "TXT_KEY_CO_EXOTIC");
-		else if (eLevel == INFLUENCE_LEVEL_FAMILIAR)
-			strInfluenceText = GetLocalizedText( "TXT_KEY_CO_FAMILIAR");
-		else if (eLevel == INFLUENCE_LEVEL_POPULAR)
-			strInfluenceText = GetLocalizedText( "TXT_KEY_CO_POPULAR");
-		else if (eLevel == INFLUENCE_LEVEL_INFLUENTIAL)
-			strInfluenceText = GetLocalizedText( "TXT_KEY_CO_INFLUENTIAL");
-		else if (eLevel == INFLUENCE_LEVEL_DOMINANT)
-			strInfluenceText = GetLocalizedText( "TXT_KEY_CO_DOMINANT");
-
-		char text[256] = {0};
-		sprintf_s(text, "[COLOR_WHITE]+%d [ICON_TOURISM][ENDCOLOR]   %s", iTourismBlastAfterModifier, strInfluenceText.c_str());
-		SHOW_PLOT_POPUP(pPlot, getOwner(), text);
+		SHOW_PLOT_POPUP(pPlot, getOwner(), CultureHelpers::GetInfluenceText(eLevel, iTourismBlastAfterModifier));
 	}
 
 	// Achievements
@@ -21617,6 +21591,21 @@ void CvUnit::setLastMoveTurn(int iNewValue)
 	CvAssert(getLastMoveTurn() >= 0);
 }
 
+//	--------------------------------------------------------------------------------
+int CvUnit::GetCycleOrder() const
+{
+	VALIDATE_OBJECT
+	return m_iCycleOrder;
+}
+
+
+//	--------------------------------------------------------------------------------
+void CvUnit::SetCycleOrder(int iNewValue)
+{
+	VALIDATE_OBJECT
+	m_iCycleOrder = iNewValue;
+}
+
 
 //	--------------------------------------------------------------------------------
 bool CvUnit::IsRecentlyDeployedFromOperation() const
@@ -22691,6 +22680,31 @@ void CvUnit::changeHillsDoubleMoveCount(int iChange)
 	VALIDATE_OBJECT
 	m_iHillsDoubleMoveCount = (m_iHillsDoubleMoveCount + iChange);
 	CvAssert(getHillsDoubleMoveCount() >= 0);
+}
+
+
+//	--------------------------------------------------------------------------------
+int CvUnit::getRiverDoubleMoveCount() const
+{
+	VALIDATE_OBJECT
+		return m_iRiverDoubleMoveCount;
+}
+
+
+//	--------------------------------------------------------------------------------
+bool CvUnit::isRiverDoubleMove() const
+{
+	VALIDATE_OBJECT
+		return (getRiverDoubleMoveCount() > 0);
+}
+
+
+//	--------------------------------------------------------------------------------
+void CvUnit::changeRiverDoubleMoveCount(int iChange)
+{
+	VALIDATE_OBJECT
+	m_iRiverDoubleMoveCount = (m_iRiverDoubleMoveCount + iChange);
+	CvAssert(getRiverDoubleMoveCount() >= 0);
 }
 #if defined(MOD_BALANCE_CORE)
 //	--------------------------------------------------------------------------------
@@ -27853,6 +27867,7 @@ void CvUnit::setHasPromotion(PromotionTypes eIndex, bool bNewValue)
 		changeAlwaysHealCount((thisPromotion.IsAlwaysHeal()) ? iChange : 0);
 		changeHealOutsideFriendlyCount((thisPromotion.IsHealOutsideFriendly()) ? iChange : 0);
 		changeHillsDoubleMoveCount((thisPromotion.IsHillsDoubleMove()) ? iChange : 0);
+		changeRiverDoubleMoveCount((thisPromotion.IsRiverDoubleMove()) ? iChange : 0);
 		changeIgnoreTerrainCostCount((thisPromotion.IsIgnoreTerrainCost()) ? iChange : 0);
 		changeIgnoreTerrainDamageCount((thisPromotion.IsIgnoreTerrainDamage()) ? iChange : 0);
 		changeIgnoreFeatureDamageCount((thisPromotion.IsIgnoreFeatureDamage()) ? iChange : 0);
@@ -28246,15 +28261,8 @@ void CvUnit::setHasPromotion(PromotionTypes eIndex, bool bNewValue)
 		if (bNewValue)
 		{
 			//SETS promotion duration, as we don't want to change it every time we get the promotion (this just stores the max length of the promotion)
-			ChangePromotionDuration(eIndex, (thisPromotion.PromotionDuration() * iChange) - getPromotionDuration(eIndex));
-			if (getPromotionDuration(eIndex) > 0)
-			{
-				SetTurnPromotionGained(eIndex, GC.getGame().getGameTurn());
-			}
-		}
-		else
-		{
-			ChangePromotionDuration(NO_PROMOTION, 0);
+			SetPromotionDuration(eIndex, thisPromotion.PromotionDuration());
+			SetTurnPromotionGained(eIndex, GC.getGame().getGameTurn());
 		}
 	}
 }
@@ -28513,6 +28521,7 @@ void CvUnit::Serialize(Unit& unit, Visitor& visitor)
 	visitor(unit.m_iHotKeyNumber);
 	visitor(unit.m_iDeployFromOperationTurn);
 	visitor(unit.m_iLastMoveTurn);
+	visitor(unit.m_iCycleOrder);
 	visitor(unit.m_iReconX);
 	visitor(unit.m_iReconY);
 	visitor(unit.m_iReconCount);
@@ -28548,6 +28557,7 @@ void CvUnit::Serialize(Unit& unit, Visitor& visitor)
 	visitor(unit.m_iAlwaysHealCount);
 	visitor(unit.m_iHealOutsideFriendlyCount);
 	visitor(unit.m_iHillsDoubleMoveCount);
+	visitor(unit.m_iRiverDoubleMoveCount);
 	visitor(unit.m_iMountainsDoubleMoveCount);
 	visitor(unit.m_iEmbarkFlatCostCount);
 	visitor(unit.m_iDisembarkFlatCostCount);
@@ -30523,7 +30533,7 @@ bool CvUnit::UnitRoadTo(int iX, int iY, int iFlags)
 
 	//ok apparently we both can move and need to move
 	//do not use the path cache here, the step finder tells us where to put the route
-	SPathFinderUserData data(getOwner(),PT_BUILD_ROUTE,NO_BUILD,eBestRoute,NO_ROUTE_PURPOSE);
+	SPathFinderUserData data(getOwner(),PT_BUILD_ROUTE,NO_BUILD,eBestRoute,NO_ROUTE_PURPOSE,false);
 	SPath path = GC.GetStepFinder().GetPath(getX(), getY(), iX, iY, data);
 
 	//index zero is the current plot!

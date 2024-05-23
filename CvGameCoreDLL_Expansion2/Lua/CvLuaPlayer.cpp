@@ -117,6 +117,7 @@ void CvLuaPlayer::PushMethods(lua_State* L, int t)
 	Method(SetNumWondersBeatenTo);
 
 	Method(IsCapitalConnectedToCity);
+	Method(IsCapitalIndustrialConnectedToCity);
 	Method(IsPlotConnectedToPlot);
 
 	Method(IsTurnActive);
@@ -698,6 +699,7 @@ void CvLuaPlayer::PushMethods(lua_State* L, int t)
 	Method(GetMinorCivFriendshipLevelWithMajor);
 	Method(GetRestingPointChange);
 	Method(ChangeRestingPointChange);
+	Method(SetRestingPointChange);
 	Method(GetActiveQuestForPlayer);
 	Method(IsMinorCivActiveQuestForPlayer);
 	Method(SetMinorCivActiveQuestForPlayer);
@@ -903,6 +905,7 @@ void CvLuaPlayer::PushMethods(lua_State* L, int t)
 
 	Method(GetSpecialistExtraYield);
 
+	Method(FindPathLength);
 	Method(FindTechPathLength);
 
 	Method(GetQueuePosition);
@@ -2213,6 +2216,16 @@ int CvLuaPlayer::lIsCapitalConnectedToCity(lua_State* L)
 	CvCity* pkCity = CvLuaCity::GetInstance(L, 2);
 
 	const bool bResult = pkCity->IsConnectedToCapital();
+	lua_pushboolean(L, bResult);
+	return 1;
+}
+//------------------------------------------------------------------------------
+int CvLuaPlayer::lIsCapitalIndustrialConnectedToCity(lua_State* L)
+{
+	//CvPlayerAI* pkPlayer = GetInstance(L);
+	CvCity* pkCity = CvLuaCity::GetInstance(L, 2);
+
+	const bool bResult = pkCity->IsIndustrialRouteToCapitalConnected();
 	lua_pushboolean(L, bResult);
 	return 1;
 }
@@ -8599,6 +8612,16 @@ int CvLuaPlayer::lChangeRestingPointChange(lua_State* L)
 	return 1;
 }
 //------------------------------------------------------------------------------
+int CvLuaPlayer::lSetRestingPointChange(lua_State* L)
+{
+	CvPlayerAI* pkPlayer = GetInstance(L);
+	PlayerTypes ePlayer = (PlayerTypes) lua_tointeger(L, 2);
+	int iValue = lua_tointeger(L, 3);
+
+	pkPlayer->GetMinorCivAI()->SetRestingPointChange(ePlayer, iValue);
+	return 1;
+}
+//------------------------------------------------------------------------------
 // Deprecated
 int CvLuaPlayer::lGetActiveQuestForPlayer(lua_State* L)
 {
@@ -10201,6 +10224,20 @@ int CvLuaPlayer::lGetSpecialistExtraYield(lua_State* L)
 
 	const int iResult = pkPlayer->getSpecialistExtraYield(eIndex1, eIndex2) +
 	                    pkPlayer->GetPlayerTraits()->GetSpecialistYieldChange(eIndex1, eIndex2);
+	lua_pushinteger(L, iResult);
+	return 1;
+}
+//------------------------------------------------------------------------------
+//int findPathLength(TechTypes  eTech, bool bCost);
+// If bCost is false, then it returns number of techs that need to be researched to acquire eTech
+// If bCost is true, then it returns the cost of a currently researched tech
+// DEPRECATED, findTechPathLength() is the newer version; kept for backwards compatibility with modmods (for now)
+int CvLuaPlayer::lFindPathLength(lua_State* L)
+{
+	CvPlayerAI* pkPlayer = GetInstance(L);
+	const TechTypes eTech = (TechTypes)lua_tointeger(L, 2);
+	const bool bCost = luaL_optbool(L, 3, true);
+	const int iResult = pkPlayer->findPathLength(eTech, bCost);
 	lua_pushinteger(L, iResult);
 	return 1;
 }
@@ -16035,7 +16072,7 @@ int CvLuaPlayer::lGetEspionageCityStatus(lua_State* L)
 	int index = 1;
 	// first pass to get the largest base potential available
 	int iLargestBasePotential = 0;
-	if (!MOD_BALANCE_CORE_SPIES_ADVANCED)
+	if (!MOD_BALANCE_VP)
 	{
 		for (int i = 0; i < MAX_PLAYERS; ++i)
 		{
@@ -16231,9 +16268,6 @@ int CvLuaPlayer::lGetEspionageSpies(lua_State* L)
 		case SPY_STATE_TRAVELLING:
 			lua_pushstring(L, "TXT_KEY_SPY_STATE_TRAVELLING");
 			break;
-		case SPY_STATE_IMPRISONED:
-			lua_pushstring(L, "TXT_KEY_SPY_STATE_IMPRISONED");
-			break;
 		case SPY_STATE_SURVEILLANCE:
 			lua_pushstring(L, "TXT_KEY_SPY_STATE_SURVEILLANCE");
 			break;
@@ -16294,9 +16328,6 @@ int CvLuaPlayer::lGetEspionageSpies(lua_State* L)
 
 		lua_pushinteger(L, pkPlayerEspionage->GetNumTurnsSpyMovementBlocked(uiSpy));
 		lua_setfield(L, t, "NumTurnsMovementBlocked");
-
-		lua_pushinteger(L, pkPlayerEspionage->GetNumTurnsSpyImprisoned(uiSpy));
-		lua_setfield(L, t, "NumTurnsImprisoned");
 
 		lua_pushinteger(L, pSpy->GetSpyFocus());
 		lua_setfield(L, t, "SpyFocus");

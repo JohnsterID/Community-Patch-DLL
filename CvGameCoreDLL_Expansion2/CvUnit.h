@@ -1094,6 +1094,9 @@ public:
 	int getLastMoveTurn() const;
 	void setLastMoveTurn(int iNewValue);
 
+	int GetCycleOrder() const;
+	void SetCycleOrder(int iNewValue);
+
 	bool IsRecentlyDeployedFromOperation() const;
 	void SetDeployFromOperationTurn(int iTurn)
 	{
@@ -1199,6 +1202,11 @@ public:
 	int getHillsDoubleMoveCount() const;
 	bool isHillsDoubleMove() const;
 	void changeHillsDoubleMoveCount(int iChange);
+	
+	int getRiverDoubleMoveCount() const;
+	bool isRiverDoubleMove() const;
+	void changeRiverDoubleMoveCount(int iChange);
+
 #if defined(MOD_BALANCE_CORE)
 	int getMountainsDoubleMoveCount() const;
 	bool isMountainsDoubleMove() const;
@@ -2076,6 +2084,7 @@ protected:
 	int m_iHotKeyNumber;
 	int m_iDeployFromOperationTurn;
 	int m_iLastMoveTurn;
+	int m_iCycleOrder;
 	int m_iReconX;
 	int m_iReconY;
 	int m_iReconCount;
@@ -2113,6 +2122,7 @@ protected:
 	int m_iAlwaysHealCount;
 	int m_iHealOutsideFriendlyCount;
 	int m_iHillsDoubleMoveCount;
+	int m_iRiverDoubleMoveCount;
 #if defined(MOD_BALANCE_CORE)
 	int m_iMountainsDoubleMoveCount;
 	int m_iEmbarkFlatCostCount;
@@ -2533,6 +2543,7 @@ SYNC_ARCHIVE_VAR(int, m_iBaseRangedCombat)
 SYNC_ARCHIVE_VAR(int, m_iHotKeyNumber)
 SYNC_ARCHIVE_VAR(int, m_iDeployFromOperationTurn)
 SYNC_ARCHIVE_VAR(int, m_iLastMoveTurn)
+SYNC_ARCHIVE_VAR(int, m_iCycleOrder)
 SYNC_ARCHIVE_VAR(int, m_iReconX)
 SYNC_ARCHIVE_VAR(int, m_iReconY)
 SYNC_ARCHIVE_VAR(int, m_iReconCount)
@@ -2568,6 +2579,7 @@ SYNC_ARCHIVE_VAR(int, m_iRangedSupportFireCount)
 SYNC_ARCHIVE_VAR(int, m_iAlwaysHealCount)
 SYNC_ARCHIVE_VAR(int, m_iHealOutsideFriendlyCount)
 SYNC_ARCHIVE_VAR(int, m_iHillsDoubleMoveCount)
+SYNC_ARCHIVE_VAR(int, m_iRiverDoubleMoveCount)
 SYNC_ARCHIVE_VAR(int, m_iMountainsDoubleMoveCount)
 SYNC_ARCHIVE_VAR(int, m_iEmbarkFlatCostCount)
 SYNC_ARCHIVE_VAR(int, m_iDisembarkFlatCostCount)

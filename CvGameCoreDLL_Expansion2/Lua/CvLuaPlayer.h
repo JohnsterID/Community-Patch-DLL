@@ -109,6 +109,7 @@ protected:
 	static int lSetNumWondersBeatenTo(lua_State* L);
 
 	static int lIsCapitalConnectedToCity(lua_State* L);
+	static int lIsCapitalIndustrialConnectedToCity(lua_State* L);
 	static int lIsPlotConnectedToPlot(lua_State* L);
 
 	static int lIsTurnActive(lua_State* L);
@@ -795,6 +796,7 @@ protected:
 	static int lGetMinorCivFriendshipLevelWithMajor(lua_State* L);
 	static int lGetRestingPointChange(lua_State* L);
 	static int lChangeRestingPointChange(lua_State* L);
+	static int lSetRestingPointChange(lua_State* L);
 	static int lGetActiveQuestForPlayer(lua_State* L); // DEPRECATED
 	static int lIsMinorCivActiveQuestForPlayer(lua_State* L);
 	static int lSetMinorCivActiveQuestForPlayer(lua_State* L);
@@ -986,6 +988,7 @@ protected:
 
 	static int lGetSpecialistExtraYield(lua_State* L);
 
+	static int lFindPathLength(lua_State* L);
 	static int lFindTechPathLength(lua_State* L);
 
 	static int lGetQueuePosition(lua_State* L);

@@ -11896,7 +11896,7 @@ void CvDiplomacyAI::DoUpdatePlayerStrengthEstimates()
 			break;
 		default:
 			iTargetValueRatio *= /*2*/ max(GD_INT_GET(TARGET_DISTANT), 1);
-			iTargetValueRatio /= /*1*/ max(GD_INT_GET(TARGET_FAR_DIVISOR), 1);
+			iTargetValueRatio /= /*1*/ max(GD_INT_GET(TARGET_DISTANT_DIVISOR), 1);
 			break;
 		}
 
@@ -11938,7 +11938,7 @@ void CvDiplomacyAI::DoUpdatePlayerStrengthEstimates()
 			break;
 		default:
 			iTargetValueRatio *= /*2*/ max(GD_INT_GET(TARGET_DISTANT), 1);
-			iTargetValueRatio /= /*1*/ max(GD_INT_GET(TARGET_FAR_DIVISOR), 1);
+			iTargetValueRatio /= /*1*/ max(GD_INT_GET(TARGET_DISTANT_DIVISOR), 1);
 			break;
 		}
 
@@ -24665,7 +24665,7 @@ void CvDiplomacyAI::SelectBestApproachTowardsMinorCiv(PlayerTypes ePlayer, std::
 		vApproachScores[CIV_APPROACH_FRIENDLY] += vApproachBias[CIV_APPROACH_FRIENDLY] * 2;
 		bAnyFriendshipBonus = true;
 	}
-	if (GetPlayer()->GetPlayerPolicies()->GetNumericModifier(POLICYMOD_RIGGING_ELECTION_MODIFIER) > 0 || GetPlayer()->GetPlayerPolicies()->GetNumericModifier(POLICYMOD_RIG_ELECTION_INFLUENCE_MODIFIER) > 0)
+	if (GetPlayer()->GetPlayerPolicies()->GetNumericModifier(POLICYMOD_RIGGING_ELECTION_MODIFIER) > 0 || GetPlayer()->GetPlayerPolicies()->GetNumericModifier(POLICYMOD_RIG_ELECTION_INFLUENCE_MODIFIER) > 0 || pTraits->GetSpyOffensiveStrengthModifier())
 	{
 		vApproachScores[CIV_APPROACH_FRIENDLY] += vApproachBias[CIV_APPROACH_FRIENDLY] * 2;
 		bAnyFriendshipBonus = true;
@@ -33672,7 +33672,7 @@ void CvDiplomacyAI::DoContactMinorCivs()
 			MinorGoldGiftInfo sGift = veMinorsToGiveGold.GetElement(i);
 
 			//Interception! Let's do a tile improvement if we can (and we'll benefit from it)
-			if (sGift.eMinor != NO_PLAYER && GET_PLAYER(sGift.eMinor).GetMinorCivAI()->IsFriends(GetID()))
+			if (sGift.eMinor != NO_PLAYER && GET_PLAYER(sGift.eMinor).GetMinorCivAI()->IsAllies(GetID()))
 			{
 				CvPlot* pImprovementPlot = GET_PLAYER(sGift.eMinor).GetMinorCivAI()->GetMajorGiftTileImprovement(GetID());
 				if (pImprovementPlot != NULL)
@@ -40453,26 +40453,36 @@ void CvDiplomacyAI::DoFromUIDiploEvent(PlayerTypes eFromPlayer, FromUIDiploEvent
 		case FROM_UI_DIPLO_EVENT_HUMAN_DISCUSSION_SHARE_OPINION:
 		{
 			PlayerTypes eTargetPlayer = (PlayerTypes) iArg1;
-			bool bHostile = (IsAtWar(eFromPlayer) || IsActHostileTowardsHuman(eFromPlayer) || IsDenouncedPlayer(eFromPlayer) || IsDenouncedByPlayer(eFromPlayer) || IsUntrustworthy(eFromPlayer));
-			bool bAcceptable = (!bHostile && !IsTooEarlyForShareOpinion(eFromPlayer) && !IsAtWar(eFromPlayer) && GET_PLAYER(eFromPlayer).isAlive() && !GET_PLAYER(eFromPlayer).isObserver() && (GetShareOpinionResponse(eFromPlayer) == SHARE_OPINION_RESPONSE_ACCEPTED || IsShareOpinionAcceptable(eFromPlayer)));
+			bool bHostile = IsAtWar(eFromPlayer) || IsDenouncedPlayer(eFromPlayer) || IsDenouncedByPlayer(eFromPlayer) || IsUntrustworthy(eFromPlayer) || IsActHostileTowardsHuman(eFromPlayer);
+			bool bAcceptable = !bHostile && !IsTooEarlyForShareOpinion(eFromPlayer) && GET_PLAYER(eFromPlayer).isAlive() && !GET_PLAYER(eFromPlayer).isObserver() && (GetShareOpinionResponse(eFromPlayer) == SHARE_OPINION_RESPONSE_ACCEPTED || IsShareOpinionAcceptable(eFromPlayer));
 			bool bDiplomat = false;
-			if (MOD_BALANCE_VP && GET_PLAYER(eFromPlayer).GetEspionage() && GET_PLAYER(eFromPlayer).GetEspionage()->IsMyDiplomatVisitingThem(m_pPlayer->GetID()))
+			if (MOD_BALANCE_VP)
 			{
-				// has the diplomat collected enough network points?
-				CvCity* pCapital = GetPlayer()->getCapitalCity();
-				if (pCapital)
+				// Vassals always share their true feelings with their master.
+				if (IsVassal(eFromPlayer))
 				{
-					CvCityEspionage* pCapitalEspionage = pCapital->GetCityEspionage();
-					if (pCapitalEspionage && pCapitalEspionage->IsDiplomatRevealTrueApproaches(eFromPlayer))
+					bAcceptable = true;
+					bDiplomat = true;
+				}
+				// Has a Diplomat collected enough network points?
+				else if (GET_PLAYER(eFromPlayer).GetEspionage() && GET_PLAYER(eFromPlayer).GetEspionage()->IsMyDiplomatVisitingThem(m_pPlayer->GetID()))
+				{
+					CvCity* pCapital = GetPlayer()->getCapitalCity();
+					if (pCapital)
 					{
-						bDiplomat = true;
+						CvCityEspionage* pCapitalEspionage = pCapital->GetCityEspionage();
+						if (pCapitalEspionage && pCapitalEspionage->IsDiplomatRevealTrueApproaches(eFromPlayer))
+						{
+							bAcceptable = true;
+							bDiplomat = true;
+						}
 					}
 				}
 			}
-			bool bOverride = (IsAtWar(eTargetPlayer) || IsVassal(eFromPlayer) || GC.getGame().IsDiploDebugModeEnabled() || GET_PLAYER(eFromPlayer).isObserver());
+			bool bOverride = IsAtWar(eTargetPlayer) || GC.getGame().IsDiploDebugModeEnabled() || GET_PLAYER(eFromPlayer).isObserver();
 
 			// We refuse! Choose a hostile response.
-			if (bHostile && !bOverride && !bDiplomat)
+			if (bHostile && !bOverride)
 			{
 				if (bActivePlayer)
 				{
@@ -40491,13 +40501,13 @@ void CvDiplomacyAI::DoFromUIDiploEvent(PlayerTypes eFromPlayer, FromUIDiploEvent
 				SetShareOpinionResponse(eFromPlayer, SHARE_OPINION_RESPONSE_REFUSED);
 			}
 			// We accepted! Share our approach towards this player with them.
-			else if (bAcceptable || bDiplomat || bOverride)
+			else if (bAcceptable || bOverride)
 			{
-				if (bAcceptable || bDiplomat)
+				if (bAcceptable)
 					SetShareOpinionResponse(eFromPlayer, SHARE_OPINION_RESPONSE_ACCEPTED);
 
-				bool bHonest = (GetCivApproach(eFromPlayer) == CIV_APPROACH_FRIENDLY && GetCivOpinion(eFromPlayer) >= CIV_OPINION_FRIEND) || bDiplomat;
-				CivApproachTypes eTargetApproach = (bHonest || bOverride) ? GetCivApproach(eTargetPlayer) : GetSurfaceApproach(eTargetPlayer);
+				bool bHonest = bDiplomat || bOverride || (GetCivApproach(eFromPlayer) == CIV_APPROACH_FRIENDLY && GetCivOpinion(eFromPlayer) >= CIV_OPINION_FRIEND);
+				CivApproachTypes eTargetApproach = bHonest ? GetCivApproach(eTargetPlayer) : GetSurfaceApproach(eTargetPlayer);
 
 				if (bActivePlayer)
 				{
@@ -50478,7 +50488,7 @@ std::vector<CvDeal*> CvDiplomacyAI::GetDealsToRenew(PlayerTypes eOtherPlayer, bo
 }
 
 /// Deal to renew
-void CvDiplomacyAI::CancelRenewDeal(PlayerTypes eOtherPlayer, RenewalReason eReason, bool bJustLogging, CvDeal* pPassDeal, bool bOnlyCheckedDeals)
+void CvDiplomacyAI::CancelRenewDeal(PlayerTypes eOtherPlayer, RenewalReason eReason, bool bJustLogging, CvDeal* pPassDeal, bool bOnlyCheckedDeals, bool bSendNetworkMessage)
 {
 	if (GetPlayer()->isHuman())
 		return;
@@ -50507,6 +50517,12 @@ void CvDiplomacyAI::CancelRenewDeal(PlayerTypes eOtherPlayer, RenewalReason eRea
 				//OutputDebugString("Cleared item from expired renewal deal \n");
 				//If we checked for renewal, we don't need to remove items, as we already did it.
 				GC.getGame().GetGameDeals().DoEndTradedItem(&*itemIter, pRenewalDeal->GetOtherPlayer(itemIter->m_eFromPlayer), false, pRenewalDeal->m_bCheckedForRenewal);
+			}
+			// network message for multiplayer. we have to use sendNetDealAccepted because we don't have a specific function to send the information that a deal has not been renewed. see CvDllDealAI::DoAcceptedDeal
+			if (bSendNetworkMessage && GET_PLAYER(eOtherPlayer).isHuman())
+			{
+				CvInterfacePtr<ICvDeal1> pDllDeal = GC.WrapDealPointer(pRenewalDeal);
+				gDLL->sendNetDealAccepted(GetPlayer()->GetID(), eOtherPlayer, pDllDeal.get(), INT_MAX, INT_MAX, INT_MAX);
 			}
 		}
 		pRenewalDeal->m_bConsideringForRenewal = false;

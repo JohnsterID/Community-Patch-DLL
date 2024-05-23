@@ -34,6 +34,7 @@
 
 class CvArea;
 class CvLandmass;
+class CvRiver;
 class CvRoute;
 
 typedef bool (*ConstPlotUnitFunc)(const CvUnit* pUnit, int iData1, int iData2);
@@ -146,6 +147,10 @@ public:
 	bool isRiverCrossingFlowClockwise(DirectionTypes eDirection) const;
 	bool isRiverSide() const;
 	bool isRiverConnection(DirectionTypes eDirection) const;
+
+	bool IsRiverSide(DirectionTypes eDirection) const;
+	bool IsLakeSide(DirectionTypes eDirection) const;
+	bool IsAlongSameRiver(const CvPlot* pToPlot) const;
 
 	CvPlot* getNeighboringPlot(DirectionTypes eDirection) const;
 	CvPlot* getNearestLandPlotInternal(int iDistance) const;
@@ -305,8 +310,8 @@ public:
 	bool isRoute() const;
 	bool isValidRoute(const CvUnit* pUnit) const;
 
-	void SetCityConnection(PlayerTypes ePlayer, bool bActive);
-	bool IsCityConnection(PlayerTypes ePlayer = NO_PLAYER) const;
+	void SetCityConnection(PlayerTypes ePlayer, bool bActive, bool bIndustrial);
+	bool IsCityConnection(PlayerTypes ePlayer = NO_PLAYER, bool bIndustrial = false) const;
 
 #if defined(MOD_BALANCE_CORE)
 	void SetTradeUnitRoute(bool bActive);
@@ -338,6 +343,11 @@ public:
 	CvLandmass* landmass() const;
 	std::vector<int> getAllAdjacentLandmasses() const;
 	bool hasSharedAdjacentLandmass(const CvPlot* pOther, bool bAllowLand, bool bAllowWater) const;
+
+	int GetRiverID(DirectionTypes eDirection) const;
+	void SetRiverID(DirectionTypes eDirection, int iRiverID);
+	CvRiver* GetRiver(DirectionTypes eDirection) const;
+	bool HasSharedRiver(const CvPlot* pOther) const;
 
 	int getOwnershipDuration() const;
 	bool isOwnershipScore() const;
@@ -724,6 +734,8 @@ public:
 	bool IsUnitPlotExperience() const;
 	int GetPlotMovesChange() const;
 	void ChangePlotMovesChange(int iValue);
+	bool IsRestoreMoves() const;
+	void ChangeRestoreMovesCount(int iValue);
 #endif
 	int GetNumCombatUnits();
 	CvUnit* getUnitByIndex(int iIndex) const;
@@ -974,6 +986,8 @@ protected:
 	short m_iImprovementDuration;
 	short m_iUpgradeProgress;
 
+	std::vector<int> m_vRivers;
+
 	SYNC_ARCHIVE_MEMBER(CvPlot)
 	char /*FeatureTypes*/ m_eFeatureType; 
 	//why only one autovariable? probably should extend this to everything the players may change about the plot
@@ -983,6 +997,7 @@ protected:
 	char m_iUnitPlotExperience;
 	char m_iUnitPlotGAExperience;
 	char m_iPlotChangeMoves;
+	char m_iRestoreMoves;
 #endif
 	char /*ResourceTypes*/ m_eResourceType;
 	char /*ImprovementTypes*/ m_eImprovementType;

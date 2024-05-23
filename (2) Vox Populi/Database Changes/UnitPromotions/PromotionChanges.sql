@@ -140,15 +140,15 @@ UPDATE UnitPromotions SET MovesChange = 1 WHERE RankList = 'HELI_MOBILITY';
 ----------------------------------------------------------------------------------------------------------------------------
 -- Siege promotion tree drawn using ASCIIFlow
 --
---                               ┌──────► Volley
---                               │                            Infiltrators
--- Siege I ─────────► Siege II ──┴──────► Siege III ────────► Range
+--                                       ┌──────► Volley
+--                                       │                            Infiltrators
+-- Siege I ─────────► Siege II ──────────┴──────► Siege III ────────► Range
 --
 -- Cover I ─────────► Cover II
---                                                            Firing Doctrine
--- Field I ─────────► Field II ──┬──────► Field III ────────► Logistics
---                               │
---                               └──────► Splash Damage I ──► Splash Damage II
+--                                                                    Firing Doctrine
+-- Field I ────┬────► Field II ──────────┬──────► Field III ────────► Logistics
+--             │                         │
+--             └────► Coastal Artillery  └──────► Splash Damage I ──► Splash Damage II
 ----------------------------------------------------------------------------------------------------------------------------
 UPDATE UnitPromotions SET RangedAttackModifier = 10, CityAttack = 15 WHERE RankList = 'SIEGE';
 
@@ -157,6 +157,13 @@ UPDATE UnitPromotions SET RangedAttackModifier = 10, OpenRangedAttackMod = 10 WH
 UPDATE UnitPromotions SET CityAttack = 50, AttackFortifiedMod = 50 WHERE Type = 'PROMOTION_VOLLEY';
 
 UPDATE UnitPromotions SET SplashDamage = 5 WHERE RankList = 'SPLASH';
+
+INSERT INTO UnitPromotions_UnitCombatMods
+	(PromotionType, UnitCombatType, Modifier)
+VALUES
+	('PROMOTION_COASTAL_ARTILLERY', 'UNITCOMBAT_NAVALMELEE', 50),
+	('PROMOTION_COASTAL_ARTILLERY', 'UNITCOMBAT_NAVALRANGED', 50),
+	('PROMOTION_COASTAL_ARTILLERY', 'UNITCOMBAT_CARRIER', 50);
 
 ----------------------------------------------------------------------------------------------------------------------------
 -- Recon promotion tree drawn using ASCIIFlow
@@ -446,12 +453,12 @@ VALUES
 INSERT INTO UnitPromotions_Domains
 	(PromotionType, DomainType, Attack)
 VALUES
-	('PROMOTION_AERIAL_TORPEDO', 'DOMAIN_SEA', 20);
+	('PROMOTION_AERIAL_TORPEDO', 'DOMAIN_SEA', 33);
 
 INSERT INTO UnitPromotions_Domains
 	(PromotionType, DomainType, Attack)
 VALUES
-	('PROMOTION_BOMB_RACK', 'DOMAIN_LAND', 20);
+	('PROMOTION_BOMB_RACK', 'DOMAIN_LAND', 33);
 
 UPDATE UnitPromotions SET RangeChange = 2 WHERE Type = 'PROMOTION_AIR_RANGE';
 
@@ -519,11 +526,13 @@ VALUES
 	('PROMOTION_VIKING', 'YIELD_GOLD', 30),
 	('PROMOTION_LONGBOAT', 'YIELD_GOLD', 60);
 
-UPDATE UnitPromotions SET AllowsEmbarkation = 1, EmbarkedAllWater = 1, EmbarkExtraVisibility = 1 WHERE Type = 'PROMOTION_ALLWATER_EMBARKATION';
+UPDATE UnitPromotions SET AllowsEmbarkation = 1, EmbarkedAllWater = 1, EmbarkExtraVisibility = 2 WHERE Type = 'PROMOTION_ALLWATER_EMBARKATION';
 
 UPDATE UnitPromotions SET MovesChange = 1 WHERE Type = 'PROMOTION_OCEAN_MOVEMENT';
 
 UPDATE UnitPromotions SET CaptureDefeatedEnemy = 1, CapturedUnitsConscripted = 1 WHERE Type = 'PROMOTION_COERCION';
+
+UPDATE UnitPromotions SET RiverDoubleMove = 1 WHERE Type = 'PROMOTION_WAR_CANOES';
 
 UPDATE UnitPromotions SET ExtraAttacks = 1 WHERE Type = 'PROMOTION_MONGOL_TERROR';
 
@@ -551,11 +560,7 @@ UPDATE UnitPromotions SET MovesChange = 3 WHERE Type = 'PROMOTION_FAST_GENERAL';
 UPDATE UnitPromotions SET AttackMod = 15, IgnoreZOC = 1 WHERE Type = 'PROMOTION_LIGHTNING_WARFARE_GUN';
 UPDATE UnitPromotions SET AttackMod = 15, MovesChange = 1 WHERE Type = 'PROMOTION_LIGHTNING_WARFARE_ARMOR';
 
-UPDATE UnitPromotions SET AttackBelowEqual50HealthMod = 20 WHERE Type = 'PROMOTION_PRIZE_RULES';
-INSERT INTO UnitPromotions_YieldFromKills
-	(PromotionType, YieldType, Yield)
-VALUES
-	('PROMOTION_PRIZE_RULES', 'YIELD_GOLD', 300);
+UPDATE UnitPromotions SET FriendlyHealChange = 5, CityAttack = 25 WHERE Type = 'PROMOTION_MARE_NOSTRUM';
 
 --------------------------------------------
 -- Tech free promotions
@@ -875,7 +880,7 @@ UPDATE UnitPromotions SET NearbyEnemyCombatMod = -10, NearbyEnemyCombatRange = 1
 UPDATE UnitPromotions SET NearbyEnemyCombatMod = -15, NearbyEnemyCombatRange = 1 WHERE Type = 'PROMOTION_HAKA_WAR_DANCE';
 
 -- Khan: Enhanced Medic
-UPDATE UnitPromotions SET SameTileHealChange = 10, AdjacentTileHealChange = 10, NearbyEnemyDamage = 10 WHERE Type = 'PROMOTION_MEDIC_GENERAL';
+UPDATE UnitPromotions SET NearbyEnemyDamage = 10 WHERE Type = 'PROMOTION_MEDIC_GENERAL';
 
 -- Samurai: Quick Study
 UPDATE UnitPromotions SET ExperiencePercent = 50 WHERE Type = 'PROMOTION_GAIN_EXPERIENCE';

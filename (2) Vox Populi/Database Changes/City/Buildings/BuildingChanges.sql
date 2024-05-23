@@ -33,7 +33,7 @@ UPDATE Buildings
 SET
 	EventTourism = 7,
 	NoUnhappfromXSpecialists = 1,
-	VassalLevyEra = 1
+	VassalLevyEra = 2
 WHERE BuildingClass = 'BUILDINGCLASS_PALACE';
 
 INSERT INTO Helper
@@ -1007,19 +1007,11 @@ FROM Buildings
 WHERE BuildingClass = 'BUILDINGCLASS_HARBOR';
 
 -- Seaport
-INSERT INTO Building_ResourceQuantityRequirements
-	(BuildingType, ResourceType, Cost)
-SELECT
-	Type, 'RESOURCE_COAL', 1
-FROM Buildings
-WHERE BuildingClass = 'BUILDINGCLASS_SEAPORT';
-
 UPDATE Buildings
 SET
 	PrereqTech = 'TECH_STEAM_POWER',
 	CitySupplyModifier = 20,
-	SpecialistType = 'SPECIALIST_ENGINEER',
-	SpecialistCount = 1
+	AllowsIndustrialWaterRoutes = 1
 WHERE BuildingClass = 'BUILDINGCLASS_SEAPORT';
 
 INSERT INTO Helper
@@ -1041,13 +1033,6 @@ FROM Buildings a, Helper b
 WHERE a.BuildingClass = 'BUILDINGCLASS_SEAPORT';
 
 DELETE FROM Helper;
-
-INSERT INTO Building_YieldModifiers
-	(BuildingType, YieldType, Yield)
-SELECT
-	Type, 'YIELD_PRODUCTION', 25
-FROM Buildings
-WHERE BuildingClass = 'BUILDINGCLASS_SEAPORT';
 
 -- Mine Field
 INSERT INTO Building_ResourceQuantityRequirements
@@ -1189,24 +1174,10 @@ WHERE BuildingClass = 'BUILDINGCLASS_STADIUM';
 UPDATE Buildings
 SET
 	EspionageModifier = 0,
-	SpySecurityModifier = 15,
+	SpySecurityModifier = 20,
+	SpySecurityModifierPerXPop = 1,
 	DistressFlatReduction = 1
 WHERE BuildingClass = 'BUILDINGCLASS_CONSTABLE';
-
-INSERT INTO Helper
-	(YieldType)
-VALUES
-	('YIELD_SCIENCE'),
-	('YIELD_CULTURE');
-
-INSERT INTO Building_YieldFromSpyIdentify
-	(BuildingType, YieldType, Yield)
-SELECT
-	a.Type, b.YieldType, 25
-FROM Buildings a, Helper b
-WHERE a.BuildingClass = 'BUILDINGCLASS_CONSTABLE';
-
-DELETE FROM Helper;
 
 -- Police Station
 UPDATE Buildings
@@ -1214,27 +1185,12 @@ SET
 	PrereqTech = 'TECH_ELECTRONICS',
 	EspionageModifier = 0,
 	SpySecurityModifier = 10,
-	SpySecurityModifierPerPop = 1,
+	SpySecurityModifierPerXPop = 1,
 	DistressFlatReduction = 1,
 	PovertyFlatReduction = 1,
 	IlliteracyFlatReduction = 1,
 	BoredomFlatReduction = 1
 WHERE BuildingClass = 'BUILDINGCLASS_POLICE_STATION';
-
-INSERT INTO Helper
-	(YieldType)
-VALUES
-	('YIELD_SCIENCE'),
-	('YIELD_CULTURE');
-
-INSERT INTO Building_YieldFromSpyDefense
-	(BuildingType, YieldType, Yield)
-SELECT
-	a.Type, b.YieldType, 100
-FROM Buildings a, Helper b
-WHERE a.BuildingClass = 'BUILDINGCLASS_POLICE_STATION';
-
-DELETE FROM Helper;
 
 ----------------------------------------------------------------------------
 -- Tourism line
@@ -1804,18 +1760,18 @@ SELECT
 FROM Buildings
 WHERE BuildingClass = 'BUILDINGCLASS_BATH';
 
--- Train Station
+-- Coaling Station
 INSERT INTO Building_ResourceQuantityRequirements
 	(BuildingType, ResourceType, Cost)
 SELECT
 	Type, 'RESOURCE_COAL', 1
 FROM Buildings
-WHERE BuildingClass = 'BUILDINGCLASS_TRAINSTATION';
+WHERE BuildingClass = 'BUILDINGCLASS_COALING_STATION';
 
 INSERT INTO Helper
 	(YieldType, Yield)
 VALUES
-	('YIELD_PRODUCTION', 25),
+	('YIELD_PRODUCTION', 20),
 	('YIELD_GOLD', 10);
 
 INSERT INTO Building_YieldModifiers
@@ -1823,7 +1779,7 @@ INSERT INTO Building_YieldModifiers
 SELECT
 	a.Type, b.YieldType, b.Yield
 FROM Buildings a, Helper b
-WHERE a.BuildingClass = 'BUILDINGCLASS_TRAINSTATION';
+WHERE a.BuildingClass = 'BUILDINGCLASS_COALING_STATION';
 
 DELETE FROM Helper;
 
@@ -2288,7 +2244,7 @@ INSERT INTO Helper
 	(BuildingClassType, YieldType, Yield)
 VALUES
 	('BUILDINGCLASS_LIGHTHOUSE', 'YIELD_FOOD', 4),
-	('BUILDINGCLASS_TRAINSTATION', 'YIELD_FOOD', 6),
+	('BUILDINGCLASS_COALING_STATION', 'YIELD_FOOD', 6),
 	('BUILDINGCLASS_STABLE', 'YIELD_PRODUCTION', 2),
 	('BUILDINGCLASS_WORKSHOP', 'YIELD_PRODUCTION', 4);
 

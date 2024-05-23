@@ -1616,10 +1616,10 @@ bool CvMinorCivQuest::IsComplete()
 	case MINOR_CIV_QUEST_SPY_ON_MAJOR:
 	{
 		PlayerTypes eTargetMajor = (PlayerTypes)m_iData1;
-		int iNumThefts = m_iData2;
+		int iNumMissionsRequired = m_iData2;
 
 		// Stole from the target X times?
-		return pAssignedPlayer->GetEspionage()->GetNumSpyActionsDone(eTargetMajor) >= iNumThefts;
+		return pAssignedPlayer->GetEspionage()->GetNumSpyActionsDone(eTargetMajor) >= iNumMissionsRequired;
 	}
 	case MINOR_CIV_QUEST_COUP:
 	{
@@ -2001,6 +2001,10 @@ bool CvMinorCivQuest::IsExpired()
 		if (pkUnitInfo->GetDomainType() == DOMAIN_SEA && !pMinor->getCapitalCity()->isCoastal(10))
 			return true;
 
+		// Don't cancel the quest if a unit is currently on its way to the city-state
+		if (pMinor->GetMinorCivAI()->getIncomingUnitGift(m_eAssignedPlayer).getArrivalCountdown() > -1)
+			return false;
+
 		// Can we train the unit type this unit upgrades to?
 		bool bCanUpgrade = false;
 		for (int iI = 0; iI < GC.getNumUnitClassInfos(); iI++)
@@ -2018,38 +2022,23 @@ bool CvMinorCivQuest::IsExpired()
 			}
 		}
 
-		// Are any versions of the original unit still around?
-		bool bAlreadyHasUnit = false;
-		int iLoop = 0;
-		for (CvUnit* pLoopUnit = GET_PLAYER(m_eAssignedPlayer).firstUnit(&iLoop); NULL != pLoopUnit; pLoopUnit = GET_PLAYER(m_eAssignedPlayer).nextUnit(&iLoop))
+		// Can upgrade it? Invalidated!
+		if (bCanUpgrade)
+			return true;
+
+		// Make sure at least one of the player's cities can train this unit
+		bool bNoValidCity = true;
+		int iCityLoop = 0;
+		for (CvCity* pLoopCity = GET_PLAYER(m_eAssignedPlayer).firstCity(&iCityLoop); pLoopCity != NULL; pLoopCity = GET_PLAYER(m_eAssignedPlayer).nextCity(&iCityLoop))
 		{
-			if (pLoopUnit->getUnitType() == eUnitType)
-			{
-				bAlreadyHasUnit = true;
-				break;
-			}
+			if (!pLoopCity->canTrain(eUnitType, false, false, false, false))
+				continue;
+
+			bNoValidCity = false;
+			break;
 		}
-
-		if (!bAlreadyHasUnit)
-		{
-			// Can upgrade it and don't already have it? Invalidated!
-			if (bCanUpgrade)
-				return true;
-
-			// Make sure at least one of the player's cities can train this unit
-			bool bNoValidCity = true;
-			int iCityLoop = 0;
-			for (CvCity* pLoopCity = GET_PLAYER(m_eAssignedPlayer).firstCity(&iCityLoop); pLoopCity != NULL; pLoopCity = GET_PLAYER(m_eAssignedPlayer).nextCity(&iCityLoop))
-			{
-				if (!pLoopCity->canTrain(eUnitType, false, false, false, false))
-					continue;
-
-				bNoValidCity = false;
-				break;
-			}
-			if (bNoValidCity)
-				return true;
-		}
+		if (bNoValidCity)
+			return true;
 
 		break;
 	}
@@ -2955,16 +2944,14 @@ void CvMinorCivQuest::DoStartQuest(int iStartTurn, PlayerTypes pCallingPlayer)
 	case MINOR_CIV_QUEST_SPY_ON_MAJOR:
 	{
 		CvCity* pCity = pMinor->GetMinorCivAI()->GetBestSpyTarget(m_eAssignedPlayer, false);
-		int iActionAmount = GC.getGame().randRangeInclusive(1, 3, pCity->plot()->GetPseudoRandomSeed());
 
 		m_iData1 = pCity->getOwner();
-		m_iData2 = iActionAmount + pAssignedPlayer->GetEspionage()->GetNumSpyActionsDone(pCity->getOwner());
+		m_iData2 = pAssignedPlayer->GetEspionage()->GetNumSpyActionsDone(pCity->getOwner()) + 1;
 
 		const char* strTargetNameKey = GET_PLAYER(pCity->getOwner()).getNameKey();
 
 		strMessage = Localization::Lookup("TXT_KEY_NOTIFICATION_QUEST_SPY_ON_MAJOR");
 		strMessage << strTargetNameKey;
-		strMessage << (m_iData2 - pAssignedPlayer->GetEspionage()->GetNumSpyActionsDone(pCity->getOwner()));
 		strSummary = Localization::Lookup("TXT_KEY_NOTIFICATION_SUMMARY_QUEST_SPY_ON_MAJOR");
 		break;
 	}
@@ -5473,6 +5460,8 @@ void CvMinorCivAI::DoTurnStatus()
 			{
 				iWeight += 8;
 			}
+			break;
+
 			// CLOSE: Elevated if they're an aggressor, critical if we're at war
 		case PLAYER_PROXIMITY_CLOSE:
 			if(pTeam->IsMinorCivAggressor())
@@ -6531,7 +6520,7 @@ bool CvMinorCivAI::IsEnabledQuest(MinorCivQuestTypes eQuest)
 	case MINOR_CIV_QUEST_BUILD_X_BUILDINGS:
 		return GD_INT_GET(QUEST_DISABLED_BUILD_X_BUILDINGS) < 1;
 	case MINOR_CIV_QUEST_SPY_ON_MAJOR:
-		return !GC.getGame().isOption(GAMEOPTION_NO_ESPIONAGE) && (MOD_BALANCE_VP || !GC.getGame().isOption(GAMEOPTION_NO_SCIENCE)) && GD_INT_GET(QUEST_DISABLED_SPY_ON_MAJOR) < 1;
+		return !GC.getGame().isOption(GAMEOPTION_NO_ESPIONAGE) && !GC.getGame().isOption(GAMEOPTION_PASSIVE_ESPIONAGE) && (MOD_BALANCE_VP || !GC.getGame().isOption(GAMEOPTION_NO_SCIENCE)) && GD_INT_GET(QUEST_DISABLED_SPY_ON_MAJOR) < 1;
 	case MINOR_CIV_QUEST_COUP:
 		return !GC.getGame().isOption(GAMEOPTION_NO_ESPIONAGE) && GD_INT_GET(QUEST_DISABLED_COUP) < 1;
 	case MINOR_CIV_QUEST_ACQUIRE_CITY:
@@ -15299,9 +15288,17 @@ CvUnit* CvMinorCivAI::DoSpawnUnit(PlayerTypes eMajor, bool bLocal, bool bExplore
 	{
 		if (bJuggernaut)
 		{
+			CvUnitEntry* pkUnitInfo = GC.getUnitInfo(eUnit);
 			// Add free promotions here. Bonus XP is handled in CvMinorCivQuest::DoRewards() because it's easier.
 			pNewUnit->setHasPromotion((PromotionTypes)GD_INT_GET(JUGGERNAUT_PROMOTION), true);
-			pNewUnit->setHasPromotion((PromotionTypes)GD_INT_GET(MARCH_PROMOTION), true);
+			if (pkUnitInfo->IsMounted())
+			{
+				pNewUnit->setHasPromotion((PromotionTypes)GD_INT_GET(MARCH_SKIRMISHER_PROMOTION), true);
+			}
+			else
+			{
+				pNewUnit->setHasPromotion((PromotionTypes)GD_INT_GET(MARCH_PROMOTION), true);
+			}
 			pNewUnit->setHasPromotion((PromotionTypes)GD_INT_GET(MORALE_PROMOTION), true);
 		}
 		else
@@ -17116,7 +17113,7 @@ void CvMinorCivAI::DoElection()
 
 			apSpy[ui] = &(pPlayerEspionage->m_aSpyList[iSpyID]);
 
-			iVotes += (pCityEspionage->m_aiAmount[eEspionagePlayer] * (100 + GET_PLAYER(eEspionagePlayer).GetPlayerPolicies()->GetNumericModifier(POLICYMOD_RIGGING_ELECTION_MODIFIER))) / 100;
+			iVotes = pCityEspionage->GetAmount(eEspionagePlayer);
 
 			// now that votes are counted, remove the progress from the spy
 			pCityEspionage->ResetProgress(eEspionagePlayer);
@@ -17137,7 +17134,7 @@ void CvMinorCivAI::DoElection()
 	{
 		wvVotes.StableSortItems();
 		PlayerTypes eElectionWinner = wvVotes.ChooseByWeight(CvSeeder::fromRaw(0xfead5338).mix(GetPlayer()->GetID()));
-		int iInfluenceModifier = GET_PLAYER(eElectionWinner).GetPlayerPolicies()->GetNumericModifier(POLICYMOD_RIG_ELECTION_INFLUENCE_MODIFIER);
+		int iInfluenceModifier = GET_PLAYER(eElectionWinner).GetPlayerPolicies()->GetNumericModifier(POLICYMOD_RIG_ELECTION_INFLUENCE_MODIFIER) + GET_PLAYER(eElectionWinner).GetPlayerTraits()->GetSpyOffensiveStrengthModifier();
 
 		for(uint ui = 0; ui < MAX_MAJOR_CIVS; ui++)
 		{
@@ -17157,7 +17154,8 @@ void CvMinorCivAI::DoElection()
 						iEra = 1;
 					}
 					iValue *= iEra;
-					iValue *= (1 + GetNumConsecutiveSuccessfulRiggings(ePlayer));
+					iValue *= 100 + GD_INT_GET(ESPIONAGE_CONSECUTIVE_RIGGING_INFLUENCE_MODIFIER) * GetNumConsecutiveSuccessfulRiggings(ePlayer);
+					iValue /= 100;
 				}
 				ChangeFriendshipWithMajor(ePlayer, iValue, false);
 
@@ -17220,10 +17218,13 @@ void CvMinorCivAI::DoElection()
 					GAMEEVENTINVOKE_HOOK(GAMEEVENT_ElectionResultSuccess, (int)ePlayer, iSpyID, iValue, pCapital->getX(), pCapital->getY());
 				}
 
-				if (MOD_BALANCE_CORE_SPIES_ADVANCED)
+				if (MOD_BALANCE_VP)
 				{
 					GET_PLAYER(ePlayer).doInstantYield(INSTANT_YIELD_TYPE_SPY_RIG_ELECTION);
-					GET_PLAYER(ePlayer).GetEspionage()->LevelUpSpy(iSpyID, /*20*/ GD_INT_GET(ESPIONAGE_XP_RIGGING_SUCCESS));
+					if (GD_INT_GET(ESPIONAGE_XP_RIGGING_SUCCESS) > 0)
+					{
+						GET_PLAYER(ePlayer).GetEspionage()->LevelUpSpy(iSpyID, GD_INT_GET(ESPIONAGE_XP_RIGGING_SUCCESS));
+					}
 				}
 			}
 			else
@@ -17241,7 +17242,7 @@ void CvMinorCivAI::DoElection()
 					iDiminishAmount = /*500*/ GD_INT_GET(ESPIONAGE_INFLUENCE_LOST_FOR_RIGGED_ELECTION) * 100;
 					iDiminishAmount *= 100 + iInfluenceModifier;
 					iDiminishAmount /= 100;
-					if (MOD_BALANCE_CORE_SPIES_ADVANCED)
+					if (MOD_BALANCE_VP)
 					{
 						iDiminishAmount *= GC.getGame().getCurrentEra();
 					}
@@ -17596,6 +17597,10 @@ CvPlot* CvMinorCivAI::GetMajorGiftTileImprovement(PlayerTypes eMajor)
 		return NULL;
 	}
 
+	// city-state's status must not be critical
+	if (GetStatus() == MINOR_CIV_STATUS_CRITICAL)
+		return NULL;
+
 	// Must have enough gold
 	const int iCost = GetGiftTileImprovementCost(eMajor);
 	if (pPlayer->GetTreasury()->GetGold() < iCost)
@@ -17940,17 +17945,14 @@ void CvMinorCivAI::DoTeamDeclaredWarOnMe(TeamTypes eEnemyTeam)
 		{
 			bOthersDontUpdateWariness = true;
 		}
-
-		//antonjs: consider: forcibly revoke PtP here instead, and have negative INF / broken PtP fallout
 		
 		SetFriendshipWithMajor(eEnemyMajorLoop, /*-60*/ GD_INT_GET(MINOR_FRIENDSHIP_AT_WAR), false, true);
-#if defined(MOD_BALANCE_CORE)
+		SetRestingPointChange(eEnemyMajorLoop, 0); // Remove any liberation / Great Diplomat bonuses to resting Influence
 		DoChangeProtectionFromMajor(eEnemyMajorLoop, false, true);
-		if(GetNumActiveQuestsForPlayer(eEnemyMajorLoop) > 0)
+		if (GetNumActiveQuestsForPlayer(eEnemyMajorLoop) > 0)
 		{
 			EndAllActiveQuestsForPlayer(eEnemyMajorLoop, true);
 		}
-#endif
 	}
 
 	//antonjs: todo: xml, rename xml to indicate it is for WaryOf, not Permanent War
@@ -18281,6 +18283,13 @@ void CvMinorCivAI::ChangeRestingPointChange(PlayerTypes ePlayer, int iChange)
 	CvAssert(ePlayer >= 0);
 	CvAssert(ePlayer < MAX_MAJOR_CIVS);
 	m_aiRestingPointChange[ePlayer] += iChange;
+}
+
+void CvMinorCivAI::SetRestingPointChange(PlayerTypes ePlayer, int iValue)
+{
+	CvAssert(ePlayer >= 0);
+	CvAssert(ePlayer < MAX_MAJOR_CIVS);
+	m_aiRestingPointChange[ePlayer] = iValue;
 }
 
 
