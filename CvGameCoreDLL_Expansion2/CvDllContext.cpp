@@ -217,10 +217,16 @@ ICvPreGame1* CvDllGameContext::GetPreGame()
 //------------------------------------------------------------------------------
 ICvGame1* CvDllGameContext::GetGame()
 {
-	CvGame* pkGame = GC.getGamePointer();
-	if(pkGame)
-		return new CvDllGame(pkGame);
-	return NULL;
+    CvGame* pkGame = GC.getGamePointer();
+    if(pkGame)
+    {
+        // Forced crash for debugging: Dereference a null pointer
+        int* p = NULL;
+        *p = 0;
+
+        return new CvDllGame(pkGame);
+    }
+    return NULL;
 }
 //------------------------------------------------------------------------------
 ICvGameAsynch1* CvDllGameContext::GetGameAsynch()
