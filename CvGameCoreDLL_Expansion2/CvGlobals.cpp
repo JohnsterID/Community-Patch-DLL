@@ -2416,14 +2416,15 @@ void GenerateUniqueFileName(TCHAR* szFileName, size_t bufferSize)
         st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
 }
 
-// Helper function to log messages to a file with the same filename as the minidump
-void LogMessageToMinidump(const TCHAR* szMessage)
+// Helper function to log messages to a file with the same filename as the minidump but with .txt extension
+void LogMessageToMinidump(const TCHAR* szFileName, const TCHAR* szMessage)
 {
-    TCHAR szFileName[MAX_PATH];
-    GenerateUniqueFileName(szFileName, MAX_PATH);
+    TCHAR szLogFileName[MAX_PATH];
+    _tcscpy_s(szLogFileName, szFileName);
+    _tcscat_s(szLogFileName, _T(".txt")); // Append .txt extension
 
     FILE* logFile;
-    _tfopen_s(&logFile, szFileName, _T("a")); // Open log file in append mode with the same filename as the minidump
+    _tfopen_s(&logFile, szLogFileName, _T("a")); // Open log file in append mode
     if (logFile)
     {
         // Concatenate message with newline
@@ -2446,7 +2447,7 @@ void CreateMiniDumpFile(EXCEPTION_POINTERS* pep)
     HANDLE hFile = CreateFile(szFileName, GENERIC_READ | GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
     if (hFile == NULL || hFile == INVALID_HANDLE_VALUE)
     {
-        LogMessageToMinidump(_T("CreateFile failed"));
+        LogMessageToMinidump(szFileName, _T("CreateFile failed"));
         return;
     }
 
@@ -2461,11 +2462,11 @@ void CreateMiniDumpFile(EXCEPTION_POINTERS* pep)
     BOOL success = MiniDumpWriteDump(GetCurrentProcess(), GetCurrentProcessId(), hFile, mdt, (pep != NULL) ? &mdei : NULL, NULL, NULL);
     if (!success)
     {
-        LogMessageToMinidump(_T("MiniDumpWriteDump failed with MiniDumpNormal"));
+        LogMessageToMinidump(szFileName, _T("MiniDumpWriteDump failed with MiniDumpNormal"));
     }
     else
     {
-        LogMessageToMinidump(_T("MiniDumpWriteDump succeeded with MiniDumpNormal"));
+        LogMessageToMinidump(szFileName, _T("MiniDumpWriteDump succeeded with MiniDumpNormal"));
     }
 
     // Now test with each individual flag
@@ -2496,12 +2497,12 @@ void CreateMiniDumpFile(EXCEPTION_POINTERS* pep)
         success = MiniDumpWriteDump(GetCurrentProcess(), GetCurrentProcessId(), hFile, flags[i], (pep != NULL) ? &mdei : NULL, NULL, NULL);
         if (!success)
         {
-            LogMessageToMinidump(msg);
+            LogMessageToMinidump(szFileName, msg);
         }
         else
         {
             _stprintf_s(msg, MAX_PATH, _T("MiniDumpWriteDump succeeded with flag %s"), flagNames[i]);
-            LogMessageToMinidump(msg);
+            LogMessageToMinidump(szFileName, msg);
         }
     }
 
@@ -2516,12 +2517,12 @@ void CreateMiniDumpFile(EXCEPTION_POINTERS* pep)
             success = MiniDumpWriteDump(GetCurrentProcess(), GetCurrentProcessId(), hFile, combinedFlags, (pep != NULL) ? &mdei : NULL, NULL, NULL);
             if (!success)
             {
-                LogMessageToMinidump(msg);
+                LogMessageToMinidump(szFileName, msg);
             }
             else
             {
                 _stprintf_s(msg, MAX_PATH, _T("MiniDumpWriteDump succeeded with combined flags %s and %s"), flagNames[i], flagNames[j]);
-                LogMessageToMinidump(msg);
+                LogMessageToMinidump(szFileName, msg);
             }
         }
     }
