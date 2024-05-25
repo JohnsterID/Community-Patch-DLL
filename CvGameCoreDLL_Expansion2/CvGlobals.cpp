@@ -2416,6 +2416,26 @@ void GenerateUniqueFileName(TCHAR* szFileName, size_t bufferSize)
         st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
 }
 
+// Helper function to log messages to a file with the same filename as the minidump
+void LogMessageToMinidump(const TCHAR* szMessage)
+{
+    TCHAR szFileName[MAX_PATH];
+    GenerateUniqueFileName(szFileName, MAX_PATH);
+
+    FILE* logFile;
+    _tfopen_s(&logFile, szFileName, _T("a")); // Open log file in append mode with the same filename as the minidump
+    if (logFile)
+    {
+        // Concatenate message with newline
+        TCHAR szLogMessage[MAX_PATH];
+        _tcscpy_s(szLogMessage, MAX_PATH, szMessage);
+        _tcscat_s(szLogMessage, MAX_PATH, _T("\n"));
+
+        _ftprintf(logFile, _T("%s"), szLogMessage);
+        fclose(logFile);
+    }
+}
+
 // Helper function to create a minidump file
 void CreateMiniDumpFile(EXCEPTION_POINTERS* pep)
 {
@@ -2426,7 +2446,7 @@ void CreateMiniDumpFile(EXCEPTION_POINTERS* pep)
     HANDLE hFile = CreateFile(szFileName, GENERIC_READ | GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
     if (hFile == NULL || hFile == INVALID_HANDLE_VALUE)
     {
-        _tprintf(_T("CreateFile failed. Error: %lu \n"), GetLastError());
+        LogMessageToMinidump(_T("CreateFile failed"));
         return;
     }
 
@@ -2436,26 +2456,74 @@ void CreateMiniDumpFile(EXCEPTION_POINTERS* pep)
     mdei.ExceptionPointers = pep;
     mdei.ClientPointers = FALSE;
 
-    MINIDUMP_TYPE mdt = static_cast<MINIDUMP_TYPE>(
-        MiniDumpWithFullMemory | MiniDumpWithHandleData | MiniDumpWithThreadInfo |
-        MiniDumpWithUnloadedModules | MiniDumpWithIndirectlyReferencedMemory |
-        MiniDumpWithCodeSegs | MiniDumpWithDataSegs
-    );
-
-    // Additional user stream information
-    // MINIDUMP_USER_STREAM_INFORMATION musi;
-    // MINIDUMP_USER_STREAM mus[1];
-    // char customInfo[] = "Custom metadata or additional context information";
-    // mus[0].Type = CommentStreamA;
-    // mus[0].Buffer = customInfo;
-    // mus[0].BufferSize = sizeof(customInfo);
-    // musi.UserStreamCount = 1;
-    // musi.UserStreamArray = mus;
-
+    // Test with MiniDumpNormal first
+    MINIDUMP_TYPE mdt = MiniDumpNormal;
     BOOL success = MiniDumpWriteDump(GetCurrentProcess(), GetCurrentProcessId(), hFile, mdt, (pep != NULL) ? &mdei : NULL, NULL, NULL);
     if (!success)
     {
-        _tprintf(_T("MiniDumpWriteDump failed. Error: %lu \n"), GetLastError());
+        LogMessageToMinidump(_T("MiniDumpWriteDump failed with MiniDumpNormal"));
+    }
+    else
+    {
+        LogMessageToMinidump(_T("MiniDumpWriteDump succeeded with MiniDumpNormal"));
+    }
+
+    // Now test with each individual flag
+    MINIDUMP_TYPE flags[] = {
+        MiniDumpWithFullMemory,
+        MiniDumpWithHandleData,
+        MiniDumpWithThreadInfo,
+        MiniDumpWithUnloadedModules,
+        MiniDumpWithIndirectlyReferencedMemory,
+        MiniDumpWithCodeSegs,
+        MiniDumpWithDataSegs
+    };
+
+    const TCHAR* flagNames[] = {
+        _T("MiniDumpWithFullMemory"),
+        _T("MiniDumpWithHandleData"),
+        _T("MiniDumpWithThreadInfo"),
+        _T("MiniDumpWithUnloadedModules"),
+        _T("MiniDumpWithIndirectlyReferencedMemory"),
+        _T("MiniDumpWithCodeSegs"),
+        _T("MiniDumpWithDataSegs")
+    };
+
+    for (int i = 0; i < sizeof(flags) / sizeof(flags[0]); ++i)
+    {
+        TCHAR msg[MAX_PATH];
+        _stprintf_s(msg, MAX_PATH, _T("MiniDumpWriteDump failed with flag %s"), flagNames[i]);
+        success = MiniDumpWriteDump(GetCurrentProcess(), GetCurrentProcessId(), hFile, flags[i], (pep != NULL) ? &mdei : NULL, NULL, NULL);
+        if (!success)
+        {
+            LogMessageToMinidump(msg);
+        }
+        else
+        {
+            _stprintf_s(msg, MAX_PATH, _T("MiniDumpWriteDump succeeded with flag %s"), flagNames[i]);
+            LogMessageToMinidump(msg);
+        }
+    }
+
+    // Incremental combination test
+    for (int i = 0; i < sizeof(flags) / sizeof(flags[0]); ++i)
+    {
+        for (int j = i + 1; j < sizeof(flags) / sizeof(flags[0]); ++j)
+        {
+            MINIDUMP_TYPE combinedFlags = static_cast<MINIDUMP_TYPE>(flags[i] | flags[j]);
+            TCHAR msg[MAX_PATH];
+            _stprintf_s(msg, MAX_PATH, _T("MiniDumpWriteDump failed with combined flags %s and %s"), flagNames[i], flagNames[j]);
+            success = MiniDumpWriteDump(GetCurrentProcess(), GetCurrentProcessId(), hFile, combinedFlags, (pep != NULL) ? &mdei : NULL, NULL, NULL);
+            if (!success)
+            {
+                LogMessageToMinidump(msg);
+            }
+            else
+            {
+                _stprintf_s(msg, MAX_PATH, _T("MiniDumpWriteDump succeeded with combined flags %s and %s"), flagNames[i], flagNames[j]);
+                LogMessageToMinidump(msg);
+            }
+        }
     }
 
     CloseHandle(hFile);
@@ -2464,17 +2532,7 @@ void CreateMiniDumpFile(EXCEPTION_POINTERS* pep)
 // Custom exception filter to trigger minidump creation
 LONG WINAPI CustomFilter(EXCEPTION_POINTERS* ExceptionInfo)
 {
-    // Check if a breakpoint exception occurred (0x80000003)
-    if (ExceptionInfo->ExceptionRecord->ExceptionCode == EXCEPTION_BREAKPOINT)
-    {
-        // Trigger minidump creation when a breakpoint is hit
-        CreateMiniDumpFile(ExceptionInfo);
-        return EXCEPTION_CONTINUE_SEARCH; // Continue searching for other exception handlers
-    }
-
-    // For other exceptions, create the minidump as usual
     CreateMiniDumpFile(ExceptionInfo);
-
     return EXCEPTION_EXECUTE_HANDLER;
 }
 

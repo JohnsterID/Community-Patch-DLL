@@ -26,7 +26,7 @@ CvDllGame::CvDllGame(CvGame* pGame)
 		gDLL->GetGameCoreLock();
 
     // Forced crash for debugging: Dereference a null pointer
-    int* p = nullptr;
+    int* p = NULL;
     *p = 0;
 }
 //------------------------------------------------------------------------------
