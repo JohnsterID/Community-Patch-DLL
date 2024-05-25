@@ -2457,44 +2457,51 @@ void CreateMiniDumpFile(EXCEPTION_POINTERS* pep)
     mdei.ExceptionPointers = pep;
     mdei.ClientPointers = FALSE;
 
-    // Test with MiniDumpNormal first
-    MINIDUMP_TYPE mdt = MiniDumpNormal;
-    BOOL success = MiniDumpWriteDump(GetCurrentProcess(), GetCurrentProcessId(), hFile, mdt, (pep != NULL) ? &mdei : NULL, NULL, NULL);
-    if (!success)
-    {
-        LogMessageToMinidump(szFileName, _T("MiniDumpWriteDump failed with MiniDumpNormal"));
-    }
-    else
-    {
-        LogMessageToMinidump(szFileName, _T("MiniDumpWriteDump succeeded with MiniDumpNormal"));
-    }
-
-    // Now test with each individual flag
+#if defined(_DEBUG)
+    // Debug build flags
     MINIDUMP_TYPE flags[] = {
+        MiniDumpNormal,
         MiniDumpWithFullMemory,
         MiniDumpWithHandleData,
         MiniDumpWithThreadInfo,
-        MiniDumpWithUnloadedModules,
         MiniDumpWithIndirectlyReferencedMemory,
+        MiniDumpWithUnloadedModules,
         MiniDumpWithCodeSegs,
         MiniDumpWithDataSegs
     };
 
     const TCHAR* flagNames[] = {
+        _T("MiniDumpNormal"),
         _T("MiniDumpWithFullMemory"),
         _T("MiniDumpWithHandleData"),
         _T("MiniDumpWithThreadInfo"),
-        _T("MiniDumpWithUnloadedModules"),
         _T("MiniDumpWithIndirectlyReferencedMemory"),
+        _T("MiniDumpWithUnloadedModules"),
         _T("MiniDumpWithCodeSegs"),
         _T("MiniDumpWithDataSegs")
     };
+#else
+    // Release build flags
+    MINIDUMP_TYPE flags[] = {
+        MiniDumpNormal,
+        MiniDumpWithUnloadedModules,
+        MiniDumpWithCodeSegs,
+        MiniDumpWithDataSegs
+    };
+
+    const TCHAR* flagNames[] = {
+        _T("MiniDumpNormal"),
+        _T("MiniDumpWithUnloadedModules"),
+        _T("MiniDumpWithCodeSegs"),
+        _T("MiniDumpWithDataSegs")
+    };
+#endif
 
     for (int i = 0; i < sizeof(flags) / sizeof(flags[0]); ++i)
     {
         TCHAR msg[MAX_PATH];
         _stprintf_s(msg, MAX_PATH, _T("MiniDumpWriteDump failed with flag %s"), flagNames[i]);
-        success = MiniDumpWriteDump(GetCurrentProcess(), GetCurrentProcessId(), hFile, flags[i], (pep != NULL) ? &mdei : NULL, NULL, NULL);
+        BOOL success = MiniDumpWriteDump(GetCurrentProcess(), GetCurrentProcessId(), hFile, flags[i], (pep != NULL) ? &mdei : NULL, NULL, NULL);
         if (!success)
         {
             LogMessageToMinidump(szFileName, msg);
@@ -2503,27 +2510,6 @@ void CreateMiniDumpFile(EXCEPTION_POINTERS* pep)
         {
             _stprintf_s(msg, MAX_PATH, _T("MiniDumpWriteDump succeeded with flag %s"), flagNames[i]);
             LogMessageToMinidump(szFileName, msg);
-        }
-    }
-
-    // Incremental combination test
-    for (int i = 0; i < sizeof(flags) / sizeof(flags[0]); ++i)
-    {
-        for (int j = i + 1; j < sizeof(flags) / sizeof(flags[0]); ++j)
-        {
-            MINIDUMP_TYPE combinedFlags = static_cast<MINIDUMP_TYPE>(flags[i] | flags[j]);
-            TCHAR msg[MAX_PATH];
-            _stprintf_s(msg, MAX_PATH, _T("MiniDumpWriteDump failed with combined flags %s and %s"), flagNames[i], flagNames[j]);
-            success = MiniDumpWriteDump(GetCurrentProcess(), GetCurrentProcessId(), hFile, combinedFlags, (pep != NULL) ? &mdei : NULL, NULL, NULL);
-            if (!success)
-            {
-                LogMessageToMinidump(szFileName, msg);
-            }
-            else
-            {
-                _stprintf_s(msg, MAX_PATH, _T("MiniDumpWriteDump succeeded with combined flags %s and %s"), flagNames[i], flagNames[j]);
-                LogMessageToMinidump(szFileName, msg);
-            }
         }
     }
 
