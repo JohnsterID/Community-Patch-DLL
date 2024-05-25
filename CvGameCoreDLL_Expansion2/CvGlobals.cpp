@@ -2451,6 +2451,13 @@ void CreateMiniDumpFile(EXCEPTION_POINTERS* pep)
         return;
     }
 
+    // Log whether the _DEBUG macro is defined
+#ifdef _DEBUG
+    LogMessageToMinidump(szFileName, _T("_DEBUG macro is defined"));
+#else
+    LogMessageToMinidump(szFileName, _T("_DEBUG macro is NOT defined"));
+#endif
+
     // Create the minidump with specified flags
     MINIDUMP_EXCEPTION_INFORMATION mdei;
     mdei.ThreadId = GetCurrentThreadId();
@@ -2480,6 +2487,8 @@ void CreateMiniDumpFile(EXCEPTION_POINTERS* pep)
         _T("MiniDumpWithCodeSegs"),
         _T("MiniDumpWithDataSegs")
     };
+
+    LogMessageToMinidump(szFileName, _T("Using debug build flags for minidump creation:"));
 #else
     // Release build flags
     MINIDUMP_TYPE flags[] = {
@@ -2495,6 +2504,8 @@ void CreateMiniDumpFile(EXCEPTION_POINTERS* pep)
         _T("MiniDumpWithCodeSegs"),
         _T("MiniDumpWithDataSegs")
     };
+
+    LogMessageToMinidump(szFileName, _T("Using release build flags for minidump creation:"));
 #endif
 
     for (int i = 0; i < sizeof(flags) / sizeof(flags[0]); ++i)
