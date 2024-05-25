@@ -2412,54 +2412,152 @@ PlayerTypes GetCurrentPlayer()
 /************************************************************************************************/
 
 #pragma comment (lib, "dbghelp.lib")
-void CreateMiniDump(EXCEPTION_POINTERS *pep)
+// Helper function to generate a unique file name based on date and time
+void GenerateUniqueFileName(TCHAR* szFileName, size_t bufferSize)
 {
-#ifdef STACKWALKER
-	{
-		/* Try to log the callstack */
-		FILogFile* pLog=LOGFILEMGR.GetLog( "Callstack.log", FILogFile::kDontTimeStamp );
-		if (pLog)
-		{
-			pLog->Msg("Gamecore Callstack\n");
+    SYSTEMTIME st;
+    GetLocalTime(&st);
+    _stprintf_s(szFileName, bufferSize, _T("CvMiniDump_%04d%02d%02d_%02d%02d%02d.dmp"),
+        st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
+}
 
-			gStackWalker.SetLog(pLog);	
-			gStackWalker.ShowCallstack(INT_MAX, GetCurrentThread(), pep ? pep->ContextRecord : NULL );
-			gStackWalker.SetLog(NULL);
+// Helper function to log messages to a file with the same filename as the minidump but with .txt extension
+void LogMessageToMinidump(const TCHAR* szFileName, const TCHAR* szMessage)
+{
+    TCHAR szLogFileName[MAX_PATH];
+    _tcscpy_s(szLogFileName, szFileName);
+    _tcscat_s(szLogFileName, _T(".txt")); // Append .txt extension
 
-			pLog->Msg("\nLua Callstack\n");
-			if (gLuaState)
-				LuaSupport::DumpCallStack(gLuaState,pLog);
+    FILE* logFile;
+    _tfopen_s(&logFile, szLogFileName, _T("a")); // Open log file in append mode
+    if (logFile)
+    {
+        // Concatenate message with newline
+        TCHAR szLogMessage[MAX_PATH];
+        _tcscpy_s(szLogMessage, MAX_PATH, szMessage);
+        _tcscat_s(szLogMessage, MAX_PATH, _T("\n"));
 
-			pLog->Close();
-		}
-	}
+        _ftprintf(logFile, _T("%s"), szLogMessage);
+        fclose(logFile);
+    }
+}
+
+// Helper function to create a minidump file
+void CreateMiniDumpFile(EXCEPTION_POINTERS* pep)
+{
+    TCHAR szFileName[MAX_PATH];
+    GenerateUniqueFileName(szFileName, MAX_PATH);
+
+    // Open a file to store the minidump
+    HANDLE hFile = CreateFile(szFileName, GENERIC_READ | GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (hFile == NULL || hFile == INVALID_HANDLE_VALUE)
+    {
+        LogMessageToMinidump(szFileName, _T("CreateFile failed"));
+        return;
+    }
+
+    // Log whether the _DEBUG macro is defined
+#ifdef _DEBUG
+    LogMessageToMinidump(szFileName, _T("_DEBUG macro is defined"));
+#else
+    LogMessageToMinidump(szFileName, _T("_DEBUG macro is NOT defined"));
 #endif
 
-	/* Open a file to store the minidump. */
-	HANDLE hFile = CreateFile(_T("CvMiniDump.dmp"), GENERIC_READ | GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-	if((hFile == NULL) || (hFile == INVALID_HANDLE_VALUE)) {
-		_tprintf(_T("CreateFile failed. Error: %lu \n"), GetLastError());
-		return;
-	}
+    // Create the minidump with specified flags
+    MINIDUMP_EXCEPTION_INFORMATION mdei;
+    mdei.ThreadId = GetCurrentThreadId();
+    mdei.ExceptionPointers = pep;
+    mdei.ClientPointers = FALSE;
 
-	/* Create the minidump. */
-	MINIDUMP_EXCEPTION_INFORMATION mdei;
-	mdei.ThreadId           = GetCurrentThreadId();
-	mdei.ExceptionPointers  = pep;
-	mdei.ClientPointers     = FALSE;
+#if defined(_DEBUG)
+    // Debug build flags
+    MINIDUMP_TYPE flags[] = {
+        MiniDumpNormal,
+        MiniDumpWithFullMemory,
+        MiniDumpWithHandleData,
+        MiniDumpWithThreadInfo,
+        MiniDumpWithIndirectlyReferencedMemory,
+        MiniDumpWithUnloadedModules,
+        MiniDumpWithCodeSegs,
+        MiniDumpWithDataSegs
+    };
 
-	MINIDUMP_TYPE mdt       = MiniDumpNormal;
+    const TCHAR* flagNames[] = {
+        _T("MiniDumpNormal"),
+        _T("MiniDumpWithFullMemory"),
+        _T("MiniDumpWithHandleData"),
+        _T("MiniDumpWithThreadInfo"),
+        _T("MiniDumpWithIndirectlyReferencedMemory"),
+        _T("MiniDumpWithUnloadedModules"),
+        _T("MiniDumpWithCodeSegs"),
+        _T("MiniDumpWithDataSegs")
+    };
 
-	MiniDumpWriteDump(GetCurrentProcess(), GetCurrentProcessId(), hFile, mdt, (pep != NULL) ? &mdei : NULL, NULL, NULL);
+    LogMessageToMinidump(szFileName, _T("Using debug build flags for minidump creation:"));
+#else
+    // Release build flags
+    MINIDUMP_TYPE flags[] = {
+        MiniDumpNormal,
+        MiniDumpWithUnloadedModules,
+        MiniDumpWithCodeSegs,
+        MiniDumpWithDataSegs
+    };
 
-	CloseHandle(hFile);
+    const TCHAR* flagNames[] = {
+        _T("MiniDumpNormal"),
+        _T("MiniDumpWithUnloadedModules"),
+        _T("MiniDumpWithCodeSegs"),
+        _T("MiniDumpWithDataSegs")
+    };
+
+    LogMessageToMinidump(szFileName, _T("Using release build flags for minidump creation:"));
+#endif
+
+    for (int i = 0; i < sizeof(flags) / sizeof(flags[0]); ++i)
+    {
+        TCHAR msg[MAX_PATH];
+        _stprintf_s(msg, MAX_PATH, _T("MiniDumpWriteDump failed with flag %s"), flagNames[i]);
+        BOOL success = MiniDumpWriteDump(GetCurrentProcess(), GetCurrentProcessId(), hFile, flags[i], (pep != NULL) ? &mdei : NULL, NULL, NULL);
+        if (!success)
+        {
+            LogMessageToMinidump(szFileName, msg);
+        }
+        else
+        {
+            _stprintf_s(msg, MAX_PATH, _T("MiniDumpWriteDump succeeded with flag %s"), flagNames[i]);
+            LogMessageToMinidump(szFileName, msg);
+        }
+    }
+
+    CloseHandle(hFile);
 }
 
-LONG WINAPI CustomFilter(EXCEPTION_POINTERS *ExceptionInfo)
+// Custom exception filter to trigger minidump creation
+LONG WINAPI CustomFilter(EXCEPTION_POINTERS* ExceptionInfo)
 {
-	CreateMiniDump(ExceptionInfo);
-	return EXCEPTION_EXECUTE_HANDLER;
+    CreateMiniDumpFile(ExceptionInfo);
+    return EXCEPTION_EXECUTE_HANDLER;
 }
+
+// Function to trigger a manual minidump (user-mode dump control)
+void TriggerManualMiniDump()
+{
+    CONTEXT context;
+    RtlCaptureContext(&context);
+
+    EXCEPTION_RECORD exceptionRecord;
+    memset(&exceptionRecord, 0, sizeof(EXCEPTION_RECORD));
+    exceptionRecord.ExceptionAddress = _ReturnAddress();
+    exceptionRecord.ExceptionCode = EXCEPTION_BREAKPOINT;
+    exceptionRecord.ExceptionFlags = 0;
+
+    EXCEPTION_POINTERS exceptionPointers;
+    exceptionPointers.ContextRecord = &context;
+    exceptionPointers.ExceptionRecord = &exceptionRecord;
+
+    CreateMiniDumpFile(&exceptionPointers);
+}
+
 #endif
 
 //
