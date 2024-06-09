@@ -12,9 +12,28 @@
 #ifndef _CVASSERT_H
 #define _CVASSERT_H
 #pragma once
+#include <iostream> // Added to include std::cerr and std::cin
 #include <set>
 
-bool CvAssertDlg(const char* expr, const char* szFile, unsigned int uiLine, bool& bIgnoreAlways, const char* msg);
+// Use inline to avoid multiple definition issues
+inline bool CvAssertDlg(const char* expr, const char* szFile, unsigned int uiLine, bool& bIgnoreAlways, const char* msg)
+{
+    std::cerr << "Assertion failed: " << expr << "\n"
+              << "File: " << szFile << "\n"
+              << "Line: " << uiLine << "\n"
+              << "Message: " << (msg ? msg : "") << "\n"
+              << "Ignore always (0/1): ";
+
+    int response = 0;
+    std::cin >> response;
+
+    if (response == 1)
+    {
+        bIgnoreAlways = true;
+    }
+
+    return true; // Returning true to trigger the breakpoint
+}
 
 // Set breakpoint creation macros
 #if defined (_WIN32)
