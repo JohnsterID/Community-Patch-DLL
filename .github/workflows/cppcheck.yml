@@ -62,12 +62,12 @@ jobs:
         run: |
           echo "Exit code: $exit_code"
 
-      - name: Upload cppcheck xml on success
-        if: ${{ env.exit_code != env.TIMEOUT_EXIT_CODE }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: cppcheck-xml
-          path: ./cppcheck.xml
+      # - name: Upload cppcheck xml on success # TODO enable when retry_analysis can detect exit code
+        # if: ${{ env.exit_code != env.TIMEOUT_EXIT_CODE }}
+        # uses: actions/upload-artifact@v4
+        # with:
+          # name: cppcheck-xml
+          # path: ./cppcheck.xml
 
   retry_analysis:
     runs-on: ubuntu-22.04
