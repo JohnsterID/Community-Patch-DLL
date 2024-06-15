@@ -382,26 +382,14 @@ void CvCityCitizens::DoTurn()
 			}
 		}
 
-#if defined(MOD_GLOBAL_CITY_AUTOMATON_WORKERS)
 		CvAssertMsg((GetNumCitizensWorkingPlots() + GetTotalSpecialistCount() + GetNumUnassignedCitizens()) <= GetCity()->getPopulation(true), "Gameplay: More workers than population in the city.");
-#else
-		CvAssertMsg((GetNumCitizensWorkingPlots() + GetTotalSpecialistCount() + GetNumUnassignedCitizens()) <= GetCity()->getPopulation(), "Gameplay: More workers than population in the city.");
-#endif
 		DoReallocateCitizens(bForceCheck);
 	}
 
-#if defined(MOD_GLOBAL_CITY_AUTOMATON_WORKERS)
 	CvAssertMsg((GetNumCitizensWorkingPlots() + GetTotalSpecialistCount() + GetNumUnassignedCitizens()) <= GetCity()->getPopulation(true), "Gameplay: More workers than population in the city.");
-#else
-	CvAssertMsg((GetNumCitizensWorkingPlots() + GetTotalSpecialistCount() + GetNumUnassignedCitizens()) <= GetCity()->getPopulation(), "Gameplay: More workers than population in the city.");
-#endif
 	DoSpecialists();
 
-#if defined(MOD_GLOBAL_CITY_AUTOMATON_WORKERS)
 	CvAssertMsg((GetNumCitizensWorkingPlots() + GetTotalSpecialistCount() + GetNumUnassignedCitizens()) <= GetCity()->getPopulation(true), "Gameplay: More workers than population in the city.");
-#else
-	CvAssertMsg((GetNumCitizensWorkingPlots() + GetTotalSpecialistCount() + GetNumUnassignedCitizens()) <= GetCity()->getPopulation(), "Gameplay: More workers than population in the city.");
-#endif
 }
 
 int CvCityCitizens::GetBonusPlotValue(CvPlot* pPlot, YieldTypes eYield, SPrecomputedExpensiveNumbers& cache)
@@ -825,14 +813,12 @@ int CvCityCitizens::GetYieldModForFocus(YieldTypes eYield, CityAIFocusTypes eFoc
 }
 
 /// What is the Building Type the AI likes the Specialist of most right now?
-BuildingTypes CvCityCitizens::GetAIBestSpecialistBuilding(int& iSpecialistValue, bool bLogging)
+BuildingTypes CvCityCitizens::GetAIBestSpecialistBuilding(int& iSpecialistValue, SPrecomputedExpensiveNumbers& cache, bool bLogging)
 {
 	if (m_pCity->GetResistanceTurns() > 0)
 		return NO_BUILDING;
 
-	gCachedNumbers.update(m_pCity);
-
-	int iBestSpecialistValue = GetSpecialistValue((SpecialistTypes)GD_INT_GET(DEFAULT_SPECIALIST),gCachedNumbers);
+	int iBestSpecialistValue = GetSpecialistValue((SpecialistTypes)GD_INT_GET(DEFAULT_SPECIALIST), cache);
 	BuildingTypes eBestBuilding = NO_BUILDING;
 	CvBuildingEntry* pBestBuildingInfo = NULL;
 
@@ -861,7 +847,7 @@ BuildingTypes CvCityCitizens::GetAIBestSpecialistBuilding(int& iSpecialistValue,
 						iValue = specialistValueCache[eSpecialist];
 					else
 					{
-						iValue = GetSpecialistValue(eSpecialist, gCachedNumbers);
+						iValue = GetSpecialistValue(eSpecialist, cache);
 						specialistValueCache[eSpecialist] = iValue;
 					}
 
@@ -900,12 +886,10 @@ BuildingTypes CvCityCitizens::GetAIBestSpecialistBuilding(int& iSpecialistValue,
 }
 
 /// What is the Building Type the AI likes the Specialist of most right now?
-BuildingTypes CvCityCitizens::GetAIBestSpecialistCurrentlyInBuilding(int& iSpecialistValue, bool bWantBest)
+BuildingTypes CvCityCitizens::GetAIBestSpecialistCurrentlyInBuilding(int& iSpecialistValue, SPrecomputedExpensiveNumbers& cache, bool bWantBest)
 {
 	BuildingTypes eBestBuilding = NO_BUILDING;
 	int iBestSpecialistValue = bWantBest ? -INT_MAX : INT_MAX;
-
-	gCachedNumbers.update(m_pCity);
 
 	//many buildings have the same specialist yields ...
 	vector<int> checked(GC.getNumSpecialistInfos(),0);
@@ -921,7 +905,7 @@ BuildingTypes CvCityCitizens::GetAIBestSpecialistCurrentlyInBuilding(int& iSpeci
 			if (checked[eSpecialist]>0)
 				continue;
 
-			int iValue = GetSpecialistValue(eSpecialist,gCachedNumbers);
+			int iValue = GetSpecialistValue(eSpecialist, cache);
 			checked[eSpecialist] = iValue;
 
 			if (bWantBest && iValue > iBestSpecialistValue)
@@ -1300,8 +1284,11 @@ bool CvCityCitizens::DoAddBestCitizenFromUnassigned(CvCity::eUpdateMode updateMo
 	if (GetNumUnassignedCitizens() == 0)
 		return false;
 
+	//inside a loop, don't drop the global happiness!
+	gCachedNumbers.update(m_pCity, updateMode==CvCity::YIELD_UPDATE_LOCAL);
+
 	int iBestPlotValue = -1;
-	CvPlot* pBestPlot = GetBestCityPlotWithValue(iBestPlotValue, eBEST_UNWORKED_NO_OVERRIDE, bLogging);
+	CvPlot* pBestPlot = GetBestCityPlotWithValue(iBestPlotValue, eBEST_UNWORKED_NO_OVERRIDE, gCachedNumbers, bLogging);
 
 	int iNetFood100 = m_pCity->getYieldRateTimes100(YIELD_FOOD, false) - m_pCity->foodConsumptionTimes100();
 	int iNetFoodIfSpecialistWorked = iNetFood100 - m_pCity->foodConsumptionSpecialistTimes100() + m_pCity->foodConsumptionNonSpecialistTimes100();
@@ -1319,8 +1306,7 @@ bool CvCityCitizens::DoAddBestCitizenFromUnassigned(CvCity::eUpdateMode updateMo
 	BuildingTypes eBestSpecialistBuilding = NO_BUILDING;
 
 	if (bCanAffordSpecialist && !bSpecialistForbidden)
-		eBestSpecialistBuilding = GetAIBestSpecialistBuilding(iSpecialistValue, bLogging);
-
+		eBestSpecialistBuilding = GetAIBestSpecialistBuilding(iSpecialistValue, gCachedNumbers, bLogging);
 
 	if (iBestPlotValue > iSpecialistValue)
 	{
@@ -1363,18 +1349,10 @@ bool CvCityCitizens::DoAddBestCitizenFromUnassigned(CvCity::eUpdateMode updateMo
 /// Pick the worst Plot to stop working
 bool CvCityCitizens::DoRemoveWorstCitizen(CvCity::eUpdateMode updateMode, bool bRemoveForcedStatus, SpecialistTypes eDontChangeSpecialist)
 {
-#if defined(MOD_GLOBAL_CITY_AUTOMATON_WORKERS)
 	int iCurrentCityPopulation = GetCity()->getPopulation(true);
-#else
-	int iCurrentCityPopulation = GetCity()->getPopulation();
-#endif
 
 	// Are all of our guys already not working Plots?
-#if defined(MOD_GLOBAL_CITY_AUTOMATON_WORKERS)
 	if (GetNumUnassignedCitizens() == GetCity()->getPopulation(true))
-#else
-	if (GetNumUnassignedCitizens() == GetCity()->getPopulation())
-#endif
 	{
 		return false;
 	}
@@ -1404,8 +1382,9 @@ bool CvCityCitizens::DoRemoveWorstCitizen(CvCity::eUpdateMode updateMode, bool b
 	}
 
 	// No Default Specialists, remove a working Pop, if there is one
+	gCachedNumbers.update(m_pCity);
 	int iWorstPlotValue = 0;
-	CvPlot* pWorstPlot = GetBestCityPlotWithValue(iWorstPlotValue, bRemoveForcedStatus ? eWORST_WORKED_ANY : eWORST_WORKED_UNFORCED);
+	CvPlot* pWorstPlot = GetBestCityPlotWithValue(iWorstPlotValue, bRemoveForcedStatus ? eWORST_WORKED_ANY : eWORST_WORKED_UNFORCED, gCachedNumbers);
 
 	if (pWorstPlot != NULL)
 	{
@@ -1435,14 +1414,13 @@ bool CvCityCitizens::DoRemoveWorstCitizen(CvCity::eUpdateMode updateMode, bool b
 }
 
 /// Find a Plot the City is either working or not, and the best/worst value for it - this function does "double duty" depending on what the user wants to find
-CvPlot* CvCityCitizens::GetBestCityPlotWithValue(int& iChosenValue, ePlotSelectionMode eMode, bool bLogging)
+CvPlot* CvCityCitizens::GetBestCityPlotWithValue(int& iChosenValue, ePlotSelectionMode eMode, SPrecomputedExpensiveNumbers& cache, bool bLogging)
 {
 	int iBestPlotValue = (eMode<eWORST_WORKED_UNFORCED) ? -INT_MAX : INT_MAX;
 	bool bBestPlotIsForcedWork = false;
 	CvPlot* pBestPlot = NULL;
 
 	FILogFile* pLog = bLogging && GC.getLogging() ? LOGFILEMGR.GetLog("CityTileScorer.csv", FILogFile::kDontTimeStamp) : NULL;
-	gCachedNumbers.update(m_pCity);
 
 	// Look at all workable Plots
 	for (int iPlotLoop = 0; iPlotLoop < GetCity()->GetNumWorkablePlots(); iPlotLoop++)
@@ -1461,7 +1439,7 @@ CvPlot* CvCityCitizens::GetBestCityPlotWithValue(int& iChosenValue, ePlotSelecti
 		case eBEST_UNWORKED_NO_OVERRIDE:
 			if (IsCanWork(pLoopPlot) && !IsWorkingPlot(iPlotLoop))
 			{
-				iValue = GetPlotValue(pLoopPlot, gCachedNumbers);
+				iValue = GetPlotValue(pLoopPlot, cache);
 
 				//if it's forced, don't even look at the value
 				if (IsForcedWorkingPlot(iPlotLoop))
@@ -1480,7 +1458,7 @@ CvPlot* CvCityCitizens::GetBestCityPlotWithValue(int& iChosenValue, ePlotSelecti
 		case eBEST_UNWORKED_ALLOW_OVERRIDE:
 			if (IsCanWorkWithOverride(pLoopPlot) && !IsWorkingPlot(iPlotLoop))
 			{
-				iValue = GetPlotValue(pLoopPlot, gCachedNumbers);
+				iValue = GetPlotValue(pLoopPlot, cache);
 
 				//if it's forced, don't even look at the value
 				if (IsForcedWorkingPlot(iPlotLoop))
@@ -1499,7 +1477,7 @@ CvPlot* CvCityCitizens::GetBestCityPlotWithValue(int& iChosenValue, ePlotSelecti
 		case eWORST_WORKED_UNFORCED:
 			if (IsWorkingPlot(iPlotLoop) && !IsForcedWorkingPlot(iPlotLoop))
 			{
-				iValue = GetPlotValue(pLoopPlot, gCachedNumbers);
+				iValue = GetPlotValue(pLoopPlot, cache);
 				if ( pBestPlot==NULL || iValue < iBestPlotValue )
 				{
 					iBestPlotValue = iValue;
@@ -1511,7 +1489,7 @@ CvPlot* CvCityCitizens::GetBestCityPlotWithValue(int& iChosenValue, ePlotSelecti
 		case eWORST_WORKED_FORCED:
 			if (IsWorkingPlot(iPlotLoop) && IsForcedWorkingPlot(iPlotLoop))
 			{
-				iValue = GetPlotValue(pLoopPlot, gCachedNumbers);
+				iValue = GetPlotValue(pLoopPlot, cache);
 				if ( pBestPlot==NULL || iValue < iBestPlotValue )
 				{
 					iBestPlotValue = iValue;
@@ -1528,7 +1506,7 @@ CvPlot* CvCityCitizens::GetBestCityPlotWithValue(int& iChosenValue, ePlotSelecti
 				// Select forced working plots but prioritize unforced working plots.
 				const bool bDisallowedByUnforcedPriority = !bBestPlotIsForcedWork && bIsForcedWork;
 				const bool bSupersedesByUnforcedPriority = bBestPlotIsForcedWork && !bIsForcedWork;
-				iValue = GetPlotValue(pLoopPlot, gCachedNumbers);
+				iValue = GetPlotValue(pLoopPlot, cache);
 				if ((pBestPlot == NULL || bSupersedesByUnforcedPriority) || (!bDisallowedByUnforcedPriority && iValue < iBestPlotValue))
 				{
 					iBestPlotValue = iValue;
@@ -1544,7 +1522,7 @@ CvPlot* CvCityCitizens::GetBestCityPlotWithValue(int& iChosenValue, ePlotSelecti
 			CvString strOutBuf;
 			strOutBuf.Format("check index %d, plot %d:%d (%df%dp%dg%do), score %d with forced work status %d. current net food %d", 
 				iPlotLoop, pLoopPlot->getX(), pLoopPlot->getY(), pLoopPlot->getYield(YIELD_FOOD), pLoopPlot->getYield(YIELD_PRODUCTION), 
-				pLoopPlot->getYield(YIELD_GOLD), pBestPlot->getYield(YIELD_SCIENCE) + pBestPlot->getYield(YIELD_CULTURE) + pBestPlot->getYield(YIELD_FAITH), iValue, int(bBestPlotIsForcedWork), gCachedNumbers.iExcessFoodTimes100);
+				pLoopPlot->getYield(YIELD_GOLD), pBestPlot->getYield(YIELD_SCIENCE) + pBestPlot->getYield(YIELD_CULTURE) + pBestPlot->getYield(YIELD_FAITH), iValue, int(bBestPlotIsForcedWork), cache.iExcessFoodTimes100);
 			pLog->Msg(strOutBuf);
 		}
 	}
@@ -1620,9 +1598,12 @@ void CvCityCitizens::OptimizeWorkedPlots(bool bLogging)
 		int iBestFreePlotValue = 0;
 		int iBestSpecialistValue = 0;
 
+		//inside a loop, don't drop the global happiness!
+		gCachedNumbers.update(m_pCity, true);
+
 		//where do we have potential for improvement?
-		CvPlot* pWorstWorkedPlot = GetBestCityPlotWithValue(iWorstWorkedPlotValue, eWORST_WORKED_UNFORCED);
-		BuildingTypes eWorstSpecialistBuilding = GetAIBestSpecialistCurrentlyInBuilding(iWorstSpecialistValue, false);
+		CvPlot* pWorstWorkedPlot = GetBestCityPlotWithValue(iWorstWorkedPlotValue, eWORST_WORKED_UNFORCED, gCachedNumbers);
+		BuildingTypes eWorstSpecialistBuilding = GetAIBestSpecialistCurrentlyInBuilding(iWorstSpecialistValue, gCachedNumbers, false);
 
 		//check whether we are turning in circles ...
 		if (std::find(justAddedPlot.begin(), justAddedPlot.end(), pWorstWorkedPlot) != justAddedPlot.end())
@@ -1674,7 +1655,7 @@ void CvCityCitizens::OptimizeWorkedPlots(bool bLogging)
 			break;
 
 		//consider alternatives (no automatic plot overrides for humans!)
-		CvPlot* pBestFreePlot = GetBestCityPlotWithValue(iBestFreePlotValue, bIsHuman ? eBEST_UNWORKED_NO_OVERRIDE : eBEST_UNWORKED_ALLOW_OVERRIDE);
+		CvPlot* pBestFreePlot = GetBestCityPlotWithValue(iBestFreePlotValue, bIsHuman ? eBEST_UNWORKED_NO_OVERRIDE : eBEST_UNWORKED_ALLOW_OVERRIDE, gCachedNumbers);
 		BuildingTypes eBestSpecialistBuilding = NO_BUILDING;
 
 		int iNetFood100 = m_pCity->getYieldRateTimes100(YIELD_FOOD, false) - m_pCity->foodConsumptionTimes100();
@@ -1689,7 +1670,7 @@ void CvCityCitizens::OptimizeWorkedPlots(bool bLogging)
 		bool bCanAffordSpecialist = iNetFoodIfSpecialistWorked >= min(GetExcessFoodThreshold100(), iNetFoodIfBestTileWorked);
 
 		if (bCanAffordSpecialist && !bSpecialistForbidden)
-			eBestSpecialistBuilding = GetAIBestSpecialistBuilding(iBestSpecialistValue);
+			eBestSpecialistBuilding = GetAIBestSpecialistBuilding(iBestSpecialistValue,gCachedNumbers);
 
 		//can a laborer be better than a specialist?
 		if (iBestSpecialistValue < iLaborerValue)
@@ -1727,10 +1708,10 @@ void CvCityCitizens::OptimizeWorkedPlots(bool bLogging)
 		}
 		else
 		{
-			//is a specialist better than working a plot?
+			//is a specialist (may also be a default specialist aka laborer) better than working a plot?
 			if (iBestSpecialistValue > iWorstWorkedPlotValue && pWorstWorkedPlot)
 			{
-				//this method also handles laborers
+				//this method also handles laborers!
 				DoAddSpecialistToBuilding(eBestSpecialistBuilding, /*bForced*/ false, CvCity::YIELD_UPDATE_GLOBAL);
 				justAddedBuildings.push_back(eBestSpecialistBuilding);
 
@@ -1765,14 +1746,6 @@ void CvCityCitizens::OptimizeWorkedPlots(bool bLogging)
 				DoAddSpecialistToBuilding(eWorstSpecialistBuilding, /*bForced*/ false, CvCity::YIELD_UPDATE_GLOBAL);
 				justAddedBuildings.push_back(eWorstSpecialistBuilding);
 			}
-			else
-			{
-				//if nothing else works, create a laborer
-				ChangeNumDefaultSpecialists(1, CvCity::YIELD_UPDATE_LOCAL);
-				// if we have just released a laborer, we're turning in circles.
-				if (bReleaseLaborer)
-					break;
-			}
 		}
 
 		iCount++;
@@ -1790,11 +1763,13 @@ bool CvCityCitizens::NeedReworkCitizens()
 		return true;
 	}
 
+	gCachedNumbers.update(m_pCity);
+
 	int iWorstWorkedPlotValue = 0;
-	CvPlot* pWorstWorkedPlot = GetBestCityPlotWithValue(iWorstWorkedPlotValue, eWORST_WORKED_UNFORCED);
+	CvPlot* pWorstWorkedPlot = GetBestCityPlotWithValue(iWorstWorkedPlotValue, eWORST_WORKED_UNFORCED, gCachedNumbers);
 
 	int iBestUnworkedPlotValue = 0;
-	CvPlot* pBestUnworkedPlot = GetBestCityPlotWithValue(iBestUnworkedPlotValue, eBEST_UNWORKED_NO_OVERRIDE);
+	CvPlot* pBestUnworkedPlot = GetBestCityPlotWithValue(iBestUnworkedPlotValue, eBEST_UNWORKED_NO_OVERRIDE, gCachedNumbers);
 
 	//First let's look at plots - if there is a better plot not being worked, we need to reallocate.
 	if (pWorstWorkedPlot != NULL && pBestUnworkedPlot != NULL)
@@ -1810,7 +1785,7 @@ bool CvCityCitizens::NeedReworkCitizens()
 	BuildingTypes eBestSpecialistBuilding = NO_BUILDING;
 	if (!GET_PLAYER(GetOwner()).isHuman() || !IsNoAutoAssignSpecialists())
 	{
-		eBestSpecialistBuilding = GetAIBestSpecialistBuilding(iSpecialistValue);
+		eBestSpecialistBuilding = GetAIBestSpecialistBuilding(iSpecialistValue,gCachedNumbers);
 	}
 
 	if (iSpecialistValue > iWorstWorkedPlotValue)
@@ -1823,7 +1798,7 @@ bool CvCityCitizens::NeedReworkCitizens()
 	BuildingTypes eBestSpecialistInCityBuilding = NO_BUILDING;
 	if (!GET_PLAYER(GetOwner()).isHuman() || !IsNoAutoAssignSpecialists())
 	{
-		eBestSpecialistInCityBuilding = GetAIBestSpecialistCurrentlyInBuilding(iSpecialistInCityValue,true);
+		eBestSpecialistInCityBuilding = GetAIBestSpecialistCurrentlyInBuilding(iSpecialistInCityValue,gCachedNumbers,true);
 	}
 
 	//check if new specialist is better than existing specialist
@@ -2607,11 +2582,8 @@ void CvCityCitizens::DoSpecialists()
 			int iGPThreshold = GetSpecialistUpgradeThreshold((UnitClassTypes)pkSpecialistInfo->getGreatPeopleUnitClass());
 			ChangeSpecialistGreatPersonProgressTimes100(eSpecialist, iGPPChange);
 
-#if defined(MOD_EVENTS_CITY)
-			if (MOD_EVENTS_CITY) {
+			if (MOD_EVENTS_CITY)
 				GAMEEVENTINVOKE_HOOK(GAMEEVENT_CityPrepared, GetCity()->getOwner(), GetCity(), eSpecialist, iGPPChange, iGPThreshold);
-			}
-#endif
 
 			// Enough to spawn a GP?
 			if (GetSpecialistGreatPersonProgress(eSpecialist) >= iGPThreshold)
@@ -2624,15 +2596,10 @@ void CvCityCitizens::DoSpecialists()
 
 					// Now... actually create the GP!
 					const UnitClassTypes eUnitClass = (UnitClassTypes)pkSpecialistInfo->getGreatPeopleUnitClass();
-					if (eUnitClass != NO_UNITCLASS)
+					const UnitTypes eUnit = GET_PLAYER(GetCity()->getOwner()).GetSpecificUnitType(eUnitClass);
+					if (eUnit != NO_UNIT)
 					{
-						UnitTypes eUnit = GET_PLAYER(GetCity()->getOwner()).GetSpecificUnitType(eUnitClass);
-
-#if defined(MOD_GLOBAL_TRULY_FREE_GP)
 						DoSpawnGreatPerson(eUnit, true, false, false);
-#else
-						DoSpawnGreatPerson(eUnit, true, false);
-#endif
 					}
 				}
 			}
@@ -2652,22 +2619,14 @@ bool CvCityCitizens::IsCanAddSpecialistToBuilding(BuildingTypes eBuilding)
 	CvAssert(eBuilding > -1);
 	CvAssert(eBuilding < GC.getNumBuildingInfos());
 
-#if defined(MOD_BALANCE_CORE)
 	if (m_pCity->IsResistance() || m_pCity->IsRazing())
-	{
 		return false;
-	}
-#endif
 
 	int iNumSpecialistsAssigned = GetNumSpecialistsInBuilding(eBuilding);
 
-#if defined(MOD_GLOBAL_CITY_AUTOMATON_WORKERS)
-	if(iNumSpecialistsAssigned < GetCity()->getPopulation(true) &&	// Limit based on Pop of City
-#else
-	if(iNumSpecialistsAssigned < GetCity()->getPopulation() &&	// Limit based on Pop of City
-#endif
-		iNumSpecialistsAssigned < GC.getBuildingInfo(eBuilding)->GetSpecialistCount() &&				// Limit for this particular Building
-		iNumSpecialistsAssigned < /*4*/ GD_INT_GET(MAX_SPECIALISTS_FROM_BUILDING))	// Overall Limit
+	if (iNumSpecialistsAssigned < GetCity()->getPopulation(true) && // Limit based on Pop of City
+		iNumSpecialistsAssigned < GC.getBuildingInfo(eBuilding)->GetSpecialistCount() && // Limit for this particular Building
+		iNumSpecialistsAssigned < /*4*/ GD_INT_GET(MAX_SPECIALISTS_FROM_BUILDING)) // Overall Limit
 	{
 		return true;
 	}
@@ -3082,25 +3041,14 @@ void CvCityCitizens::ChangeSpecialistGreatPersonProgressTimes100(SpecialistTypes
 				if (!GET_PLAYER(GetOwner()).isMinorCiv())
 				{
 					// Reset progress on this Specialist
-#if defined(MOD_BALANCE_CORE)
 					DoResetSpecialistGreatPersonProgressTimes100(eIndex, (iGPThreshold * 100));
-#else
-					DoResetSpecialistGreatPersonProgressTimes100(eSpecialist);
-#endif
 
 					// Now... actually create the GP!
 					const UnitClassTypes eUnitClass = (UnitClassTypes)pkSpecialistInfo->getGreatPeopleUnitClass();
-					if (eUnitClass != NO_UNITCLASS)
+					const UnitTypes eUnit = GET_PLAYER(GetOwner()).GetSpecificUnitType(eUnitClass);
+					if (eUnit != NO_UNIT)
 					{
-						UnitTypes eUnit = GET_PLAYER(GetOwner()).GetSpecificUnitType(eUnitClass);
-						if (eUnit != NO_UNIT)
-						{
-#if defined(MOD_GLOBAL_TRULY_FREE_GP)
-							DoSpawnGreatPerson(eUnit, true, false, false);
-#else
-							DoSpawnGreatPerson(eUnit, true, false);
-#endif
-						}
+						DoSpawnGreatPerson(eUnit, true, false, false);
 					}
 				}
 			}
@@ -3159,76 +3107,46 @@ int CvCityCitizens::GetSpecialistUpgradeThreshold(UnitClassTypes eUnitClass)
 
 	if (eUnitClass == GC.getInfoTypeForString("UNITCLASS_WRITER", true))
 	{
-#if defined(MOD_GLOBAL_TRULY_FREE_GP)
 		iNumCreated = GET_PLAYER(GetCity()->getOwner()).getGreatWritersCreated(MOD_GLOBAL_TRULY_FREE_GP);
 		iThreshold -= /*0*/ GD_INT_GET(GWAM_THRESHOLD_DECREASE);
-#else
-		iNumCreated = GET_PLAYER(GetCity()->getOwner()).getGreatWritersCreated();
-#endif
 	}
 	else if (eUnitClass == GC.getInfoTypeForString("UNITCLASS_ARTIST", true))
 	{
-#if defined(MOD_GLOBAL_TRULY_FREE_GP)
 		iNumCreated = GET_PLAYER(GetCity()->getOwner()).getGreatArtistsCreated(MOD_GLOBAL_TRULY_FREE_GP);
 		iThreshold -= /*0*/ GD_INT_GET(GWAM_THRESHOLD_DECREASE);
-#else
-		iNumCreated = GET_PLAYER(GetCity()->getOwner()).getGreatArtistsCreated();
-#endif
 	}
 	else if (eUnitClass == GC.getInfoTypeForString("UNITCLASS_MUSICIAN", true))
 	{
-#if defined(MOD_GLOBAL_TRULY_FREE_GP)
 		iNumCreated = GET_PLAYER(GetCity()->getOwner()).getGreatMusiciansCreated(MOD_GLOBAL_TRULY_FREE_GP);
 		iThreshold -= /*0*/ GD_INT_GET(GWAM_THRESHOLD_DECREASE);
-#else
-		iNumCreated = GET_PLAYER(GetCity()->getOwner()).getGreatMusiciansCreated();
-#endif
 	}
 	else if (MOD_BALANCE_VP && eUnitClass == GC.getInfoTypeForString("UNITCLASS_GREAT_DIPLOMAT", true))
 	{
-#if defined(MOD_GLOBAL_TRULY_FREE_GP)
 		iNumCreated = GET_PLAYER(GetCity()->getOwner()).getGreatDiplomatsCreated(MOD_GLOBAL_TRULY_FREE_GP);
-#else
-		iNumCreated = GET_PLAYER(GetCity()->getOwner()).getGreatDiplomatsCreated();
-#endif
 	}
 	else
 	{
-#if defined(MOD_GLOBAL_SEPARATE_GP_COUNTERS)
 		if (MOD_GLOBAL_SEPARATE_GP_COUNTERS)
 		{
-			if (eUnitClass == GC.getInfoTypeForString("UNITCLASS_MERCHANT", true)) {
-#if defined(MOD_GLOBAL_TRULY_FREE_GP)
+			if (eUnitClass == GC.getInfoTypeForString("UNITCLASS_MERCHANT", true))
+			{
 				iNumCreated = GET_PLAYER(GetCity()->getOwner()).getGreatMerchantsCreated(MOD_GLOBAL_TRULY_FREE_GP);
-#else
-				iNumCreated = GET_PLAYER(GetCity()->getOwner()).getGreatMerchantsCreated();
-#endif
 			}
-			else if (eUnitClass == GC.getInfoTypeForString("UNITCLASS_SCIENTIST", true)) {
-#if defined(MOD_GLOBAL_TRULY_FREE_GP)
+			else if (eUnitClass == GC.getInfoTypeForString("UNITCLASS_SCIENTIST", true))
+			{
 				iNumCreated = GET_PLAYER(GetCity()->getOwner()).getGreatScientistsCreated(MOD_GLOBAL_TRULY_FREE_GP);
-#else
-				iNumCreated = GET_PLAYER(GetCity()->getOwner()).getGreatScientistsCreated();
-#endif
 			}
 			else
 			{
-#if defined(MOD_GLOBAL_TRULY_FREE_GP)
 				iNumCreated = GET_PLAYER(GetCity()->getOwner()).getGreatEngineersCreated(MOD_GLOBAL_TRULY_FREE_GP);
-#else
-				iNumCreated = GET_PLAYER(GetCity()->getOwner()).getGreatEngineersCreated();
-#endif
 			}
 		}
 		else
-#endif
-#if defined(MOD_GLOBAL_TRULY_FREE_GP)
+		{
 			iNumCreated = GET_PLAYER(GetCity()->getOwner()).getGreatPeopleCreated(MOD_GLOBAL_TRULY_FREE_GP);
-#else
-			iNumCreated = GET_PLAYER(GetCity()->getOwner()).getGreatPeopleCreated();
-#endif
+		}
 	}
-#if defined(MOD_BALANCE_CORE)
+
 	const UnitTypes eThisPlayersUnitType = GET_PLAYER(GetCity()->getOwner()).GetSpecificUnitType(eUnitClass);
 	if (eThisPlayersUnitType != NO_UNIT)
 	{
@@ -3237,44 +3155,23 @@ int CvCityCitizens::GetSpecialistUpgradeThreshold(UnitClassTypes eUnitClass)
 		{
 			if (pkUnitInfo->IsGPExtra() == 1)
 			{
-#if defined(MOD_GLOBAL_TRULY_FREE_GP)
 				iNumCreated = GET_PLAYER(GetCity()->getOwner()).getGPExtra1Created(MOD_GLOBAL_TRULY_FREE_GP);
-#else
-				iNumCreated = GET_PLAYER(GetCity()->getOwner()).getGPExtra1Created();
-#endif
 			}
 			else if (pkUnitInfo->IsGPExtra() == 2)
 			{
-#if defined(MOD_GLOBAL_TRULY_FREE_GP)
 				iNumCreated = GET_PLAYER(GetCity()->getOwner()).getGPExtra2Created(MOD_GLOBAL_TRULY_FREE_GP);
-#else
-				iNumCreated = GET_PLAYER(GetCity()->getOwner()).getGPExtra2Created();
-#endif
 			}
-
 			else if (pkUnitInfo->IsGPExtra() == 3)
 			{
-#if defined(MOD_GLOBAL_TRULY_FREE_GP)
 				iNumCreated = GET_PLAYER(GetCity()->getOwner()).getGPExtra3Created(MOD_GLOBAL_TRULY_FREE_GP);
-#else
-				iNumCreated = GET_PLAYER(GetCity()->getOwner()).getGPExtra3Created();
-#endif
 			}
 			else if (pkUnitInfo->IsGPExtra() == 4)
 			{
-#if defined(MOD_GLOBAL_TRULY_FREE_GP)
 				iNumCreated = GET_PLAYER(GetCity()->getOwner()).getGPExtra4Created(MOD_GLOBAL_TRULY_FREE_GP);
-#else
-				iNumCreated = GET_PLAYER(GetCity()->getOwner()).getGPExtra4Created();
-#endif
 			}
 			else if (pkUnitInfo->IsGPExtra() == 5)
 			{
-#if defined(MOD_GLOBAL_TRULY_FREE_GP)
 				iNumCreated = GET_PLAYER(GetCity()->getOwner()).getGPExtra5Created(MOD_GLOBAL_TRULY_FREE_GP);
-#else
-				iNumCreated = GET_PLAYER(GetCity()->getOwner()).getGPExtra5Created();
-#endif
 			}
 		}
 	}
@@ -3285,7 +3182,7 @@ int CvCityCitizens::GetSpecialistUpgradeThreshold(UnitClassTypes eUnitClass)
 		iThreshold *= (100 + iMod);
 		iThreshold /= 100;
 	}
-#endif
+
 	// Increase threshold based on how many GP have already been spawned
 	iThreshold += (/*100 in CP, 250 in VP*/ GD_INT_GET(GREAT_PERSON_THRESHOLD_INCREASE) * iNumCreated);
 
@@ -3314,16 +3211,13 @@ int CvCityCitizens::GetSpecialistUpgradeThreshold(UnitClassTypes eUnitClass)
 }
 
 /// Create a GP!
-#if defined(MOD_GLOBAL_TRULY_FREE_GP)
 void CvCityCitizens::DoSpawnGreatPerson(UnitTypes eUnit, bool bIncrementCount, bool bCountAsProphet, bool bIsFree)
-#else
-void CvCityCitizens::DoSpawnGreatPerson(UnitTypes eUnit, bool bIncrementCount, bool bCountAsProphet)
-#endif
 {
 	CvAssert(eUnit != NO_UNIT);
 
-	if (eUnit == NO_UNIT)
-		return;	// Better than crashing.
+	// Not a great person
+	if (GC.getUnitInfo(eUnit)->GetSpecialUnitType() != static_cast<SpecialUnitTypes>(GC.getInfoTypeForString("SPECIALUNIT_PEOPLE")))
+		return;
 
 	// If it's the active player then show the popup
 	if (GetCity()->getOwner() == GC.getGame().getActivePlayer())
@@ -3339,300 +3233,16 @@ void CvCityCitizens::DoSpawnGreatPerson(UnitTypes eUnit, bool bIncrementCount, b
 	CvPlayer& kPlayer = GET_PLAYER(GetCity()->getOwner());
 	CvUnit* newUnit = kPlayer.initUnit(eUnit, GetCity()->getX(), GetCity()->getY());
 
-	// Bump up the count
-	if (bIncrementCount && !bCountAsProphet)
-	{
-#if defined(MOD_BALANCE_CORE)
-		if (kPlayer.GetPlayerTraits()->IsGPWLTKD())
-		{
-			int iWLTKD = /*6*/ GD_INT_GET(CITY_RESOURCE_WLTKD_TURNS) / 3;
-			iWLTKD *= GC.getGame().getGameSpeedInfo().getTrainPercent();
-			iWLTKD /= 100;
+	newUnit->DoGreatPersonSpawnBonus(GetCity());
 
-			if (iWLTKD > 0)
-			{
-				GetCity()->ChangeWeLoveTheKingDayCounter(iWLTKD, true);
-				CvNotifications* pNotifications = kPlayer.GetNotifications();
-				if (pNotifications)
-				{
-					Localization::String strText = Localization::Lookup("TXT_KEY_NOTIFICATION_CITY_WLTKD_UA");
-					strText << newUnit->getNameKey() << GetCity()->getNameKey();
-					Localization::String strSummary = Localization::Lookup("TXT_KEY_NOTIFICATION_SUMMARY_CITY_WLTKD_UA");
-					strSummary << GetCity()->getNameKey();
-					pNotifications->Add(NOTIFICATION_GENERIC, strText.toUTF8(), strSummary.toUTF8(), GetCity()->getX(), GetCity()->getY(), -1);
-				}
-			}
-		}
-		if (newUnit->isWLKTKDOnBirth())
-		{
-			CvCity* pLoopCity = NULL;
-			int iLoop = 0;
-			for (pLoopCity = kPlayer.firstCity(&iLoop); pLoopCity != NULL; pLoopCity = kPlayer.nextCity(&iLoop))
-			{
-				if (pLoopCity != NULL)
-				{
-					int iWLTKD = /*6*/ GD_INT_GET(CITY_RESOURCE_WLTKD_TURNS) / 3;
-					iWLTKD *= GC.getGame().getGameSpeedInfo().getTrainPercent();
-					iWLTKD /= 100;
-
-					if (iWLTKD > 0)
-					{
-						pLoopCity->ChangeWeLoveTheKingDayCounter(iWLTKD, true);
-						CvNotifications* pNotifications = kPlayer.GetNotifications();
-						if (pNotifications)
-						{
-							Localization::String strText = Localization::Lookup("TXT_KEY_NOTIFICATION_CITY_WLTKD_UNIT");
-							strText << newUnit->getNameKey() << pLoopCity->getNameKey();
-							Localization::String strSummary = Localization::Lookup("TXT_KEY_NOTIFICATION_SUMMARY_CITY_WLTKD_UNIT");
-							strSummary << pLoopCity->getNameKey();
-							pNotifications->Add(NOTIFICATION_GENERIC, strText.toUTF8(), strSummary.toUTF8(), pLoopCity->getX(), pLoopCity->getY(), -1);
-						}
-					}
-				}
-			}
-		}
-		if (newUnit->isGoldenAgeOnBirth())
-		{
-			kPlayer.changeGoldenAgeTurns(kPlayer.getGoldenAgeLength());
-		}
-		if (newUnit->isCultureBoost())
-		{
-			int iValue = kPlayer.GetTotalJONSCulturePerTurn() * 4;
-			kPlayer.changeJONSCulture(iValue);
-			if (kPlayer.getCapitalCity() != NULL)
-				kPlayer.getCapitalCity()->ChangeJONSCultureStored(iValue);
-
-			CvNotifications* pNotifications = kPlayer.GetNotifications();
-			if (pNotifications)
-			{
-				Localization::String strText = Localization::Lookup("TXT_KEY_NOTIFICATION_CULTURE_UNIT");
-				strText << newUnit->getNameKey();
-				Localization::String strSummary = Localization::Lookup("TXT_KEY_NOTIFICATION_SUMMARY_CULTURE_UNIT");
-				strSummary << newUnit->getNameKey();
-				pNotifications->Add(NOTIFICATION_GENERIC, strText.toUTF8(), strSummary.toUTF8(), newUnit->getX(), newUnit->getY(), -1);
-			}
-		}
-#endif
-		if (newUnit->IsGreatGeneral())
-		{
-#if defined(MOD_GLOBAL_TRULY_FREE_GP)
-			kPlayer.incrementGreatGeneralsCreated(bIsFree);
-#else
-			kPlayer.incrementGreatGeneralsCreated();
-#endif
-		}
-		else if (newUnit->IsGreatAdmiral())
-		{
-#if defined(MOD_GLOBAL_TRULY_FREE_GP)
-			kPlayer.incrementGreatAdmiralsCreated(bIsFree);
-#else
-			kPlayer.incrementGreatAdmiralsCreated();
-#endif
-			CvPlot *pSpawnPlot = kPlayer.GetBestCoastalSpawnPlot(newUnit);
-			if (newUnit->plot() != pSpawnPlot)
-			{
-				newUnit->setXY(pSpawnPlot->getX(), pSpawnPlot->getY());
-			}
-		}
-		else if (newUnit->getUnitInfo().GetUnitClassType() == GC.getInfoTypeForString("UNITCLASS_WRITER"))
-		{
-#if defined(MOD_GLOBAL_TRULY_FREE_GP)
-			kPlayer.incrementGreatWritersCreated(bIsFree);
-#else
-			kPlayer.incrementGreatWritersCreated();
-#endif
-		}
-		else if (newUnit->getUnitInfo().GetUnitClassType() == GC.getInfoTypeForString("UNITCLASS_ARTIST"))
-		{
-#if defined(MOD_GLOBAL_TRULY_FREE_GP)
-			kPlayer.incrementGreatArtistsCreated(bIsFree);
-#else
-			kPlayer.incrementGreatArtistsCreated();
-#endif
-		}
-		else if (newUnit->getUnitInfo().GetUnitClassType() == GC.getInfoTypeForString("UNITCLASS_MUSICIAN"))
-		{
-#if defined(MOD_GLOBAL_TRULY_FREE_GP)
-			kPlayer.incrementGreatMusiciansCreated(bIsFree);
-#else
-			kPlayer.incrementGreatMusiciansCreated();
-#endif
-		}
-		else if (MOD_BALANCE_VP && newUnit->getUnitInfo().GetUnitClassType() == GC.getInfoTypeForString("UNITCLASS_GREAT_DIPLOMAT"))
-		{
-#if defined(MOD_GLOBAL_TRULY_FREE_GP)
-			kPlayer.incrementGreatDiplomatsCreated(bIsFree);
-#else
-			kPlayer.incrementGreatDiplomatsCreated();
-#endif
-		}
-#if defined(MOD_BALANCE_CORE)
-		else if (newUnit->getUnitInfo().IsGPExtra() == 1)
-		{
-#if defined(MOD_GLOBAL_TRULY_FREE_GP)
-			kPlayer.incrementGPExtra1Created(bIsFree);
-#else
-			kPlayer.incrementGPExtra1Created();
-#endif
-		}
-		else if (newUnit->getUnitInfo().IsGPExtra() == 2)
-		{
-#if defined(MOD_GLOBAL_TRULY_FREE_GP)
-			kPlayer.incrementGPExtra2Created(bIsFree);
-#else
-			kPlayer.incrementGPExtra2Created();
-#endif
-		}
-		else if (newUnit->getUnitInfo().IsGPExtra() == 3)
-		{
-#if defined(MOD_GLOBAL_TRULY_FREE_GP)
-			kPlayer.incrementGPExtra3Created(bIsFree);
-#else
-			kPlayer.incrementGPExtra3Created();
-#endif
-		}
-		else if (newUnit->getUnitInfo().IsGPExtra() == 4)
-		{
-#if defined(MOD_GLOBAL_TRULY_FREE_GP)
-			kPlayer.incrementGPExtra4Created(bIsFree);
-#else
-			kPlayer.incrementGPExtra4Created();
-#endif
-		}
-		else if (newUnit->getUnitInfo().IsGPExtra() == 5)
-		{
-#if defined(MOD_GLOBAL_TRULY_FREE_GP)
-			kPlayer.incrementGPExtra5Created(bIsFree);
-#else
-			kPlayer.incrementGPExtra5Created();
-#endif
-		}
-#endif
-		else
-		{
-#if defined(MOD_GLOBAL_SEPARATE_GP_COUNTERS)
-			if (MOD_GLOBAL_SEPARATE_GP_COUNTERS)
-			{
-				if (newUnit->getUnitInfo().GetUnitClassType() == GC.getInfoTypeForString("UNITCLASS_MERCHANT"))
-				{
-#if defined(MOD_GLOBAL_TRULY_FREE_GP)
-					kPlayer.incrementGreatMerchantsCreated(bIsFree);
-#else
-					kPlayer.incrementGreatMerchantsCreated();
-#endif
-				}
-				else if (newUnit->getUnitInfo().GetUnitClassType() == GC.getInfoTypeForString("UNITCLASS_SCIENTIST"))
-				{
-#if defined(MOD_GLOBAL_TRULY_FREE_GP)
-					kPlayer.incrementGreatScientistsCreated(bIsFree);
-#else
-					kPlayer.incrementGreatScientistsCreated();
-#endif
-				}
-				else
-				{
-#if defined(MOD_GLOBAL_TRULY_FREE_GP)
-					kPlayer.incrementGreatEngineersCreated(bIsFree);
-#else
-					kPlayer.incrementGreatEngineersCreated();
-#endif
-				}
-			}
-			else
-#endif
-#if defined(MOD_GLOBAL_TRULY_FREE_GP)
-				kPlayer.incrementGreatPeopleCreated(bIsFree);
-#else
-				kPlayer.incrementGreatPeopleCreated();
-#endif
-		}
-	}
-	if (bCountAsProphet || newUnit->getUnitInfo().IsFoundReligion())
-	{
-#if defined(MOD_BALANCE_CORE)
-		if (kPlayer.GetPlayerTraits()->IsGPWLTKD())
-		{
-			int iWLTKD = /*6*/ GD_INT_GET(CITY_RESOURCE_WLTKD_TURNS) / 3;
-			iWLTKD *= GC.getGame().getGameSpeedInfo().getTrainPercent();
-			iWLTKD /= 100;
-
-			if (iWLTKD > 0)
-			{
-				GetCity()->ChangeWeLoveTheKingDayCounter(iWLTKD, true);
-				CvNotifications* pNotifications = kPlayer.GetNotifications();
-				if (pNotifications)
-				{
-					Localization::String strText = Localization::Lookup("TXT_KEY_NOTIFICATION_CITY_WLTKD_UA");
-					strText << newUnit->getNameKey() << GetCity()->getNameKey();
-					Localization::String strSummary = Localization::Lookup("TXT_KEY_NOTIFICATION_SUMMARY_CITY_WLTKD_UA");
-					strSummary << GetCity()->getNameKey();
-					pNotifications->Add(NOTIFICATION_GENERIC, strText.toUTF8(), strSummary.toUTF8(), GetCity()->getX(), GetCity()->getY(), -1);
-				}
-			}
-		}
-		if (newUnit->isWLKTKDOnBirth())
-		{
-			CvCity* pLoopCity = NULL;
-			int iLoop = 0;
-			for (pLoopCity = kPlayer.firstCity(&iLoop); pLoopCity != NULL; pLoopCity = kPlayer.nextCity(&iLoop))
-			{
-				if (pLoopCity != NULL)
-				{
-					int iWLTKD = /*6*/ GD_INT_GET(CITY_RESOURCE_WLTKD_TURNS) / 3;
-					iWLTKD *= GC.getGame().getGameSpeedInfo().getTrainPercent();
-					iWLTKD /= 100;
-
-					if (iWLTKD > 0)
-					{
-						pLoopCity->ChangeWeLoveTheKingDayCounter(iWLTKD, true);
-						CvNotifications* pNotifications = kPlayer.GetNotifications();
-						if (pNotifications)
-						{
-							Localization::String strText = Localization::Lookup("TXT_KEY_NOTIFICATION_CITY_WLTKD_UNIT");
-							strText << newUnit->getNameKey() << pLoopCity->getNameKey();
-							Localization::String strSummary = Localization::Lookup("TXT_KEY_NOTIFICATION_SUMMARY_CITY_WLTKD_UNIT");
-							strSummary << pLoopCity->getNameKey();
-							pNotifications->Add(NOTIFICATION_GENERIC, strText.toUTF8(), strSummary.toUTF8(), pLoopCity->getX(), pLoopCity->getY(), -1);
-						}
-					}
-				}
-			}
-		}
-		if (newUnit->isGoldenAgeOnBirth())
-		{
-			kPlayer.changeGoldenAgeTurns(kPlayer.getGoldenAgeLength());
-		}
-		if (newUnit->isCultureBoost())
-		{
-			int iValue = kPlayer.GetTotalJONSCulturePerTurn() * 4;
-			kPlayer.changeJONSCulture(iValue);
-			if (kPlayer.getCapitalCity() != NULL)
-				kPlayer.getCapitalCity()->ChangeJONSCultureStored(iValue);
-
-			CvNotifications* pNotifications = kPlayer.GetNotifications();
-			if (pNotifications)
-			{
-				Localization::String strText = Localization::Lookup("TXT_KEY_NOTIFICATION_CULTURE_UNIT");
-				strText << newUnit->getNameKey();
-				Localization::String strSummary = Localization::Lookup("TXT_KEY_NOTIFICATION_SUMMARY_CULTURE_UNIT");
-				strSummary << newUnit->getNameKey();
-				pNotifications->Add(NOTIFICATION_GENERIC, strText.toUTF8(), strSummary.toUTF8(), newUnit->getX(), newUnit->getY(), -1);
-			}
-		}
-#endif
-		if (bIncrementCount)
-#if defined(MOD_GLOBAL_TRULY_FREE_GP)
-			kPlayer.GetReligions()->ChangeNumProphetsSpawned(1, bIsFree);
-#else
-			kPlayer.GetReligions()->ChangeNumProphetsSpawned(1);
-#endif
-	}
+	if (bIncrementCount)
+		kPlayer.incrementGreatPersonCount(newUnit->getUnitInfo(), bCountAsProphet, bIsFree);
 
 	// Setup prophet properly
 	if (newUnit->getUnitInfo().IsFoundReligion())
 	{
 		ReligionTypes eReligion = kPlayer.GetReligions()->GetOwnedReligion();
-		newUnit->GetReligionDataMutable()->SetFullStrength(kPlayer.GetID(),newUnit->getUnitInfo(),eReligion);
+		newUnit->GetReligionDataMutable()->SetFullStrength(kPlayer.GetID(), newUnit->getUnitInfo(),eReligion);
 	}
 
 	// Notification
@@ -3700,7 +3310,7 @@ SPrecomputedExpensiveNumbers::SPrecomputedExpensiveNumbers() :
 {
 }
 
-void SPrecomputedExpensiveNumbers::update(CvCity * pCity)
+void SPrecomputedExpensiveNumbers::update(CvCity * pCity, bool bKeepGlobalHappiness)
 {
 	CvPlayer& kPlayer = GET_PLAYER(pCity->getOwner());
 
@@ -3714,7 +3324,8 @@ void SPrecomputedExpensiveNumbers::update(CvCity * pCity)
 	iFoodCorpMod = pCity->GetTradeRouteCityMod(YIELD_FOOD);
 
 	//this is so expensive, put a marker and it will be updated on demand
-	iGlobalHappiness = INT_MAX;
+	if (!bKeepGlobalHappiness)
+		iGlobalHappiness = INT_MAX;
 
 	if (pCity->IsPuppet())
 	{

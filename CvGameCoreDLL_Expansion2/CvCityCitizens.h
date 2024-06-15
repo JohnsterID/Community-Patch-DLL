@@ -1,5 +1,5 @@
 /*	-------------------------------------------------------------------------------------------------------
-	© 1991-2012 Take-Two Interactive Software and its subsidiaries.  Developed by Firaxis Games.  
+	Â© 1991-2012 Take-Two Interactive Software and its subsidiaries.  Developed by Firaxis Games.  
 	Sid Meier's Civilization V, Civ, Civilization, 2K Games, Firaxis Games, Take-Two Interactive Software 
 	and their respective logos are all trademarks of Take-Two interactive Software, Inc.  
 	All other marks and trademarks are the property of their respective owners.  
@@ -37,7 +37,7 @@ struct SPrecomputedExpensiveNumbers
 	vector<vector<int>> bonusForXFeature; //updated on demand only
 
 	SPrecomputedExpensiveNumbers();
-	void update(CvCity* pCity);
+	void update(CvCity* pCity, bool bKeepGlobalHappiness=false);
 };
 
 //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -99,11 +99,12 @@ public:
 	bool SetFocusType(CityAIFocusTypes eFocus, bool bReallocate = false);
 	int GetYieldModForFocus(YieldTypes eYield, CityAIFocusTypes eFocus, bool bEmphasizeFood, const SPrecomputedExpensiveNumbers& cache);
 
-	// Specialist AI
-	BuildingTypes GetAIBestSpecialistBuilding(int& iSpecialistValue, bool bLogging = false);
-	BuildingTypes GetAIBestSpecialistCurrentlyInBuilding(int& iSpecialistValue, bool bWantBest);
+protected:
+	BuildingTypes GetAIBestSpecialistBuilding(int& iSpecialistValue, SPrecomputedExpensiveNumbers& cache, bool bLogging = false);
+	BuildingTypes GetAIBestSpecialistCurrentlyInBuilding(int& iSpecialistValue, SPrecomputedExpensiveNumbers& cache, bool bWantBest);
 	int GetSpecialistValue(SpecialistTypes eSpecialist, SPrecomputedExpensiveNumbers& cache);
 
+public:
 	// Citizen Assignment
 	int GetNumUnassignedCitizens() const;
 	void ChangeNumUnassignedCitizens(int iChange);
@@ -119,7 +120,7 @@ public:
 
 	void OptimizeWorkedPlots(bool bLogging);
 	bool NeedReworkCitizens();
-	CvPlot* GetBestCityPlotWithValue(int& iChosenValue, ePlotSelectionMode eMode, bool Logging = false);
+	CvPlot* GetBestCityPlotWithValue(int& iChosenValue, ePlotSelectionMode eMode, SPrecomputedExpensiveNumbers& cache, bool Logging = false);
 
 	// Worked Plots
 	bool IsWorkingPlot(int iIndex) const;
@@ -190,11 +191,8 @@ public:
 	int GetNumSpecialistsAllowedByBuilding(const CvBuildingEntry& kBuilding);
 
 	int GetSpecialistUpgradeThreshold(UnitClassTypes eUnitClass);
-#if defined(MOD_GLOBAL_TRULY_FREE_GP)
+
 	void DoSpawnGreatPerson(UnitTypes eUnit, bool bIncrementCount, bool bCountAsProphet, bool bIsFree);
-#else
-	void DoSpawnGreatPerson(UnitTypes eUnit, bool bIncrementCount, bool bCountAsProphet);
-#endif
 
 	YieldTypes GetFocusTypeYield(CityAIFocusTypes eFocus);
 
