@@ -34858,14 +34858,15 @@ CvDeal* CvDiplomacyAI::DoRenewExpiredDeal(PlayerTypes ePlayer, DiploStatementTyp
 			}
 
 			//exclude items that can't be renewed:
-			if (it->m_eItemType ==
-				TRADE_ITEM_GOLD ||
-				TRADE_ITEM_GOLD_PER_TURN ||
-				TRADE_ITEM_RESOURCES ||
-				TRADE_ITEM_OPEN_BORDERS ||
-				TRADE_ITEM_ALLOW_EMBASSY ||
-				TRADE_ITEM_DEFENSIVE_PACT)
-				continue;
+			if (it->m_eItemType == TRADE_ITEM_GOLD ||
+				it->m_eItemType == TRADE_ITEM_GOLD_PER_TURN ||
+				it->m_eItemType == TRADE_ITEM_RESOURCES ||
+				it->m_eItemType == TRADE_ITEM_OPEN_BORDERS ||
+				it->m_eItemType == TRADE_ITEM_ALLOW_EMBASSY ||
+				it->m_eItemType == TRADE_ITEM_DEFENSIVE_PACT)
+			{
+			continue;
+			}
 				
 			//otherwise remove it.
 			pCurrentDeal->RemoveByType(it->m_eItemType, it->m_eFromPlayer);
@@ -56360,15 +56361,6 @@ bool CvDiplomacyAI::IsVoluntaryVassalageRequestAcceptable(PlayerTypes ePlayer)
 		}
 	}
 
-	// Do not accept voluntary capitulation if we need their capitals to win.
-	/* - commented out due to change with vassal logic
-	if (IsGoingForWorldConquest() || IsCloseToWorldConquest())
-	{
-		if (iNumCaps > 0)
-			return false;
-	}
-	*/
-
 	// We must be willing to go to war with everyone they're currently at war with.
 	vector<PlayerTypes> vNewWarPlayers;
 
@@ -56411,7 +56403,7 @@ bool CvDiplomacyAI::IsVoluntaryVassalageRequestAcceptable(PlayerTypes ePlayer)
 		if (GET_PLAYER(*it).isMinorCiv())
 		{
 			PeaceBlockReasons eReason = GET_PLAYER(ePlayer).GetDiplomacyAI()->GetPeaceBlockReason(*it);
-			if (eReason == PEACE_BLOCK_REASON_ALWAYS_WAR || eReason == PEACE_BLOCK_REASON_AT_WAR_WITH_ALLY)
+			if (eReason == PEACE_BLOCK_REASON_ALWAYS_WAR || eReason == PEACE_BLOCK_REASON_AT_WAR_WITH_ALLY || eReason == PEACE_BLOCK_REASON_SCENARIO)
 			{
 				if (GetCivApproach(*it) > CIV_APPROACH_HOSTILE && GetMilitaryStrengthComparedToUs(*it) > STRENGTH_AVERAGE)
 					return false;
