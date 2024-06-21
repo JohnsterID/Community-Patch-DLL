@@ -4397,7 +4397,7 @@ bool CvCityReligions::ComputeReligiousMajority(bool bNotifications)
 	{
 		iTotalFollowers += religionIt->m_iFollowers;
 
-		if(religionIt->m_iFollowers > iMostFollowers || religionIt->m_iFollowers == iMostFollowers && religionIt->m_iPressure > iMostFollowerPressure)
+		if(religionIt->m_iFollowers > iMostFollowers || (religionIt->m_iFollowers == iMostFollowers && religionIt->m_iPressure > iMostFollowerPressure))
 		{
 			iMostFollowers = religionIt->m_iFollowers;
 			iMostFollowerPressure = religionIt->m_iPressure;
@@ -4450,7 +4450,7 @@ ReligionTypes CvCityReligions::GetSimulatedReligiousMajority()
 	{
 		iTotalFollowers += religionIt->m_iFollowers;
 
-		if(religionIt->m_iFollowers > iMostFollowers || religionIt->m_iFollowers == iMostFollowers && religionIt->m_iPressure > iMostFollowerPressure)
+		if(religionIt->m_iFollowers > iMostFollowers || (religionIt->m_iFollowers == iMostFollowers && religionIt->m_iPressure > iMostFollowerPressure))
 		{
 			iMostFollowers = religionIt->m_iFollowers;
 			iMostFollowerPressure = religionIt->m_iPressure;
@@ -9895,7 +9895,7 @@ int CvReligionAI::ScoreBeliefForPlayer(CvBeliefEntry* pEntry, bool bReturnConque
 				}
 			}
 
-			CUSTOMLOG("FaithPurchaseAllGreatPeople unlocks %i GPs for %s", iTemp, m_pPlayer->getCivilizationDescription());
+			//CUSTOMLOG("FaithPurchaseAllGreatPeople unlocks %i GPs for %s", iTemp, m_pPlayer->getCivilizationDescription());
 		}
 		else
 		{
