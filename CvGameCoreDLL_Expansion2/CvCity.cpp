@@ -25134,7 +25134,8 @@ int CvCity::GetBaseYieldRateFromCSAlliance(YieldTypes eIndex) const
 		iValue /= 100;
 	}
 
-	return iValue;
+	int iBonus = GetYieldPerAlly(eIndex) * GET_PLAYER(getOwner()).GetNumCSAllies();
+	return iValue + iBonus;
 }
 //	--------------------------------------------------------------------------------
 /// Base yield rate from CS Alliances
@@ -25181,7 +25182,8 @@ int CvCity::GetBaseYieldRateFromCSFriendship(YieldTypes eIndex) const
 		iValue /= 100;
 	}
 
-	return iValue;
+	int iBonus = GetYieldPerFriend(eIndex) * GET_PLAYER(getOwner()).GetNumCSFriends();
+	return iValue + iBonus;
 
 }
 void CvCity::ChangeBaseYieldRateFromCSFriendship(YieldTypes eIndex, int iChange)
@@ -25725,7 +25727,7 @@ int CvCity::CalculateCitySecurity(CvString* toolTipSink) const
 
 	// Local Buildings
 	iTempMod = GetSpySecurityModifier();
-	iTempMod += GD_INT_GET(ESPIONAGE_SECURITY_PER_POPULATION_BUILDING_SCALER) != 0 ? getPopulation() * GetSpySecurityModifierPerXPop() / /*2*/ GD_INT_GET(ESPIONAGE_SECURITY_PER_POPULATION_BUILDING_SCALER) : 0;
+	iTempMod += GD_INT_GET(ESPIONAGE_SECURITY_PER_POPULATION_BUILDING_SCALER) != 0 ? getPopulation() * GetSpySecurityModifierPerXPop() / /*360*/ GD_INT_GET(ESPIONAGE_SECURITY_PER_POPULATION_BUILDING_SCALER) : 0;
 	GC.getGame().BuildProdModHelpText(toolTipSink, "TXT_KEY_EO_CITY_SECURITY_BUILDINGS_TT", iTempMod);
 	iCitySecurity += iTempMod;
 
@@ -31153,7 +31155,7 @@ bool CvCity::CrosscheckYieldsFromMinors()
 			}
 
 			//bonuses based on minor traits (currently food only). do not consider any major-trait specific modifiers here!
-			if (eYield == YIELD_FOOD)
+			if (eYield == YIELD_FOOD && pMinorLoop->GetTrait() == MINOR_CIV_TRAIT_MARITIME)
 			{
 				if (isCapital())
 				{
@@ -34875,14 +34877,33 @@ int CvCity::GetVassalLevyEra() const
 // Spawn one eUnit on city plot (moved to nearest valid plot)
 void CvCity::SpawnFreeUnit(UnitTypes eUnit)
 {
+	CvUnitEntry* pkUnitInfo = GC.getUnitInfo(eUnit);
+	ASSERT(pkUnitInfo);
+
 	// Great Prophet goes the other path for proper initialization and popup notification
-	if (GC.getUnitInfo(eUnit)->IsFoundReligion())
+	if (pkUnitInfo->IsFoundReligion())
 	{
 		GetCityCitizens()->DoSpawnGreatPerson(eUnit, true /*bIncrementCount*/, true, MOD_GLOBAL_TRULY_FREE_GP);
 		return;
 	}
 
 	CvPlayer& kPlayer = GET_PLAYER(getOwner());
+
+	// Free non-Prophet religious units (from buildings and policies) take on the state religion. If no state religion, use the city's religion.
+	ReligionTypes eReligion = NO_RELIGION;
+	if (pkUnitInfo->IsSpreadReligion() || pkUnitInfo->IsRemoveHeresy())
+	{
+		if (GC.getGame().isOption(GAMEOPTION_NO_RELIGION))
+			return;
+
+		eReligion = kPlayer.GetReligions()->GetStateReligion(false);
+		if (eReligion == NO_RELIGION)
+			eReligion = GetCityReligions()->GetReligiousMajority();
+
+		if (eReligion == NO_RELIGION || eReligion == RELIGION_PANTHEON)
+			return;
+	}
+
 	CvUnit* pFreeUnit = kPlayer.initUnit(eUnit, getX(), getY());
 
 	if (pFreeUnit->isTrade())
@@ -34910,6 +34931,10 @@ void CvCity::SpawnFreeUnit(UnitTypes eUnit)
 		pFreeUnit->kill(false);
 		return;
 	}
+
+	// Set up religious units properly
+	if (pkUnitInfo->IsSpreadReligion() || pkUnitInfo->IsRemoveHeresy())
+		pFreeUnit->GetReligionDataMutable()->SetFullStrength(kPlayer.GetID(), pFreeUnit->getUnitInfo(), eReligion);
 
 	pFreeUnit->DoGreatPersonSpawnBonus(this);
 	addProductionExperience(pFreeUnit);
