@@ -3,6 +3,9 @@
 INSERT INTO Defines(Name, Value) SELECT 'MAJORS_CAN_MOVE_STARTING_SETTLER', 1;
 INSERT INTO Defines(Name, Value) SELECT 'CS_CAN_MOVE_STARTING_SETTLER', 0;
 
+-- If > -1, a player with no cities but who is still alive (Complete Kills) will be granted a free Settler after this many turns
+INSERT INTO Defines(Name, Value) SELECT 'COMPLETE_KILLS_TURN_TIMER', -1;
+
 -- Maximum number of Ideology Tenets of each Level that a Player can have (should correspond to the limitations put on human players by the Ideology Selection UI)
 INSERT INTO Defines(Name, Value) SELECT 'MAX_NUM_TENETS_LEVEL_1', 7;
 INSERT INTO Defines(Name, Value) SELECT 'MAX_NUM_TENETS_LEVEL_2', 4;
@@ -1505,3 +1508,6 @@ UPDATE Defines SET Value = -500 WHERE Name = 'PLOT_INFLUENCE_NW_COST';
 INSERT INTO Defines (Name, Value) SELECT 'FRIENDSHIP_THRESHOLD_MOD_MEDIEVAL', 6;
 INSERT INTO Defines (Name, Value) SELECT 'FRIENDSHIP_THRESHOLD_MOD_INDUSTRIAL', 10;
 INSERT INTO Defines (Name, Value) SELECT 'CITY_STATE_SCALE_PER_CITY_MOD', 0;
+
+-- Fix default max builder interaction with policies
+UPDATE Defines SET Value = -9999 WHERE Name = 'DEFAULT_MAX_NUM_BUILDERS';

@@ -98,8 +98,8 @@ public:
 
 	void initFreeState(CvGameInitialItemsOverrides& kOverrides);
 	void initFreeUnits();
-	void addFreeUnitAI(UnitAITypes eUnitAI, bool bGameStart, int iCount);
-	CvPlot* addFreeUnit(UnitTypes eUnit, bool bGameStart, UnitAITypes eUnitAI = NO_UNITAI);
+	void addFreeUnitAI(UnitAITypes eUnitAI, bool bGameStart, int iCount, bool bCompleteKills = false);
+	CvPlot* addFreeUnit(UnitTypes eUnit, bool bGameStart, UnitAITypes eUnitAI = NO_UNITAI, bool bCompleteKills = false);
 
 	CvCity* initCity(int iX, int iY, bool bBumpUnits = true, bool bInitialFounding = true, ReligionTypes eInitialReligion = NO_RELIGION, const char* szName = NULL, CvUnitEntry* pkSettlerUnitEntry = NULL);
 
@@ -132,12 +132,10 @@ public:
 #if defined(MOD_BALANCE_CORE_EVENTS)
 	void DoEvents(bool bEspionageOnly = false);
 	void DoCancelEventChoice(EventChoiceTypes eChosenEventChoice);
-	void CheckActivePlayerEvents(CvCity* pCity);
 	bool IsEventValid(EventTypes eEvent);
 	bool IsEventChoiceValid(EventChoiceTypes eChosenEventChoice, EventTypes eParentEvent);
 	void DoStartEvent(EventTypes eChosenEvent, bool bSendMsg);
 	void DoEventChoice(EventChoiceTypes eEventChoice, EventTypes eEvent = NO_EVENT, bool bSendMsg = true, bool bEspionage = false);
-	void DoEventSyncChoices(EventChoiceTypes eEventChoice, CvCity* pCity);
 	CvString GetScaledHelpText(EventChoiceTypes eEventChoice, bool bYieldsOnly);
 	CvString GetDisabledTooltip(EventChoiceTypes eChosenEventChoice);
 
@@ -515,28 +513,27 @@ public:
 	void ChangeNumCitiesFreeCultureBuilding(int iChange);
 	int GetNumCitiesFreeFoodBuilding() const;
 	void ChangeNumCitiesFreeFoodBuilding(int iChange);
-#if defined(MOD_BALANCE_CORE)
+
 	int GetNumCitiesFreeChosenBuilding(BuildingClassTypes eBuildingClass) const;
 	void ChangeNumCitiesFreeChosenBuilding(BuildingClassTypes eBuildingClass, int iChange);
 
 	bool IsFreeUnitNewFoundCity(UnitClassTypes eUnitClass) const;
-	void ChangeNewFoundCityFreeUnit(UnitClassTypes eUnitClass, bool bValue);
+	void ChangeNewFoundCityFreeUnit(UnitClassTypes eUnitClass, int iChange);
 
 	bool IsFreeBuildingNewFoundCity(BuildingClassTypes eBuildingClass) const;
-	void ChangeNewFoundCityFreeBuilding(BuildingClassTypes eBuildingClass, bool bValue);
+	void ChangeNewFoundCityFreeBuilding(BuildingClassTypes eBuildingClass, int iChange);
 
 	bool IsFreeChosenBuildingNewCity(BuildingClassTypes eBuildingClass) const;
-	void ChangeFreeChosenBuildingNewCity(BuildingClassTypes eBuildingClass, bool bValue);
+	void ChangeFreeChosenBuildingNewCity(BuildingClassTypes eBuildingClass, int iChange);
 
 	bool IsFreeBuildingAllCity(BuildingClassTypes eBuildingClass) const;
-	void ChangeAllCityFreeBuilding(BuildingClassTypes eBuildingClass, bool bValue);
+	void ChangeAllCityFreeBuilding(BuildingClassTypes eBuildingClass, int iChange);
 	
 	void SetReformation(bool bValue);
 	bool IsReformation() const;
 
 	int GetReformationFollowerReduction() const;
 	void ChangeReformationFollowerReduction(int iValue);
-#endif
 
 	void DoYieldsFromKill(CvUnit* pAttackingUnit, CvUnit* pDefendingUnit, CvCity* pCity = NULL);
 
@@ -545,7 +542,7 @@ public:
 	void DoHealGlobal(int iHealPercent);
 	void DoHealLocal(int iHealPercent, CvPlot* pPlot);
 #if defined(MOD_BALANCE_CORE)
-	void DoFreeGreatWorkOnConquest(PlayerTypes ePlayer, CvCity* pCity);
+	void DoFreeGreatWorkOnConquest(CvCity* pCity);
 	void DoWarVictoryBonuses();
 	void DoDifficultyBonus(HistoricEventTypes eHistoricEvent);
 #endif
@@ -1142,9 +1139,7 @@ public:
 	void changeMaxPlayerBuildingProductionModifier(int iChange);
 
 	int getFreeExperience() const;
-	void changeFreeExperienceFromBldgs(int ichange);
-	void changeFreeExperienceFromMinors(int ichange);
-	void recomputeFreeExperience();
+	void changeFreeExperience(int ichange);
 
 	void doUpdateBarbarianCampVisibility();
 
@@ -1585,6 +1580,7 @@ public:
 	//power is military + economic
 	int getPower() const;
 	int GetMilitaryMight() const;
+	int GetNuclearMight() const;
 	int GetEconomicMight() const;
 	int GetProductionMight() const;
 	void ResetMightCalcTurn();
@@ -1630,6 +1626,9 @@ public:
 	void setEverAlive(bool bNewValue);
 	void setAlive(bool bNewValue, bool bNotify = true);
 	void verifyAlive(PlayerTypes eKiller = NO_PLAYER);
+	void checkCompleteKillsTimer();
+	int GetCompleteKillsTimerTurn() const;
+	void SetCompleteKillsTimerTurn(int iTurn);
 	bool isAlive() const
 	{
 		return m_bAlive;
@@ -1672,8 +1671,6 @@ public:
 	bool isExtendedGame() const;
 	void makeExtendedGame();
 
-	bool isFoundedFirstCity() const;
-	void setFoundedFirstCity(bool bNewValue);
 	int GetNumCitiesFounded() const;
 	void ChangeNumCitiesFounded(int iValue);
 
@@ -1893,9 +1890,6 @@ public:
 
 	int GetFreeTradeRoute() const;
 	void changeFreeTradeRoute(int iChange);
-
-	int GetFreeSpy() const;
-	void changeFreeSpy(int iChange);
 
 	int GetReligionDistance() const;
 	void changeReligionDistance(int iChange);
@@ -2417,9 +2411,6 @@ public:
 	std::string getScriptData() const;
 	void setScriptData(const std::string& strNewValue);
 
-	const CvString& getPbemEmailAddress() const;
-	void setPbemEmailAddress(const char* szAddress);
-
 	int getUnitExtraCost(UnitClassTypes eUnitClass) const;
 	void setUnitExtraCost(UnitClassTypes eUnitClass, int iCost);
 
@@ -2446,7 +2437,6 @@ public:
 	int getGrowthThreshold(int iPopulation) const;
 
 	int GetCityStrengthMod() const;
-	void SetCityStrengthMod(int iValue);
 	void ChangeCityStrengthMod(int iChange);
 
 	int GetCityGrowthMod() const;
@@ -2584,8 +2574,6 @@ public:
 	void ChangeNumWonders(int iValue);
 	int GetNumPolicies() const;
 	void ChangeNumPolicies(int iValue);
-	int GetNumGreatPeople() const;
-	void ChangeNumGreatPeople(int iValue);
 	// End New Victory Stuff
 
 #if defined(MOD_BALANCE_CORE)
@@ -2779,7 +2767,7 @@ public:
 	bool HasAnyTradeRoute() const;
 	int GetNumInternationalRoutes() const;
 	int GetNumInternalRoutes() const;
-	bool HasAnyTradeRouteWith(PlayerTypes iPlayer) const;
+	bool HasAnyTradeRouteWith(PlayerTypes ePlayer) const;
 	bool HasUnit(UnitTypes iUnitType);
 	bool HasUnitClass(UnitClassTypes iUnitClassType);
 	bool HasUUActive();
@@ -2895,6 +2883,8 @@ public:
 	bool NeedWorkboatToImproveResource(ResourceTypes eResource) const;
 
 	UnitTypes GetCompetitiveSpawnUnitType(const bool bIncludeRanged = false, const bool bIncludeShips = false, const bool bIncludeRecon = false, const bool bIncludeUUs = false, const CvCity* pSpawnCity = NULL, const bool bNoResource = false, const bool bMinorCivGift = false, const bool bRandom = false, CvSeeder* pSeed = NULL, const vector<int> viUnitCombat = vector<int>()) const;
+
+	int calculateNuclearMight(PlayerTypes ePlayer = NO_PLAYER, bool bComputeShelterNumbers = false, int iBombShelterPercent = 0, int iNukeModifier = 0, int iInterceptionChance = 0) const;
 
 protected:
 	class ConqueredByBoolField
@@ -3191,7 +3181,6 @@ protected:
 	int m_iVotesPerFollowingCityTimes100;
 	int m_iInfluenceGPExpend;
 	int m_iFreeTradeRoute;
-	int m_iFreeSpy;
 	int m_iReligionDistance;
 	int m_iPressureMod;
 	int m_iTradeReligionModifier;
@@ -3221,8 +3210,6 @@ protected:
 	int m_iMaxTeamBuildingProductionModifier;
 	int m_iMaxPlayerBuildingProductionModifier;
 	int m_iFreeExperience;
-	int m_iFreeExperienceFromBldgs;
-	int m_iFreeExperienceFromMinors;
 	int m_iFeatureProductionModifier;
 	int m_iWorkerSpeedModifier;
 	int m_iImprovementCostModifier;
@@ -3362,6 +3349,7 @@ protected:
 	int m_iCitiesLost;
 	int m_iMilitaryRating;
 	int m_iMilitaryMight;
+	int m_iNuclearMight;
 	int m_iEconomicMight;
 	int m_iProductionMight;
 	int m_iTurnSliceMightRecomputed;
@@ -3413,7 +3401,6 @@ protected:
 	int m_iHolyCityY;
 	int m_iNumWonders;
 	int m_iNumPolicies;
-	int m_iNumGreatPeople;
 	int m_iCityConnectionHappiness;
 	int m_iHolyCityID;
 	int m_iTurnsSinceSettledLastCity;
@@ -3450,8 +3437,8 @@ protected:
 	bool m_bDynamicTurnsSimultMode;
 	bool m_bPbemNewTurn;
 	bool m_bExtendedGame;
-	bool m_bFoundedFirstCity;
 	int m_iNumCitiesFounded;
+	int m_iCompleteKillsTimerTurn;
 	bool m_bStrike;
 	bool m_bCramped;
 	bool m_bLostCapital;
@@ -3578,13 +3565,11 @@ protected:
 	bool m_bVassalLevy;
 	int m_iVassalGoldMaintenanceMod;
 
-#if defined(MOD_BALANCE_CORE)
 	std::vector<int> m_paiNumCitiesFreeChosenBuilding;
-	std::vector<bool> m_pabFreeChosenBuildingNewCity;
-	std::vector<bool> m_pabAllCityFreeBuilding;
-	std::vector<bool> m_pabNewFoundCityFreeUnit;
-	std::vector<bool> m_pabNewFoundCityFreeBuilding;
-#endif
+	std::vector<int> m_paiFreeChosenBuildingNewCity;
+	std::vector<int> m_paiAllCityFreeBuilding;
+	std::vector<int> m_paiNewFoundCityFreeUnit;
+	std::vector<int> m_paiNewFoundCityFreeBuilding;
 
 	std::vector<bool> m_pabLoyalMember;
 
@@ -4037,7 +4022,6 @@ SYNC_ARCHIVE_VAR(int, m_iFreeWCVotes)
 SYNC_ARCHIVE_VAR(int, m_iVotesPerFollowingCityTimes100)
 SYNC_ARCHIVE_VAR(int, m_iInfluenceGPExpend)
 SYNC_ARCHIVE_VAR(int, m_iFreeTradeRoute)
-SYNC_ARCHIVE_VAR(int, m_iFreeSpy)
 SYNC_ARCHIVE_VAR(int, m_iReligionDistance)
 SYNC_ARCHIVE_VAR(int, m_iPressureMod)
 SYNC_ARCHIVE_VAR(int, m_iTradeReligionModifier)
@@ -4056,8 +4040,6 @@ SYNC_ARCHIVE_VAR(int, m_iMaxGlobalBuildingProductionModifier)
 SYNC_ARCHIVE_VAR(int, m_iMaxTeamBuildingProductionModifier)
 SYNC_ARCHIVE_VAR(int, m_iMaxPlayerBuildingProductionModifier)
 SYNC_ARCHIVE_VAR(int, m_iFreeExperience)
-SYNC_ARCHIVE_VAR(int, m_iFreeExperienceFromBldgs)
-SYNC_ARCHIVE_VAR(int, m_iFreeExperienceFromMinors)
 SYNC_ARCHIVE_VAR(int, m_iFeatureProductionModifier)
 SYNC_ARCHIVE_VAR(int, m_iWorkerSpeedModifier)
 SYNC_ARCHIVE_VAR(int, m_iImprovementCostModifier)
@@ -4186,6 +4168,7 @@ SYNC_ARCHIVE_VAR(int, m_iCapitalCityID)
 SYNC_ARCHIVE_VAR(int, m_iCitiesLost)
 SYNC_ARCHIVE_VAR(int, m_iMilitaryRating)
 SYNC_ARCHIVE_VAR(int, m_iMilitaryMight)
+SYNC_ARCHIVE_VAR(int, m_iNuclearMight)
 SYNC_ARCHIVE_VAR(int, m_iEconomicMight)
 SYNC_ARCHIVE_VAR(int, m_iProductionMight)
 SYNC_ARCHIVE_VAR(int, m_iTurnSliceMightRecomputed)
@@ -4231,7 +4214,6 @@ SYNC_ARCHIVE_VAR(int, m_iHolyCityX)
 SYNC_ARCHIVE_VAR(int, m_iHolyCityY)
 SYNC_ARCHIVE_VAR(int, m_iNumWonders)
 SYNC_ARCHIVE_VAR(int, m_iNumPolicies)
-SYNC_ARCHIVE_VAR(int, m_iNumGreatPeople)
 SYNC_ARCHIVE_VAR(int, m_iCityConnectionHappiness)
 SYNC_ARCHIVE_VAR(int, m_iHolyCityID)
 SYNC_ARCHIVE_VAR(int, m_iTurnsSinceSettledLastCity)
@@ -4260,8 +4242,8 @@ SYNC_ARCHIVE_VAR(bool, m_bEndTurn)
 SYNC_ARCHIVE_VAR(bool, m_bDynamicTurnsSimultMode)
 SYNC_ARCHIVE_VAR(bool, m_bPbemNewTurn)
 SYNC_ARCHIVE_VAR(bool, m_bExtendedGame)
-SYNC_ARCHIVE_VAR(bool, m_bFoundedFirstCity)
 SYNC_ARCHIVE_VAR(int, m_iNumCitiesFounded)
+SYNC_ARCHIVE_VAR(int, m_iCompleteKillsTimerTurn)
 SYNC_ARCHIVE_VAR(bool, m_bStrike)
 SYNC_ARCHIVE_VAR(bool, m_bCramped)
 SYNC_ARCHIVE_VAR(bool, m_bLostCapital)
@@ -4359,10 +4341,10 @@ SYNC_ARCHIVE_VAR(std::vector<int>, m_paiHurryModifier)
 SYNC_ARCHIVE_VAR(bool, m_bVassalLevy)
 SYNC_ARCHIVE_VAR(int, m_iVassalGoldMaintenanceMod)
 SYNC_ARCHIVE_VAR(std::vector<int>, m_paiNumCitiesFreeChosenBuilding)
-SYNC_ARCHIVE_VAR(std::vector<bool>, m_pabFreeChosenBuildingNewCity)
-SYNC_ARCHIVE_VAR(std::vector<bool>, m_pabAllCityFreeBuilding)
-SYNC_ARCHIVE_VAR(std::vector<bool>, m_pabNewFoundCityFreeUnit)
-SYNC_ARCHIVE_VAR(std::vector<bool>, m_pabNewFoundCityFreeBuilding)
+SYNC_ARCHIVE_VAR(std::vector<int>, m_paiFreeChosenBuildingNewCity)
+SYNC_ARCHIVE_VAR(std::vector<int>, m_paiAllCityFreeBuilding)
+SYNC_ARCHIVE_VAR(std::vector<int>, m_paiNewFoundCityFreeUnit)
+SYNC_ARCHIVE_VAR(std::vector<int>, m_paiNewFoundCityFreeBuilding)
 SYNC_ARCHIVE_VAR(std::vector<bool>, m_pabLoyalMember)
 SYNC_ARCHIVE_VAR(std::vector<bool>, m_pabHasGlobalMonopoly)
 SYNC_ARCHIVE_VAR(std::vector<bool>, m_pabHasStrategicMonopoly)

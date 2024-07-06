@@ -1,5 +1,5 @@
 /*	-------------------------------------------------------------------------------------------------------
-	© 1991-2012 Take-Two Interactive Software and its subsidiaries.  Developed by Firaxis Games.  
+	Â© 1991-2012 Take-Two Interactive Software and its subsidiaries.  Developed by Firaxis Games.  
 	Sid Meier's Civilization V, Civ, Civilization, 2K Games, Firaxis Games, Take-Two Interactive Software 
 	and their respective logos are all trademarks of Take-Two interactive Software, Inc.  
 	All other marks and trademarks are the property of their respective owners.  
@@ -241,7 +241,7 @@ public:
 
 	// Approach
 	CivApproachTypes GetCivApproach(PlayerTypes ePlayer) const;
-	void SetCivApproach(PlayerTypes ePlayer, CivApproachTypes eApproach);
+	void SetCivApproach(PlayerTypes ePlayer, CivApproachTypes eApproach, bool bResetAttackOperations = true);
 
 	CivApproachTypes GetCivStrategicApproach(PlayerTypes ePlayer) const;
 	void SetCivStrategicApproach(PlayerTypes ePlayer, CivApproachTypes eApproach);
@@ -398,9 +398,9 @@ public:
 	void SetCoopWarStateChangeTurn(PlayerTypes eAllyPlayer, PlayerTypes eTargetPlayer, int iTurn);
 	bool IsCoopWarMessageTooSoon(PlayerTypes eAskingPlayer, PlayerTypes eTargetPlayer) const;
 
-	int GetCoopWarScore(PlayerTypes ePlayer) const;
-	void SetCoopWarScore(PlayerTypes ePlayer, int iValue);
-	void ChangeCoopWarScore(PlayerTypes ePlayer, int iChange);
+	int GetCoopWarAgreementScore(PlayerTypes ePlayer) const;
+	void SetCoopWarAgreementScore(PlayerTypes ePlayer, int iValue);
+	void ChangeCoopWarAgreementScore(PlayerTypes ePlayer, int iChange);
 
 	// ------------------------------------
 	// War
@@ -414,7 +414,6 @@ public:
 	// Would we potentially attack ePlayer if someone else asked us to?
 	bool IsPotentialWarTarget(PlayerTypes ePlayer) const;
 	void SetPotentialWarTarget(PlayerTypes ePlayer, bool bValue);
-	void DoResetPotentialWarTargets();
 
 	// Mustering For Attack: Is there Sneak Attack Operation completed and ready to roll against ePlayer?
 	bool IsArmyInPlaceForAttack(PlayerTypes ePlayer) const;
@@ -1958,7 +1957,7 @@ private:
 	// Coop Wars
 	char m_aaeCoopWarState[MAX_MAJOR_CIVS][MAX_MAJOR_CIVS];
 	int m_aaiCoopWarStateChangeTurn[MAX_MAJOR_CIVS][MAX_MAJOR_CIVS];
-	char m_aiCoopWarScore[MAX_MAJOR_CIVS];
+	char m_aiCoopWarAgreementScore[MAX_MAJOR_CIVS];
 
 	// War
 	bool m_abSaneDiplomaticTarget[MAX_CIV_PLAYERS];
