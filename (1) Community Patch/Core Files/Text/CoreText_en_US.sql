@@ -49,6 +49,11 @@ WHERE EXISTS (SELECT * FROM CustomModOptions WHERE Name='ALTERNATE_ASSYRIA_TRAIT
 -- Cities
 
 UPDATE Language_en_US	
+SET Text = 'Do you want to annex the puppet of {@1_CityName} into your empire? It will allow you to choose Production, but will increase your [ICON_HAPPINESS_4] Unhappiness and slow your acquisition of new Policies and Technologies. You will not be able to reverse this.'
+WHERE Tag = 'TXT_KEY_POPUP_ANNEX_PUPPET';
+
+
+UPDATE Language_en_US	
 SET Text = '[NEWLINE]Requires {TXT_KEY_GRAMMAR_A_AN << {1_BuildingName:textkey}} in this City.'
 WHERE Tag = 'TXT_KEY_NO_ACTION_UNIT_REQUIRES_BUILDING';
 
@@ -711,11 +716,6 @@ WHERE Tag = 'TXT_KEY_ECONOMICAISTRATEGY_TOO_MANY_UNITS';
 UPDATE Language_en_US
 SET Text = 'We''re having issues with our growing population, so we needn''t build growth buildings in our cities.'
 WHERE Tag = 'TXT_KEY_ECONOMICAISTRATEGY_HALT_GROWTH_BUILDINGS';
-
--- Reversed Tourism for Open Borders
-UPDATE Language_en_US
-SET Text = '+{1_Num}% Bonus for Open Borders from:[NEWLINE]   '
-WHERE Tag = 'TXT_KEY_CO_CITY_TOURISM_OPEN_BORDERS_BONUS';
 
 -- Barbarians
 UPDATE Language_en_US
@@ -1980,6 +1980,8 @@ UPDATE Language_en_US
 SET Text = '{1_Num} [ICON_TOURISM] Tourism from buildings purchased with [ICON_PEACE] Faith'
 WHERE Tag = 'TXT_KEY_CO_CITY_TOURISM_FAITH_BUILDINGS';
 
-
+UPDATE Language_en_US
+SET Text = '+{1_Num}% Bonus from Trade Route between Empires[NEWLINE]'
+WHERE Tag = 'TXT_KEY_CO_PLAYER_TOURISM_TRADE_ROUTE';
 
 

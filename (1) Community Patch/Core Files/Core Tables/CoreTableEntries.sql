@@ -305,6 +305,9 @@ UPDATE GameSpeeds SET DifficultyBonusPercent = 300 WHERE Type = 'GAMESPEED_MARAT
 -- (10 = 1%)
 ALTER TABLE GameSpeeds ADD COLUMN 'MilitaryRatingDecayPercent' INTEGER DEFAULT 0;
 
+-- Bonus XP to Gold-purchased military units, scaling with era.
+ALTER TABLE Traits ADD COLUMN 'PurchasedUnitsBonusXP' INTEGER DEFAULT 0;
+
 -- Trade Route yields no longer scale from distance.
 ALTER TABLE Traits ADD COLUMN 'IgnoreTradeDistanceScaling' BOOLEAN DEFAULT 0;
 
@@ -1430,7 +1433,7 @@ ALTER TABLE Policies ADD COLUMN 'TradeRouteSeaDistanceModifier' INTEGER DEFAULT 
 
 -- City Security against Spies
 ALTER TABLE Buildings ADD COLUMN 'SpySecurityModifier' INTEGER DEFAULT 0;
--- City Security against Spies per X Population, where X = ESPIONAGE_SECURITY_PER_POPULATION_BUILDING_SCALER
+-- City Security against Spies per X, where X = (total of this value in the city) * (city population) / ESPIONAGE_SECURITY_PER_POPULATION_BUILDING_SCALER
 ALTER TABLE Buildings ADD COLUMN 'SpySecurityModifierPerXPop' INTEGER DEFAULT 0;
 -- City Security against Spies in all Cities
 ALTER TABLE Buildings ADD COLUMN 'GlobalSpySecurityModifier' INTEGER DEFAULT 0;
@@ -1557,6 +1560,7 @@ ALTER TABLE Worlds ADD COLUMN 'MinDistanceCities' INTEGER DEFAULT 0;
 ALTER TABLE Worlds ADD COLUMN 'MinDistanceCityStates' INTEGER DEFAULT 0;
 ALTER TABLE Worlds ADD COLUMN 'ReformationPercentRequired' INTEGER DEFAULT 100;
 ALTER TABLE Worlds ADD COLUMN 'NumCitiesTourismCostMod' INTEGER DEFAULT 0;
+ALTER TABLE Worlds ADD COLUMN 'NumCitiesUnitSupplyMod' INTEGER DEFAULT 0;
 
 -- New City Plot Yields Method
 ALTER TABLE Yields ADD COLUMN 'MinCityFlatFreshWater' INTEGER DEFAULT 0;
@@ -1566,7 +1570,7 @@ ALTER TABLE Yields ADD COLUMN 'MinCityHillNoFreshWater' INTEGER DEFAULT 0;
 ALTER TABLE Yields ADD COLUMN 'MinCityMountainFreshWater' INTEGER DEFAULT 0;
 ALTER TABLE Yields ADD COLUMN 'MinCityMountainNoFreshWater' INTEGER DEFAULT 0;
 
--- Policy Initialize Number of best units in captial. Requries 'IncludesOneShotFreeUnits' Set to true.
+-- Policy which initializes N of the best units in a category in capital. Requires 'IncludesOneShotFreeUnits' set to true.
 ALTER TABLE Policies ADD COLUMN 'BestNumberLandCombatUnitClass' INTEGER DEFAULT 0;
 ALTER TABLE Policies ADD COLUMN 'BestNumberLandRangedUnitClass' INTEGER DEFAULT 0;
 ALTER TABLE Policies ADD COLUMN 'BestNumberSeaCombatUnitClass' INTEGER DEFAULT 0;
@@ -1759,11 +1763,8 @@ ALTER TABLE Builds ADD COLUMN 'CultureBoost' BOOLEAN DEFAULT 0;
 -- When a unit (civilian or combat) with this promotion is stationed in a City, City gains X% modifier towards building military units.
 ALTER TABLE UnitPromotions ADD COLUMN 'MilitaryProductionModifier' INTEGER DEFAULT 0;
 
--- Unit gets the "HighSeaRaider" Promotion Entry (if defined) when it plunders a Trade Route.
+-- Unit gains 3x gold when it plunders a Trade Route.
 ALTER TABLE Units ADD COLUMN 'HighSeaRaider' BOOLEAN DEFAULT 0;
-
--- Units gains this promotion when its Unit Entry is a HighSeaRaider
-ALTER TABLE UnitPromotions ADD COLUMN 'HighSeaRaider' BOOLEAN DEFAULT 0;
 
 -- Unit gets a CS modifier if not adjacent to any Friendly Unit
 ALTER TABLE UnitPromotions ADD COLUMN 'NoAdjacentUnitMod' INTEGER DEFAULT 0;

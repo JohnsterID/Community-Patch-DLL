@@ -31,7 +31,7 @@
 	lua_setfield(L, t, #Name);
 
 //safety measure against illegal pointers passed from lua
-#define CHECK_PLOT_VALID(p) if(!p||!GC.getMap().isPlot(p->getX(),p->getY())|(p<GC.getMap().plotByIndexUnchecked(0))|(p>GC.getMap().plotByIndexUnchecked(GC.getMap().numPlots()-1))) return 0;
+#define CHECK_PLOT_VALID(p) if (!p || !GC.getMap().isPlot(p->getX(), p->getY()) || (p < GC.getMap().plotByIndexUnchecked(0)) || (p > GC.getMap().plotByIndexUnchecked(GC.getMap().numPlots() - 1))) return 0;
 
 //------------------------------------------------------------------------------
 void CvLuaPlot::PushMethods(lua_State* L, int t)
@@ -2367,7 +2367,6 @@ int CvLuaPlot::lAddPopupMessage(lua_State* L)
 {
 	CvPlot* pPlot = GetInstance(L);
 	const char* szMessage = lua_tostring(L, 2);
-	const float fDelay = (float) luaL_optnumber(L, 3, 0.0);
 	const PlayerTypes ePlayer = (PlayerTypes) luaL_optinteger(L, 4, GC.getGame().getActivePlayer());
 
 	SHOW_PLOT_POPUP(pPlot, ePlayer, szMessage);

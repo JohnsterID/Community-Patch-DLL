@@ -1,5 +1,5 @@
 /*	-------------------------------------------------------------------------------------------------------
-	� 1991-2012 Take-Two Interactive Software and its subsidiaries.  Developed by Firaxis Games.  
+	© 1991-2012 Take-Two Interactive Software and its subsidiaries.  Developed by Firaxis Games.  
 	Sid Meier's Civilization V, Civ, Civilization, 2K Games, Firaxis Games, Take-Two Interactive Software 
 	and their respective logos are all trademarks of Take-Two interactive Software, Inc.  
 	All other marks and trademarks are the property of their respective owners.  
@@ -81,8 +81,6 @@ public:
 	int GetAllFeatureProduction() const;
 	int GetImprovementCostModifier() const;
 	int GetImprovementUpgradeRateModifier() const;
-	int GetSpecialistProductionModifier() const;
-	int GetSpecialistUpgradeModifier() const;
 	int GetMilitaryProductionModifier() const;
 	int GetBaseFreeUnits() const;
 	int GetBaseFreeMilitaryUnits() const;
@@ -169,7 +167,6 @@ public:
 	int GetHappyPerMilitaryUnit() const;
 	int GetFreeSpecialist() const;
 	int GetTechPrereq() const;
-	int GetMaxConscript() const;
 	int GetExpModifier() const;
 	int GetExpInBorderModifier() const;
 	int GetMinorQuestFriendshipMod() const;
@@ -217,7 +214,6 @@ public:
 	bool IsMinorScienceAllies() const;
 	bool IsMinorResourceBonus() const;
 	int GetPolicyBranchType() const;
-	int GetNumExtraBranches() const;
 	int GetHappinessToCulture() const;
 	int GetHappinessToScience() const;
 	int GetNumCitiesFreeCultureBuilding() const;
@@ -262,7 +258,6 @@ public:
 	// Accessor Functions (Arrays)
 	int GetPrereqOrPolicies(int i) const;
 	int GetPrereqAndPolicies(int i) const;
-	int GetPolicyDisables(int i) const;
 	int GetYieldModifier(int i) const;
 	int* GetYieldModifierArray() const;
 	int GetCityYieldChange(int i) const;
@@ -281,7 +276,7 @@ public:
 	int* GetGreatWorkYieldChangeArray() const;
 	int GetSpecialistExtraYield(int i) const;
 	int* GetSpecialistExtraYieldArray() const;
-	int IsFreePromotion(int i) const;
+	bool IsFreePromotion(int i) const;
 	bool IsFreePromotionUnitCombat(const int promotionID, const int unitCombatID) const;
 #if defined(MOD_RELIGION_POLICY_BRANCH_FAITH_GP)
 	bool HasFaithPurchaseUnitClasses() const;
@@ -495,6 +490,11 @@ public:
 
 	int GetGreatGeneralExtraBonus() const;
 
+	set<int> GetPolicyDisables() const
+	{
+		return m_siPolicyDisables;
+	}
+
 private:
 	int m_iTechPrereq;
 	int m_iCultureCost;
@@ -547,8 +547,6 @@ private:
 	int m_iAllFeatureProduction;
 	int m_iImprovementCostModifier;
 	int m_iImprovementUpgradeRateModifier;
-	int m_iSpecialistProductionModifier;
-	int m_iSpecialistUpgradeModifier;
 	int m_iMilitaryProductionModifier;
 	int m_iBaseFreeUnits;
 	int m_iBaseFreeMilitaryUnits;
@@ -655,9 +653,7 @@ private:
 	bool m_bMinorScienceAllies;
 	bool m_bMinorResourceBonus;
 	int m_iFreeSpecialist;
-	int m_iMaxConscript;
 	int m_iPolicyBranchType;
-	int m_iNumExtraBranches;
 	int m_iWoundedUnitDamageMod;
 	int m_iUnitUpgradeCostMod;
 	int m_iBarbarianCombatBonus;
@@ -740,7 +736,7 @@ private:
 #endif
 	int* m_piPrereqOrPolicies;
 	int* m_piPrereqAndPolicies;
-	int* m_piPolicyDisables;
+	set<int> m_siPolicyDisables;
 	int* m_piYieldModifier;
 	int* m_piCityYieldChange;
 	int* m_piCoastalCityYieldChange;
@@ -860,7 +856,6 @@ private:
 #if defined(MOD_BALANCE_CORE_BUILDING_INVESTMENTS)
 	int m_iInvestmentModifier;
 #endif
-//	bool* m_pabHurry;
 	bool* m_pabSpecialistValid;
 	int** m_ppiImprovementYieldChanges;
 	int** m_ppiPlotYieldChanges;
@@ -1169,13 +1164,6 @@ public:
 	bool IsPolicyBranchFinished(PolicyBranchTypes eBranchType) const;
 	bool WillFinishBranchIfAdopted(PolicyTypes eType) const;
 
-	PolicyBranchTypes GetPolicyBranchChosen(int iID) const;
-	void SetPolicyBranchChosen(int iID, PolicyBranchTypes eBranchType);
-	int GetNumPolicyBranchesAllowed() const;
-
-	int GetNumExtraBranches() const;
-	void ChangeNumExtraBranches(int iChange);
-
 	// Below is used to determine the "title" for the player
 	void DoNewPolicyPickedForHistory(PolicyTypes ePolicy);
 	PolicyBranchTypes GetDominantPolicyBranchForTitle() const;
@@ -1230,13 +1218,10 @@ private:
 	bool* m_pabPolicyBranchFinished;
 	int* m_paiPolicyBranchBlockedCount;
 	int* m_paiPolicyBlockedCount;
-	PolicyBranchTypes* m_paePolicyBranchesChosen;
 	PolicyBranchTypes* m_paePolicyBlockedBranchCheck;
 	CvPolicyXMLEntries* m_pPolicies;
 	CvPolicyAI* m_pPolicyAI;
 	CvPlayer* m_pPlayer;
-
-	int m_iNumExtraBranches;
 
 	PolicyBranchTypes m_eBranchPicked1;
 	PolicyBranchTypes m_eBranchPicked2;

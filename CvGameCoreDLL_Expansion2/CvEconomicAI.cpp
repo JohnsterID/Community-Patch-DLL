@@ -252,11 +252,7 @@ void CvEconomicAIStrategyXMLEntries::DeleteArray()
 /// Get a specific entry
 CvEconomicAIStrategyXMLEntry* CvEconomicAIStrategyXMLEntries::GetEntry(int index)
 {
-#if defined(MOD_BALANCE_CORE)
-	return (index!=NO_ECONOMICAISTRATEGY) ? m_paAIStrategyEntries[index] : NULL;
-#else
-	return m_paAIStrategyEntries[index];
-#endif
+	return (index != NO_ECONOMICAISTRATEGY) ? m_paAIStrategyEntries[index] : NULL;
 }
 
 //=====================================
@@ -774,8 +770,11 @@ void CvEconomicAI::DoTurn()
 		}
 	}
 
-	if(!m_pPlayer->isHuman())
+	if (!m_pPlayer->isHuman())
 	{
+		// This needs to be called first
+		m_pPlayer->DoUpdateCoreCitiesForSpaceshipProduction();
+
 		DoHurry();
 		DoPlotPurchases();
 		DisbandExtraWorkers();
@@ -786,7 +785,6 @@ void CvEconomicAI::DoTurn()
 		DisbandMiscUnits();
 		DisbandUnitsToFreeSpaceshipResources();
 
-#if defined(MOD_GLOBAL_GREATWORK_YIELDTYPES)
 		YieldTypes eFocusYield = NO_YIELD;
 		if (EconomicAIHelpers::IsTestStrategy_GS_Spaceship(m_pPlayer)) {
 			eFocusYield = YIELD_SCIENCE;
@@ -799,9 +797,6 @@ void CvEconomicAI::DoTurn()
 		}
 		
 		m_pPlayer->GetCulture()->DoSwapGreatWorks(eFocusYield);
-#else
-		m_pPlayer->GetCulture()->DoSwapGreatWorks();
-#endif
 	}
 }
 
@@ -1801,40 +1796,7 @@ void CvEconomicAI::DoHurry()
 				if (m_pPlayer->GetEconomicAI()->CanWithdrawMoneyForPurchase(PURCHASE_TYPE_UNIT, iGoldCost))
 				{
 					// Resource requirement
-					bool bMissingResource = false;
-					if (!m_pPlayer->isMinorCiv() && !m_pPlayer->isBarbarian())
-					{
-						for (int iResourceLoop = 0; iResourceLoop < GC.getNumResourceInfos() && !bMissingResource; iResourceLoop++)
-						{
-							ResourceTypes eResource = (ResourceTypes)iResourceLoop;
-							int iNumResource = pkUnitInfo->GetResourceQuantityRequirement(eResource);
-							if (iNumResource > 0)
-							{
-								//Don't use all of our Aluminum, keep some for spaceship parts
-								ResourceTypes eAluminumResource = (ResourceTypes)GC.getInfoTypeForString("RESOURCE_ALUMINUM", true);
-								if (eResource == eAluminumResource)
-								{
-									iNumResource += (m_pPlayer->GetNumAluminumStillNeededForSpaceship() + m_pPlayer->GetNumAluminumStillNeededForCoreCities());
-								}
-
-								if (m_pPlayer->getNumResourceAvailable(eResource) < iNumResource)
-								{
-									bMissingResource = true;
-								}
-
-								if (MOD_UNITS_RESOURCE_QUANTITY_TOTALS)
-								{
-									int iResourceTotal = pkUnitInfo->GetResourceQuantityTotal(eResource);
-									if (m_pPlayer->getNumResourceTotal(eResource) < iResourceTotal || m_pPlayer->getNumResourceAvailable(eResource) < 0)
-									{
-										bMissingResource = true;
-									}
-								}
-							}
-						}
-					}
-
-					if (bMissingResource)
+					if (m_pPlayer->HasResourceForNewUnit(eUnitType, false, true))
 						continue;
 
 					//Log it
@@ -1930,12 +1892,15 @@ void CvEconomicAI::DoHurry()
 						if (GC.getLogging() && GC.getAILogging())
 						{
 							CvString strLogString;
-#if defined(MOD_BALANCE_CORE_BUILDING_INVESTMENTS)
-							strLogString.Format("MOD - Investing in building: %s in %s. Cost: %d, Balance (before buy): %d, TurnsLeft: %d, ExcessValuation: %d",
-#else
-							strLogString.Format("MOD - Buying building: %s in %s. Cost: %d, Balance (before buy): %d, TurnsLeft: %d, ExcessValuation: %d",
-#endif
-							pkBuildingInfo->GetDescription(), pSelectedCity->getName().c_str(), iGoldCost, m_pPlayer->GetTreasury()->GetGold(), iTurnsLeft, iExcessValuation);
+							if (MOD_BALANCE_CORE_BUILDING_INVESTMENTS)
+								strLogString = "MOD - Investing in building:";
+							else
+								strLogString = "MOD - Buying building:";
+
+							strLogString.Format("%s %s in %s. Cost: %d, Balance (before buy): %d, TurnsLeft: %d, ExcessValuation: %d",
+								strLogString.c_str(), pkBuildingInfo->GetDescription(), pSelectedCity->getName().c_str(),
+								iGoldCost, m_pPlayer->GetTreasury()->GetGold(), iTurnsLeft, iExcessValuation);
+
 							m_pPlayer->GetHomelandAI()->LogHomelandMessage(strLogString);
 						}
 
@@ -2372,7 +2337,7 @@ void CvEconomicAI::DisbandUnitsToFreeSpaceshipResources()
 	ResourceTypes eAluminum = (ResourceTypes)GC.getInfoTypeForString("RESOURCE_ALUMINUM", true);
 	int iNumAluminumWeNeed = max(0, iNumTotalAluminumNeededForSpaceship + iNumTotalAluminumNeededForCoreCities - m_pPlayer->getNumResourceAvailable(eAluminum, true));
 
-	vector<CvCity*> vCoreCities = m_pPlayer->GetCoreCitiesForSpaceshipProduction();
+	const vector<int>& vCoreCities = m_pPlayer->GetCoreCitiesForSpaceshipProduction();
 	if (GC.getLogging() && GC.getAILogging())
 	{
 		CvString strLogString;
@@ -2383,7 +2348,7 @@ void CvEconomicAI::DisbandUnitsToFreeSpaceshipResources()
 			strLogString.Format("Core Cities: ");
 			for (size_t i = 0; i < vCoreCities.size(); i++)
 			{
-				strLogString += vCoreCities[i]->getName();
+				strLogString += m_pPlayer->getCity(vCoreCities[i])->getName();
 				strLogString += ", ";
 			}
 		}
@@ -2460,7 +2425,7 @@ void CvEconomicAI::DisbandUnitsToFreeSpaceshipResources()
 		{
 			// sort cities by economic value, cities in which we want to build spaceship parts are extra valuable
 			CvWeightedVector<CvCity*> vCityEconomicWeights;
-			vector<CvCity*> vCitiesForSpaceshipParts = m_pPlayer->GetCoreCitiesForSpaceshipProduction();
+			const vector<int>& vCitiesForSpaceshipParts = m_pPlayer->GetCoreCitiesForSpaceshipProduction();
 			int iLoopCity = 0;
 			for (CvCity* pLoopCity = m_pPlayer->firstCity(&iLoopCity); pLoopCity != NULL; pLoopCity = m_pPlayer->nextCity(&iLoopCity))
 			{
@@ -2469,9 +2434,10 @@ void CvEconomicAI::DisbandUnitsToFreeSpaceshipResources()
 					continue;
 
 				int iWeight = pLoopCity->getEconomicValue(m_pPlayer->GetID());
-				if (pLoopCity->isProductionSpaceshipPart() || (vCitiesForSpaceshipParts.size() > 0 && std::find(vCitiesForSpaceshipParts.begin(), vCitiesForSpaceshipParts.end(), pLoopCity) != vCitiesForSpaceshipParts.end()))
+				if (pLoopCity->isProductionSpaceshipPart() || (vCitiesForSpaceshipParts.size() > 0 && std::find(vCitiesForSpaceshipParts.begin(), vCitiesForSpaceshipParts.end(), pLoopCity->GetID()) != vCitiesForSpaceshipParts.end()))
 				{
-					iWeight *= 2;
+					// make sure the core cities for spaceship production have the highest score
+					iWeight *= 10;
 				}
 				vCityEconomicWeights.push_back(pLoopCity, iWeight);
 			}
@@ -2481,7 +2447,16 @@ void CvEconomicAI::DisbandUnitsToFreeSpaceshipResources()
 				// start selling buildings in the worst cities
 				for (int i = vCityEconomicWeights.size() - 1; i >= 0; i--)
 				{
+
 					CvCity* pLoopCity = vCityEconomicWeights.GetElement(i);
+					// if this is a core city, sell buildings only if we need them for spaceship parts
+					if (pLoopCity->isProductionSpaceshipPart() || (vCitiesForSpaceshipParts.size() > 0 && std::find(vCitiesForSpaceshipParts.begin(), vCitiesForSpaceshipParts.end(), pLoopCity->GetID()) != vCitiesForSpaceshipParts.end()))
+					{
+						if (iNumAluminumWeNeed - iNumTotalAluminumNeededForCoreCities <= 0)
+						{
+							continue;
+						}
+					}
 					BuildingTypes eBestBuilding = NO_BUILDING;
 					int iNumAluminumInBuilding = 0;
 					int iWorstRefund = INT_MAX;
@@ -2493,6 +2468,14 @@ void CvEconomicAI::DisbandUnitsToFreeSpaceshipResources()
 
 						if (pkBuildingInfo && pkBuildingInfo->GetResourceQuantityRequirement(eAluminum) > 0)
 						{
+							// Building in queue? Cancel it.
+							if (pLoopCity->isBuildingInQueue(eBuilding))
+							{
+								eBestBuilding = eBuilding;
+								iNumAluminumInBuilding = pkBuildingInfo->GetResourceQuantityRequirement(eAluminum);
+								// canceling a building in queue is always better than selling an existing one, so don't consider other options anymore
+								break;
+							}
 							// Has this Building
 							if (pLoopCity->GetCityBuildings()->GetNumBuilding(eBuilding) > 0 && pLoopCity->GetCityBuildings()->IsBuildingSellable(*pkBuildingInfo))
 							{
@@ -2508,11 +2491,11 @@ void CvEconomicAI::DisbandUnitsToFreeSpaceshipResources()
 					}
 					if (eBestBuilding != NO_BUILDING)
 					{
-						pLoopCity->GetCityBuildings()->DoSellBuilding(eBestBuilding);
+						pLoopCity->isBuildingInQueue(eBestBuilding) ? pLoopCity->clearOrderQueue() : pLoopCity->GetCityBuildings()->DoSellBuilding(eBestBuilding);
 						if (GC.getLogging() && GC.getAILogging())
 						{
 							CvString strLogString;
-							strLogString.Format("Selling building %s in %s to get aluminum for spaceship.  Aluminum available after disbanding: %d", GC.getBuildingInfo(eBestBuilding)->GetText(), pLoopCity->getName().GetCString(), m_pPlayer->getNumResourceAvailable(eAluminum, true));
+							strLogString.Format("Selling or canceling production of building %s in %s to get aluminum for spaceship. Aluminum available now: %d", GC.getBuildingInfo(eBestBuilding)->GetText(), pLoopCity->getName().GetCString(), m_pPlayer->getNumResourceAvailable(eAluminum, true));
 							m_pPlayer->LogSpaceshipPlanMessage(strLogString);
 						}
 						iNumAluminumWeNeed -= iNumAluminumInBuilding;
@@ -3777,7 +3760,7 @@ bool EconomicAIHelpers::IsTestStrategy_FoundCity(EconomicAIStrategyTypes eStrate
 	if ((GC.getGame().isOption(GAMEOPTION_ONE_CITY_CHALLENGE) && pPlayer->isHuman()) || pPlayer->isBarbarian() || CannotMinorCiv(pPlayer, eStrategy))
 		return false;
 
-	if(pPlayer->getNumCities() < 1) //in this case homeland (first settler moves) should apply
+	if (pPlayer->GetNumCitiesFounded() == 0) //in this case homeland (first settler moves) should apply
 		return false;
 
 	// Never run this strategy for a human player
@@ -4350,29 +4333,18 @@ bool EconomicAIHelpers::IsTestStrategy_NeedArchaeologists(CvPlayer* pPlayer)
 {
 	int iNumSites = pPlayer->GetEconomicAI()->GetVisibleAntiquitySites();
 	int iNumArchaeologists = pPlayer->GetNumUnitsWithUnitAI(UNITAI_ARCHAEOLOGIST, true);
-#if defined(MOD_BALANCE_CORE)
 	int iNumSitesOwn = pPlayer->GetEconomicAI()->GetVisibleAntiquitySitesOwnTerritory();
 	int iNumSitesNeutral = pPlayer->GetEconomicAI()->GetVisibleAntiquitySitesUnownedTerritory();
-#endif
-#if defined(MOD_BALANCE_CORE)
-	if(iNumSitesOwn > iNumArchaeologists)
-	{
+
+	if (iNumSitesOwn > iNumArchaeologists)
 		return true;
-	}
-	else if((iNumSitesOwn + iNumSitesNeutral) > (iNumArchaeologists * 2) && !pPlayer->IsAtWar())
-	{
+
+	if ((iNumSitesOwn + iNumSitesNeutral > iNumArchaeologists * 2) && !pPlayer->IsAtWar())
 		return true;
-	}
-	else if((iNumSitesOwn + iNumSitesNeutral + iNumSites) > (iNumArchaeologists * 4) && !pPlayer->IsAtWar() && (iNumArchaeologists < 3))
-	{
+
+	if ((iNumSitesOwn + iNumSitesNeutral + iNumSites > iNumArchaeologists * 4) && !pPlayer->IsAtWar() && iNumArchaeologists < 3)
 		return true;
-	}
-#else
-	if (iNumSites > iNumArchaeologists)
-	{
-		return true;
-	}
-#endif
+
 	return false;
 }
 
@@ -4759,42 +4731,41 @@ bool EconomicAIHelpers::IsTestStrategy_NeedMuseums(CvPlayer* pPlayer)
 /// We have the tech for guilds but haven't built them yet
 bool EconomicAIHelpers::IsTestStrategy_NeedGuilds(CvPlayer* pPlayer)
 {
-	CvTeam &kTeam = GET_TEAM(pPlayer->getTeam());
 	const CvCivilizationInfo& playerCivilizationInfo = pPlayer->getCivilizationInfo();
+	BuildingTypes eWritersGuild = static_cast<BuildingTypes>(playerCivilizationInfo.getCivilizationBuildings(GC.getInfoTypeForString("BUILDINGCLASS_WRITERS_GUILD")));
+	BuildingTypes eArtistsGuild = static_cast<BuildingTypes>(playerCivilizationInfo.getCivilizationBuildings(GC.getInfoTypeForString("BUILDINGCLASS_ARTISTS_GUILD")));
+	BuildingTypes eMusiciansGuild = static_cast<BuildingTypes>(playerCivilizationInfo.getCivilizationBuildings(GC.getInfoTypeForString("BUILDINGCLASS_MUSICIANS_GUILD")));
 
-	BuildingTypes eWritersGuild = MOD_BUILDINGS_THOROUGH_PREREQUISITES ? (BuildingTypes)playerCivilizationInfo.getCivilizationBuildings((BuildingClassTypes)GC.getInfoTypeForString("BUILDINGCLASS_WRITERS_GUILD")) : (BuildingTypes)GC.getInfoTypeForString("BUILDING_WRITERS_GUILD", true);
-	BuildingTypes eArtistsGuild = MOD_BUILDINGS_THOROUGH_PREREQUISITES ? (BuildingTypes)playerCivilizationInfo.getCivilizationBuildings((BuildingClassTypes)GC.getInfoTypeForString("BUILDINGCLASS_ARTISTS_GUILD")) : (BuildingTypes)GC.getInfoTypeForString("BUILDING_ARTISTS_GUILD", true);
-	BuildingTypes eMusiciansGuild = MOD_BUILDINGS_THOROUGH_PREREQUISITES ? (BuildingTypes)playerCivilizationInfo.getCivilizationBuildings((BuildingClassTypes)GC.getInfoTypeForString("BUILDINGCLASS_MUSICIANS_GUILD")) : (BuildingTypes)GC.getInfoTypeForString("BUILDING_MUSICIANS_GUILD", true);
-
-	CvBuildingEntry *pkBuilding = NULL;
-	pkBuilding = GC.getBuildingInfo(eWritersGuild);
-	if (pkBuilding)
+	CvBuildingEntry* pkWritersGuildInfo = GC.getBuildingInfo(eWritersGuild);
+	if (pkWritersGuildInfo)
 	{
-		if (kTeam.GetTeamTechs()->HasTech((TechTypes)pkBuilding->GetPrereqAndTech()))
+		if (pPlayer->HasTech(static_cast<TechTypes>(pkWritersGuildInfo->GetPrereqAndTech())))
 		{
-			if (pPlayer->GetFirstCityWithBuildingClass(pkBuilding->GetBuildingClassType()) == NULL)
+			if (!pPlayer->HasBuildingClass(pkWritersGuildInfo->GetBuildingClassType()))
 			{
 				return true;
 			}
 		}
 	}
-	pkBuilding = GC.getBuildingInfo(eArtistsGuild);
-	if (pkBuilding)
+
+	CvBuildingEntry* pkArtistsGuildInfo = GC.getBuildingInfo(eArtistsGuild);
+	if (pkArtistsGuildInfo)
 	{
-		if (kTeam.GetTeamTechs()->HasTech((TechTypes)pkBuilding->GetPrereqAndTech()))
+		if (pPlayer->HasTech(static_cast<TechTypes>(pkArtistsGuildInfo->GetPrereqAndTech())))
 		{
-			if (pPlayer->GetFirstCityWithBuildingClass(pkBuilding->GetBuildingClassType()) == NULL)
+			if (!pPlayer->HasBuildingClass(pkArtistsGuildInfo->GetBuildingClassType()))
 			{
 				return true;
 			}
 		}
 	}
-	pkBuilding = GC.getBuildingInfo(eMusiciansGuild);
-	if (pkBuilding)
+
+	CvBuildingEntry* pkMusiciansGuildInfo = GC.getBuildingInfo(eMusiciansGuild);
+	if (pkMusiciansGuildInfo)
 	{
-		if (kTeam.GetTeamTechs()->HasTech((TechTypes)pkBuilding->GetPrereqAndTech()))
+		if (pPlayer->HasTech(static_cast<TechTypes>(pkMusiciansGuildInfo->GetPrereqAndTech())))
 		{
-			if (pPlayer->GetFirstCityWithBuildingClass(pkBuilding->GetBuildingClassType()) == NULL)
+			if (!pPlayer->HasBuildingClass(pkMusiciansGuildInfo->GetBuildingClassType()))
 			{
 				return true;
 			}
@@ -4823,10 +4794,9 @@ bool EconomicAIHelpers::IsTestStrategy_StartedPiety(CvPlayer* pPlayer)
 
 bool EconomicAIHelpers::CannotMinorCiv(CvPlayer* pPlayer, EconomicAIStrategyTypes eStrategy)
 {
-	if(!pPlayer->isMinorCiv() || eStrategy==NO_ECONOMICAISTRATEGY)
-	{
+	if (!pPlayer->isMinorCiv() || eStrategy == NO_ECONOMICAISTRATEGY)
 		return false;
-	}
-	CvEconomicAIStrategyXMLEntry* pStrategy = pPlayer->GetEconomicAI()->GetEconomicAIStrategies()->GetEntry(eStrategy);
-	return (pStrategy->IsNoMinorCivs() != 0);
+
+	CvEconomicAIStrategyXMLEntry* pkStrategyInfo = pPlayer->GetEconomicAI()->GetEconomicAIStrategies()->GetEntry(eStrategy);
+	return pkStrategyInfo->IsNoMinorCivs();
 }

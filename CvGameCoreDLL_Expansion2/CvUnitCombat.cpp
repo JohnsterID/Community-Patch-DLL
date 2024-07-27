@@ -314,9 +314,6 @@ void CvUnitCombat::GenerateMeleeCombatInfo(CvUnit& kAttacker, CvUnit* pkDefender
 		// int iDefenderEffectiveStrength = iDefenderStrength * (iDefenderMaxHP - range(pkDefender->getDamage(), 0, iDefenderMaxHP - 1)) / iDefenderMaxHP;
 		// iDefenderEffectiveStrength = iDefenderEffectiveStrength > 0 ? iDefenderEffectiveStrength : 1;
 
-		//int iExperience = kAttacker.defenseXPValue();
-		//iExperience = ((iExperience * iAttackerEffectiveStrength) / iDefenderEffectiveStrength); // is this right? looks like more for less [Jon: Yes, it's XP for the defender]
-		//iExperience = range(iExperience, GD_INT_GET(MIN_EXPERIENCE_PER_COMBAT), GD_INT_GET(MAX_EXPERIENCE_PER_COMBAT));
 		int iExperience = /*4*/ GD_INT_GET(EXPERIENCE_DEFENDING_UNIT_MELEE);
 		pkCombatInfo->setExperience(BATTLE_UNIT_DEFENDER, iExperience);
 		pkCombatInfo->setMaxExperienceAllowed(BATTLE_UNIT_DEFENDER, kAttacker.maxXPValue());
@@ -988,7 +985,7 @@ void CvUnitCombat::GenerateRangedCombatInfo(CvCity& kAttacker, CvUnit* pkDefende
 	}
 	else
 	{
-		pkCombatInfo->setUpdateGlobal(BATTLE_UNIT_DEFENDER, pkDefender->isGGFromBarbarians() || !bBarbarian && !kAttacker.isBarbarian());
+		pkCombatInfo->setUpdateGlobal(BATTLE_UNIT_DEFENDER, pkDefender->isGGFromBarbarians() || (!bBarbarian && !kAttacker.isBarbarian()));
 	}
 #else
 	pkCombatInfo->setUpdateGlobal(BATTLE_UNIT_DEFENDER, !bBarbarian && !kAttacker.isBarbarian());
@@ -2291,9 +2288,6 @@ void CvUnitCombat::GenerateAirSweepCombatInfo(CvUnit& kAttacker, CvUnit* pkDefen
 		int iDefenderEffectiveStrength = iDefenderStrength * (iDefenderMaxHP - range(pkDefender->getDamage(), 0, iDefenderMaxHP - 1)) / iDefenderMaxHP;
 		iDefenderEffectiveStrength = iDefenderEffectiveStrength > 0 ? iDefenderEffectiveStrength : 1;
 
-		//int iExperience = kAttacker.defenseXPValue();
-		//iExperience = ((iExperience * iAttackerEffectiveStrength) / iDefenderEffectiveStrength); // is this right? looks like more for less [Jon: Yes, it's XP for the defender]
-		//iExperience = range(iExperience, GD_INT_GET(MIN_EXPERIENCE_PER_COMBAT), GD_INT_GET(MAX_EXPERIENCE_PER_COMBAT));
 		pkCombatInfo->setExperience(BATTLE_UNIT_DEFENDER, iDefenderExperience);
 		pkCombatInfo->setMaxExperienceAllowed(BATTLE_UNIT_ATTACKER, pkDefender->maxXPValue());
 		pkCombatInfo->setInBorders(BATTLE_UNIT_ATTACKER, plot.getOwner() == pkDefender->getOwner());
@@ -2821,7 +2815,7 @@ uint CvUnitCombat::ApplyNuclearExplosionDamage(const CvCombatMemberEntry* pkDama
 	}
 
 	// Then the terrain effects
-	int iBlastRadius = /*2*/ GD_INT_GET(NUKE_BLAST_RADIUS);
+	int iBlastRadius = /*2*/ range(GD_INT_GET(NUKE_BLAST_RADIUS), 1, 5);
 
 	for(int iDX = -(iBlastRadius); iDX <= iBlastRadius; iDX++)
 	{
@@ -3034,7 +3028,7 @@ uint CvUnitCombat::ApplyNuclearExplosionDamage(const CvCombatMemberEntry* pkDama
 //	The attacker is optional, this is also called for a meltdown
 void CvUnitCombat::GenerateNuclearExplosionDamage(CvPlot* pkTargetPlot, int iDamageLevel, CvUnit* pkAttacker, CvCombatMemberEntry* pkDamageArray, int* piDamageMembers, int iMaxDamageMembers)
 {
-	int iBlastRadius = /*2*/ GD_INT_GET(NUKE_BLAST_RADIUS);
+	int iBlastRadius = /*2*/ range(GD_INT_GET(NUKE_BLAST_RADIUS), 1, 5);
 
 #if defined(MOD_EVENTS_BATTLES)
 	CvCity* pDefenderCity = NULL;
@@ -3209,7 +3203,7 @@ void CvUnitCombat::ResolveNuclearCombat(const CvCombatInfo& kCombatInfo, uint ui
 
 	if(pkAttacker && !pkAttacker->isDelayedDeath())
 	{
-		// Make sure we are disconnected from any unit transporting the attacker (i.e. its a missile)
+		// Make sure we are disconnected from any unit transporting the attacker (i.e. it's a missile)
 		pkAttacker->setTransportUnit(NULL);
 
 		if(pkTargetPlot)
@@ -3767,14 +3761,10 @@ CvUnitCombat::ATTACK_RESULT CvUnitCombat::Attack(CvUnit& kAttacker, CvPlot& targ
 	kAttacker.SetAutomateType(NO_AUTOMATE);
 	pDefender->SetAutomateType(NO_AUTOMATE);
 
-#if !defined(NO_TUTORIALS)
-	// slewis - tutorial'd
 	if(kAttacker.getOwner() == GC.getGame().getActivePlayer())
 	{
 		GC.getGame().SetEverAttackedTutorial(true);
 	}
-	// end tutorial'd
-#endif
 
 	// handle the Zulu special thrown spear first attack
 	ATTACK_RESULT eFireSupportResult = ATTACK_ABORTED;

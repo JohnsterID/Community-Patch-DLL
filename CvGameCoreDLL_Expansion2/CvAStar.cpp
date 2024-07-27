@@ -52,7 +52,7 @@ unsigned int saiRuntimeHistogram[100] = {0};
 struct SLogNode
 {
 	SLogNode( NodeState _type, int _round, int _x, int _y, int _kc, int _hc, int _turns, int _moves ) : 
-		type(_type), x(_x), y(_y), round(_round), kc(_kc), hc(_hc), t(_turns), m(_moves)
+		x(_x), y(_y), round(_round), kc(_kc), hc(_hc), t(_turns), m(_moves), type(_type)
 	{
 		if (type == NS_INVALID)
 		{
@@ -107,10 +107,10 @@ CvAStar::CvAStar()
       udGetExtraChildrenFunc(NULL),
       udInitializeFunc(NULL),
       udUninitializeFunc(NULL),
+      m_iCurrentGenerationID(0),
       m_pBest(NULL),
       m_ppaaNodes(NULL),
       m_ppaaNeighbors(NULL),
-      m_iCurrentGenerationID(0),
       m_iProcessedNodes(0),
       m_iTestedNodes(0),
       m_iRounds(0),
@@ -418,24 +418,23 @@ bool CvAStar::FindPathWithCurrentConfiguration(int iXstart, int iYstart, int iXd
 	saiRuntimeHistogram[iBin]++;
 
 	CvUnit* pUnit = m_sData.iUnitID > 0 ? GET_PLAYER(m_sData.ePlayer).getUnit(m_sData.iUnitID) : NULL;
+#if defined(VPDEBUG)
 	if ( timer.GetDeltaInSeconds()>0.2 && data.ePath==PT_UNIT_MOVEMENT )
 	{
 		//debug hook
 		int iStartIndex = GC.getMap().plotNum(m_iXstart, m_iYstart);
-#if defined(VPDEBUG)
 		if (iStartIndex==giLastStartIndex && iStartIndex>0)
 		{
 			OutputDebugString("Repeated pathfinding start\n");
 			gStackWalker.ShowCallstack(5);
 		}
-#endif
 		giLastStartIndex = iStartIndex;
 
 		int iNumPlots = GC.getMap().numPlots();
 
 		//in some cases we have no destination plot, so exhaustion is not always a "fail"
 		CvString msg = CvString::format("Run %d: Path type %d %s (%s from %d,%d to %d,%d - flags %d), tested %d, processed %d nodes in %d rounds (%d%% of map) in %.2f ms\n",
-			m_iCurrentGenerationID, m_sData.ePath, bSuccess ? "found" : "not found", pUnit ? pUnit->getName().c_str() : "unknown",
+			m_iCurrentGenerationID, m_sData.ePath, bSuccess||!HasValidDestination() ? "found" : "not found", pUnit ? pUnit->getName().c_str() : "unknown",
 			m_iXstart, m_iYstart, m_iXdest, m_iYdest, m_sData.iFlags, m_iTestedNodes, m_iProcessedNodes, m_iRounds,
 			(100 * m_iProcessedNodes) / iNumPlots, timer.GetDeltaInSeconds() * 1000);
 		OutputDebugString( msg.c_str() );
@@ -448,6 +447,7 @@ bool CvAStar::FindPathWithCurrentConfiguration(int iXstart, int iYstart, int iXd
 		//gStackWalker.SetLog(NULL);
 #endif
 	}
+#endif
 
 	if (g_bPathFinderLogging)
 	{
@@ -755,9 +755,7 @@ SPath CvAStar::GetCurrentPath(TurnCountMode eMode) const
 
 	CvAStarNode* pNode = m_pBest;
 	if (!pNode)
-	{
 		return ret;
-	}
 
 	ret.iTotalCost = pNode->m_iKnownCost;
 	ret.iNormalizedDistanceRaw = (pNode->m_iKnownCost * SPath::getNormalizedDistanceBase()) / m_iBasicPlotCost + 1;
@@ -977,7 +975,7 @@ void UpdateNodeCacheData(CvAStarNode* node, const CvUnit* pUnit, const CvAStar* 
 		kToNodeCacheData.bUnitStackingLimitReached = true;
 
 	//do not use DestinationReached() here, approximate destination won't do
-	bool bIsDestination = node->m_iX == finder->GetDestX() && node->m_iY == finder->GetDestY() || !finder->HasValidDestination();
+	bool bIsDestination = (node->m_iX == finder->GetDestX() && node->m_iY == finder->GetDestY()) || !finder->HasValidDestination();
 
 	//use the flags mostly as provided
 	//destination will be handled later once we know whether we would like to end the turn here
@@ -1568,7 +1566,7 @@ int PathValid(const CvAStarNode* parent, const CvAStarNode* node, const SPathFin
 			return FALSE;
 
 		//do not use DestinationReached() here, approximate destination won't do (also we don't use MOVEFLAG_DESTINATION in pathfinder)
-		bool bIsDestination = node->m_iX == finder->GetDestX() && node->m_iY == finder->GetDestY() || !finder->HasValidDestination();
+		bool bIsDestination = (node->m_iX == finder->GetDestX() && node->m_iY == finder->GetDestY()) || !finder->HasValidDestination();
 
 		//don't allow moves through enemy cities (but allow them as attack targets for melee)
 		if (kToNodeCacheData.bIsEnemyCity && !(bIsDestination && pUnit->IsCanAttackWithMove()))
@@ -2087,7 +2085,7 @@ static void AddCityConnectionHarborConnections(const CvPlot* pPlot, const CvASta
 
 static void AddCityConnectionRiverConnections(CvPlot* pPlot, const CvAStar* finder, vector<pair<int, int>>& out)
 {
-	if (!MOD_BALANCE_VP)
+	if (!MOD_RIVER_CITY_CONNECTIONS)
 		return;
 
 	RouteTypes eRoute = finder->GetData().eRoute;
@@ -2607,7 +2605,7 @@ bool CvTwoLayerPathFinder::CanEndTurnAtNode(const CvAStarNode* temp) const
 			return false;
 
 	if (temp->m_kCostCacheData.bPlotVisibleToTeam && !(temp->m_kCostCacheData.iMoveFlags & CvUnit::MOVEFLAG_ATTACK)) 
-		if (temp->m_kCostCacheData.bIsEnemyCity || (temp->m_kCostCacheData.bIsVisibleEnemyCombatUnit && !temp->m_kCostCacheData.iMoveFlags && CvUnit::MOVEFLAG_IGNORE_ENEMIES))
+		if (temp->m_kCostCacheData.bIsEnemyCity || (temp->m_kCostCacheData.bIsVisibleEnemyCombatUnit && !(temp->m_kCostCacheData.iMoveFlags & CvUnit::MOVEFLAG_IGNORE_ENEMIES)))
 			return false;
 
 	return true;
@@ -3771,17 +3769,17 @@ SPathFinderUserData::SPathFinderUserData(const CvUnit* pUnit, int _iFlags, int _
 // Convenience constructor
 SPathFinderUserData::SPathFinderUserData(PlayerTypes _ePlayer, PathType _ePathType)
     : ePath(_ePathType),
-      iFlags(0),
-      iMaxTurns(INT_MAX),
+      eRoute(NO_ROUTE),
+      eBuild(NO_BUILD),
       ePlayer(_ePlayer),
       eEnemy(NO_PLAYER),
+      eRoutePurpose(NO_ROUTE_PURPOSE),
       iUnitID(0),
-      eBuild(NO_BUILD),
-      eRoute(NO_ROUTE),
+      iFlags(0),
+      iMaxTurns(INT_MAX),
       iMaxNormalizedDistance(INT_MAX),
       iMinMovesLeft(0),
       iStartMoves(0),
-      eRoutePurpose(NO_ROUTE_PURPOSE),
       bUseRivers(false)
 {
 }

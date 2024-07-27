@@ -596,6 +596,8 @@ function RefreshAgents()
 			agentEntry.AgentLocationActionsPanel:SetHide(false);
 			agentEntry.AgentActivityPanel:SetHide(false);
 			agentEntry.AgentKIAPanel:SetHide(true);
+			
+			agentEntry.RelocateButton:SetHide(false);
 
 			agentEntry.AgentLocation:SetText(v.AgentLocation);
 			agentEntry.AgentLocation:LocalizeAndSetToolTip("TXT_KEY_EO_SPY_NEEDS_ASSIGNMENT_TT");
@@ -692,6 +694,9 @@ function RefreshAgents()
 
 			if (v.NumTurnsMovementBlocked > 0) then
 				agentEntry.RelocateButton:LocalizeAndSetToolTip("TXT_KEY_EO_COUNTERSPY_CANNOT_MOVE_TT", v.Rank, v.Name,v.NumTurnsMovementBlocked);
+				agentEntry.RelocateButton:SetDisabled(true);
+			elseif (v.VassalDiplomatPlayer >= 0) then
+				agentEntry.RelocateButton:LocalizeAndSetToolTip("TXT_KEY_EO_VASSAL_DIPLOMAT_CANNOT_MOVE_TT", v.Rank, v.Name, Players[v.VassalDiplomatPlayer]:GetCivilizationShortDescription());
 				agentEntry.RelocateButton:SetDisabled(true);
 			else
 				agentEntry.RelocateButton:LocalizeAndSetToolTip("TXT_KEY_EO_SPY_MOVE_TT", v.Rank, v.Name);

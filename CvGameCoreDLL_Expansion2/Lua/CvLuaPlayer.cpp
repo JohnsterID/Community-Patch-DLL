@@ -81,6 +81,9 @@ void CvLuaPlayer::PushMethods(lua_State* L, int t)
 	Method(IsResourceCityTradeable);
 	Method(IsResourceImproveable);
 	Method(IsResourceRevealed);
+	Method(GetPlotValueCity);
+	Method(GetCombinedChangeValue);
+	Method(GetSpecialistValueCity);
 	Method(DisbandUnit);
 	Method(AddFreeUnit);
 
@@ -139,7 +142,6 @@ void CvLuaPlayer::PushMethods(lua_State* L, int t)
 	Method(CanTrain);
 	Method(CanConstruct);
 	Method(CanCreate);
-	Method(CanPrepare);
 	Method(CanMaintain);
 
 	Method(IsCanPurchaseAnyCity);
@@ -418,6 +420,7 @@ void CvLuaPlayer::PushMethods(lua_State* L, int t)
 	Method(GetUnitCostIncreaseFromWarWeariness);
 	Method(GetUnhappinessFromWarWeariness);
 	Method(GetTechSupplyReduction);
+	Method(GetEmpireSizeSupplyReduction);
 	Method(GetUnitSupplyFromExpendedGreatPeople);
 	Method(ChangeUnitSupplyFromExpendedGreatPeople);
 
@@ -478,8 +481,6 @@ void CvLuaPlayer::PushMethods(lua_State* L, int t)
 	Method(IsPolicyBranchUnlocked);
 	Method(SetPolicyBranchUnlocked);
 	Method(GetNumPolicyBranchesUnlocked);
-	Method(GetPolicyBranchChosen);
-	Method(GetNumPolicyBranchesAllowed);
 	Method(GetNumPolicies);
 	Method(GetNumPoliciesInBranch);
 	Method(GetNumPoliciesPurchasedInBranch);
@@ -512,18 +513,6 @@ void CvLuaPlayer::PushMethods(lua_State* L, int t)
 	Method(GetAnarchyNumTurns);
 	Method(SetAnarchyNumTurns);
 	Method(ChangeAnarchyNumTurns);
-
-	Method(GetAdvancedStartPoints);
-	Method(SetAdvancedStartPoints);
-	Method(ChangeAdvancedStartPoints);
-	Method(GetAdvancedStartUnitCost);
-	Method(GetAdvancedStartCityCost);
-	Method(GetAdvancedStartPopCost);
-	Method(GetAdvancedStartBuildingCost);
-	Method(GetAdvancedStartImprovementCost);
-	Method(GetAdvancedStartRouteCost);
-	Method(GetAdvancedStartTechCost);
-	Method(GetAdvancedStartVisibilityCost);
 
 	Method(GetAttackBonusTurns);
 	Method(GetCultureBonusTurns);
@@ -595,7 +584,6 @@ void CvLuaPlayer::PushMethods(lua_State* L, int t)
 	Method(GetUnitProductionModifier);
 	Method(GetBuildingProductionModifier);
 	Method(GetProjectProductionModifier);
-	Method(GetSpecialistProductionModifier);
 	Method(GetMaxGlobalBuildingProductionModifier);
 	Method(GetMaxTeamBuildingProductionModifier);
 	Method(GetMaxPlayerBuildingProductionModifier);
@@ -632,11 +620,6 @@ void CvLuaPlayer::PushMethods(lua_State* L, int t)
 	Method(IsMilitaryFoodProduction);
 	Method(GetHighestUnitLevel);
 
-	Method(GetConscriptCount);
-	Method(SetConscriptCount);
-	Method(ChangeConscriptCount);
-
-	Method(GetMaxConscript);
 	Method(GetOverflowResearch);
 	Method(SetOverflowResearch);
 	Method(ChangeOverflowResearch);
@@ -887,10 +870,6 @@ void CvLuaPlayer::PushMethods(lua_State* L, int t)
 	Method(IsBuildingClassMaxedOut);
 	Method(GetBuildingClassMaking);
 	Method(GetBuildingClassCountPlusMaking);
-	Method(GetHurryCount);
-	Method(IsHasAccessToHurry);
-	Method(IsCanHurry);
-	Method(GetHurryGoldCost);
 
 	//Method(IsSpecialistValid);
 	Method(IsResearchingTech);
@@ -1291,7 +1270,6 @@ void CvLuaPlayer::PushMethods(lua_State* L, int t)
 	Method(GetMilitaryAggressivePosture);
 	Method(CountAggressiveMilitaryScore);
 	Method(MoveRequestTooSoon);
-	Method(GetPlayerMoveTroopsRequestCounter);
 	Method(GetMyShareOfVassalTaxes);
 	Method(GetExpensePerTurnFromVassalTaxes);
 	Method(GetVassalTaxContribution);
@@ -1947,6 +1925,100 @@ int CvLuaPlayer::lIsResourceRevealed(lua_State* L)
 
 	return 1;
 }
+
+int CvLuaPlayer::lGetPlotValueCity(lua_State* L)
+{
+	CvPlayerAI* pkPlayer = GetInstance(L);
+	const int iCityID = lua_tointeger(L, 2);
+	const int iPlotX = lua_tointeger(L, 3);
+	const int iPlotY = lua_tointeger(L, 4);
+	const bool bAdd = lua_toboolean(L, 5);
+
+	CvCity* pCity = pkPlayer->getCity(iCityID);
+	if (pCity)
+	{
+		CvPlot* pPlot = GC.getMap().plot(iPlotX, iPlotY);
+		if (pPlot)
+		{
+			SPrecomputedExpensiveNumbers cache;
+			cache.update(pCity);
+			lua_pushinteger(L, pCity->GetCityCitizens()->GetPlotValue(pPlot, bAdd, cache));
+			return 1;
+		}
+	}
+	lua_pushinteger(L, -INT_MAX);
+	return 1;
+}
+
+int CvLuaPlayer::lGetSpecialistValueCity(lua_State* L)
+{
+	CvPlayerAI* pkPlayer = GetInstance(L);
+	const int iCityID = lua_tointeger(L, 2);
+	const int iSpecialist = lua_tointeger(L, 3);
+	const bool bAdd = lua_toboolean(L, 4);
+
+	CvCity* pCity = pkPlayer->getCity(iCityID);
+	if (pCity)
+	{
+		SPrecomputedExpensiveNumbers cache;
+		cache.update(pCity);
+		lua_pushinteger(L, pCity->GetCityCitizens()->GetSpecialistValue((SpecialistTypes)iSpecialist, bAdd, cache));
+		return 1;
+	}
+	lua_pushinteger(L, -INT_MAX);
+	return 1;
+}
+
+// for testing of the city governor. how is an option to remove something and add something else instead scored?
+int CvLuaPlayer::lGetCombinedChangeValue(lua_State* L)
+{
+	CvPlayerAI* pkPlayer = GetInstance(L);
+	const int iCityID = lua_tointeger(L, 2);
+	// first two: remove something
+	// for a specialist: first value = -1, second value = specialist ID
+	// for a plot: first value iX, second value iY
+	const int iR1 = lua_tointeger(L, 3);
+	const int iR2 = lua_tointeger(L, 4);
+	// second two: remove something
+	const int iR3 = lua_tointeger(L, 5);
+	const int iR4 = lua_tointeger(L, 6);
+
+	CvCity* pCity = pkPlayer->getCity(iCityID);
+	if (!pCity)
+	{
+		lua_pushinteger(L, -INT_MAX);
+		return 1;
+	}
+
+	SPrecomputedExpensiveNumbers cache;
+	cache.update(pCity);
+
+	YieldAndGPPList change;
+	if (iR1 == -1)
+	{
+		// specialist
+		change = pCity->GetCityCitizens()->GetSpecialistYields((SpecialistTypes)iR2);
+	}
+	else
+	{
+		change = pCity->GetCityCitizens()->GetPlotYields(GC.getMap().plot(iR1, iR2), cache);
+	}
+
+	YieldAndGPPList change2;
+	if (iR3 == -1)
+	{
+		// specialist
+		change2 = pCity->GetCityCitizens()->GetSpecialistYields((SpecialistTypes)iR4);
+	}
+	else
+	{
+		change2 = pCity->GetCityCitizens()->GetPlotYields(GC.getMap().plot(iR3, iR4), cache);
+	}
+
+	lua_pushinteger(L, pCity->GetCityCitizens()->ScoreYieldChange(change.negative() + change2, cache));
+	return 1;
+}
+
 //------------------------------------------------------------------------------
 //void disbandUnit(bool bAnnounce);
 int CvLuaPlayer::lDisbandUnit(lua_State* L)
@@ -2405,12 +2477,6 @@ int CvLuaPlayer::lCanConstruct(lua_State* L)
 int CvLuaPlayer::lCanCreate(lua_State* L)
 {
 	return BasicLuaMethod(L, &CvPlayerAI::canCreate);
-}
-//------------------------------------------------------------------------------
-//bool canPrepare(SpecialistTypes  eSpecialist, bool bContinue);
-int CvLuaPlayer::lCanPrepare(lua_State* L)
-{
-	return BasicLuaMethod(L, &CvPlayerAI::canPrepare);
 }
 //------------------------------------------------------------------------------
 //bool canMaintain(ProcessTypes  eProcess, bool bContinue);
@@ -3379,17 +3445,13 @@ int CvLuaPlayer::lGetInfluenceTradeRouteGoldBonus(lua_State* L)
 {
 	CvPlayerAI* pkPlayer = GetInstance(L);
 	PlayerTypes eOtherPlayer = (PlayerTypes)lua_tointeger(L, 2);
-	
-#if defined(MOD_BALANCE_CORE_GOLD_INTERNAL_TRADE_ROUTES)
+
 	int iResult = 0;
 	PlayerTypes ePlayer = pkPlayer->GetID();
 	if (ePlayer != eOtherPlayer)
 	{
 		iResult = pkPlayer->GetCulture()->GetInfluenceTradeRouteGoldBonus(eOtherPlayer);
 	}
-#else
-	const int iResult = pkPlayer->GetCulture()->GetInfluenceTradeRouteGoldBonus(eOtherPlayer);
-#endif
 	lua_pushinteger(L, iResult);
 	return 1;
 }
@@ -3545,16 +3607,13 @@ int CvLuaPlayer::lGetInfluenceTradeRouteScienceBonus(lua_State* L)
 {
 	CvPlayerAI* pkPlayer = GetInstance(L);
 	PlayerTypes eOtherPlayer = (PlayerTypes)lua_tointeger(L, 2);
-#if defined(MOD_BALANCE_CORE) && defined(MOD_BALANCE_CORE_GOLD_INTERNAL_TRADE_ROUTES)
+
 	int iResult = 0;
 	PlayerTypes ePlayer = pkPlayer->GetID();
 	if (ePlayer != eOtherPlayer)
 	{
 		iResult = pkPlayer->GetCulture()->GetInfluenceTradeRouteScienceBonus(eOtherPlayer);
 	}
-#else
-	const int iResult = pkPlayer->GetCulture()->GetInfluenceTradeRouteScienceBonus(eOtherPlayer);
-#endif
 	lua_pushinteger(L, iResult);
 	return 1;
 }
@@ -3702,12 +3761,8 @@ int CvLuaPlayer::lChangeInfluenceOnPlayer(lua_State* L)
 int CvLuaPlayer::lDoSwapGreatWorks(lua_State* L)
 {
 	CvPlayerAI* pkPlayer = GetInstance(L);
-#if defined(MOD_GLOBAL_GREATWORK_YIELDTYPES)
 	YieldTypes eFocusYield = static_cast<YieldTypes>(lua_tointeger(L, 2));
 	pkPlayer->GetCulture()->DoSwapGreatWorks(eFocusYield);
-#else
-	pkPlayer->GetCulture()->DoSwapGreatWorks();
-#endif
 	return 0;
 }
 //------------------------------------------------------------------------------
@@ -3739,7 +3794,7 @@ int CvLuaPlayer::lGetCityOfClosestGreatWorkSlot(lua_State* L)
 	GreatWorkSlotType eGreatWorkSlot = static_cast<GreatWorkSlotType>(lua_tointeger(L, 4));
 	BuildingClassTypes eBuildingClass;
 	int iSlot;
-	CvCity* pkCity = pkPlayer->GetCulture()->GetClosestAvailableGreatWorkSlot(iX, iY, eGreatWorkSlot, &eBuildingClass, &iSlot);
+	CvCity* pkCity = pkPlayer->GetCulture()->GetClosestAvailableGreatWorkSlot(iX, iY, eGreatWorkSlot, eBuildingClass, iSlot);
 	if (pkCity)
 	{
 		CvLuaCity::Push(L, pkCity);
@@ -3758,21 +3813,12 @@ int CvLuaPlayer::lGetBuildingOfClosestGreatWorkSlot(lua_State* L)
 	int iX = lua_tointeger(L, 2);
 	int iY = lua_tointeger(L, 3);
 	GreatWorkSlotType eGreatWorkSlot = static_cast<GreatWorkSlotType>(lua_tointeger(L, 4));
-	BuildingClassTypes eBuildingClass;
+	BuildingClassTypes eBuildingClass = NO_BUILDINGCLASS;
 	int iSlot;
-	CvCity* pkCity = pkPlayer->GetCulture()->GetClosestAvailableGreatWorkSlot(iX, iY, eGreatWorkSlot, &eBuildingClass, &iSlot);
-	CvCivilizationInfo *pkCivInfo = GC.getCivilizationInfo(pkPlayer->getCivilizationType());
-	if (pkCity && pkCivInfo)
+	CvCity* pkCity = pkPlayer->GetCulture()->GetClosestAvailableGreatWorkSlot(iX, iY, eGreatWorkSlot, eBuildingClass, iSlot);
+	if (pkCity && eBuildingClass != NO_BUILDINGCLASS)
 	{
-		int iBuilding = -1;
-		if (MOD_BUILDINGS_THOROUGH_PREREQUISITES)
-		{
-			iBuilding = (int)pkCity->GetCityBuildings()->GetBuildingTypeFromClass(eBuildingClass);
-		}
-		else
-		{
-			iBuilding = pkCivInfo->getCivilizationBuildings(eBuildingClass);
-		}
+		int iBuilding = pkCity->GetBuildingTypeFromClass(eBuildingClass);
 		lua_pushinteger(L, iBuilding);
 		return 1;
 	}
@@ -3934,12 +3980,8 @@ int CvLuaPlayer::lCanCreatePantheon(lua_State* L)
 int CvLuaPlayer::lHasCreatedReligion(lua_State* L)
 {
 	CvPlayerAI* pkPlayer = GetInstance(L);
-#if defined(MOD_RELIGION_LOCAL_RELIGIONS)
 	const bool bIgnoreLocal = luaL_optbool(L, 2, false);
 	const bool bResult = pkPlayer->GetReligions()->HasCreatedReligion(bIgnoreLocal);
-#else
-	const bool bResult = pkPlayer->GetReligions()->HasCreatedReligion();
-#endif
 	lua_pushboolean(L, bResult);
 
 	return 1;
@@ -4067,11 +4109,7 @@ int CvLuaPlayer::lGetMinimumFaithNextGreatProphet(lua_State* L)
 {
 	CvPlayerAI* pkPlayer = GetInstance(L);
 
-#if defined(MOD_GLOBAL_TRULY_FREE_GP)
 	int iFaith = pkPlayer->GetReligions()->GetCostNextProphet(true /*bIncludeBeliefDiscounts*/, true /*bAdjustForSpeedDifficulty*/, MOD_GLOBAL_TRULY_FREE_GP);
-#else
-	int iFaith = pkPlayer->GetReligions()->GetCostNextProphet(true /*bIncludeBeliefDiscounts*/, true /*bAdjustForSpeedDifficulty*/);
-#endif
 	lua_pushinteger(L, iFaith);
 
 	return 1;
@@ -4499,7 +4537,13 @@ int CvLuaPlayer::lGetWarDuration(lua_State* L)
 {
 	CvPlayerAI* pkPlayer = GetInstance(L);
 	const PlayerTypes ePlayer = (PlayerTypes)lua_tointeger(L, 2);
-	const int iResult = pkPlayer->GetPlayerNumTurnsAtWar(ePlayer);
+	const int iResult = GET_TEAM(pkPlayer->getTeam()).GetNumTurnsAtWar(GET_PLAYER(ePlayer).getTeam());
+	if (iResult == INT_MAX)
+	{
+		lua_pushinteger(L, -1);
+		return 1;
+	}
+
 	lua_pushinteger(L, iResult);
 	return 1;
 }
@@ -4507,11 +4551,13 @@ int CvLuaPlayer::lGetWarDuration(lua_State* L)
 int CvLuaPlayer::lGetLongestWarDuration(lua_State* L)
 {
 	CvPlayerAI* pkPlayer = GetInstance(L);
-	int iResult = 0;
+	int iResult = -1;
 	for (int iI = 0; iI < MAX_PLAYERS; iI++)
 	{
 		PlayerTypes ePlayer = (PlayerTypes)iI;
-		iResult = max(iResult, pkPlayer->GetPlayerNumTurnsAtWar(ePlayer));
+		int iDuration = GET_TEAM(pkPlayer->getTeam()).GetNumTurnsAtWar(GET_PLAYER(ePlayer).getTeam());
+		if (iDuration != INT_MAX && iDuration > iResult)
+			iResult = iDuration;
 	}
 
 	lua_pushinteger(L, iResult);
@@ -4528,6 +4574,29 @@ int CvLuaPlayer::lGetTechSupplyReduction(lua_State* L)
 	int iTotalSupplyWithReduction = pkPlayer->GetNumUnitsSuppliedByHandicap();
 	iTotalSupplyWithReduction += pkPlayer->GetNumUnitsSuppliedByCities();
 	iTotalSupplyWithReduction += pkPlayer->GetNumUnitsSuppliedByPopulation();
+
+	int iTotalSupply = (iTotalSupplyWithoutReduction - iTotalSupplyWithReduction);
+
+	lua_pushinteger(L, iTotalSupply);
+	return 1;
+}
+
+int CvLuaPlayer::lGetEmpireSizeSupplyReduction(lua_State* L)
+{
+	CvPlayerAI* pkPlayer = GetInstance(L);
+	int iReductionPercent = max(pkPlayer->GetNumEffectiveCities(false) * /*0 in CP, 5 in VP*/ GC.getMap().getWorldInfo().GetNumCitiesUnitSupplyMod(), 0);
+	if (iReductionPercent == 0)
+	{
+		lua_pushinteger(L, 0);
+		return 1;
+	}
+
+	int iTotalSupplyWithoutReduction = pkPlayer->GetNumUnitsSuppliedByHandicap();
+	iTotalSupplyWithoutReduction += pkPlayer->GetNumUnitsSuppliedByCities();
+	iTotalSupplyWithoutReduction += pkPlayer->GetNumUnitsSuppliedByPopulation();
+	iTotalSupplyWithoutReduction += pkPlayer->GetUnitSupplyFromExpendedGreatPeople();
+
+	int iTotalSupplyWithReduction = iTotalSupplyWithoutReduction * 100 / (100 + iReductionPercent);
 
 	int iTotalSupply = (iTotalSupplyWithoutReduction - iTotalSupplyWithReduction);
 
@@ -6463,56 +6532,45 @@ int CvLuaPlayer::lGetNumPolicyDifference(lua_State* L)
 int CvLuaPlayer::lGetGreatWorks(lua_State* L)
 {
 	CvPlayerAI* pkPlayer = GetInstance(L);
-	GreatWorkClass eGreatWorkClass = (GreatWorkClass)lua_tointeger(L, 2);
+	GreatWorkClass eGreatWorkClass = static_cast<GreatWorkClass>(lua_tointeger(L, 2));
 
 	lua_createtable(L, 0, 0);
 	int index = 1;
 
 	int iCityLoop;
-	CvCity* pCity = NULL;
-	for (pCity = pkPlayer->firstCity(&iCityLoop); pCity != NULL; pCity = pkPlayer->nextCity(&iCityLoop))
+	for (CvCity* pCity = pkPlayer->firstCity(&iCityLoop); pCity != NULL; pCity = pkPlayer->nextCity(&iCityLoop))
 	{
-		for(int iBuildingClassLoop = 0; iBuildingClassLoop < GC.getNumBuildingClassInfos(); iBuildingClassLoop++)
+		for (int iBuildingClassLoop = 0; iBuildingClassLoop < GC.getNumBuildingClassInfos(); iBuildingClassLoop++)
 		{
-			const CvCivilizationInfo& playerCivilizationInfo = pkPlayer->getCivilizationInfo();
-			BuildingTypes eBuilding = NO_BUILDING;
+			BuildingClassTypes eBuildingClass = static_cast<BuildingClassTypes>(iBuildingClassLoop);
+			BuildingTypes eBuilding = pCity->GetBuildingTypeFromClass(eBuildingClass);
+			if (eBuilding == NO_BUILDING)
+				continue;
 
-			if (MOD_BUILDINGS_THOROUGH_PREREQUISITES)
-			{
-				eBuilding = pCity->GetCityBuildings()->GetBuildingTypeFromClass((BuildingClassTypes)iBuildingClassLoop);
-			}
-			else
-			{
-				eBuilding = (BuildingTypes)playerCivilizationInfo.getCivilizationBuildings((BuildingClassTypes)iBuildingClassLoop);
-			}
+			CvBuildingEntry* pkBuildingInfo = GC.getBuildingInfo(eBuilding);
+			if (!pkBuildingInfo)
+				continue;
 
-			if (eBuilding != NO_BUILDING)
+			if (pCity->HasBuilding(eBuilding))
 			{
-				CvBuildingEntry *pkBuilding = GC.getBuildingInfo(eBuilding);
-				if (pkBuilding)
+				int iNumSlots = pkBuildingInfo->GetGreatWorkCount();
+				for (int iI = 0; iI < iNumSlots; iI++)
 				{
-					if (pCity->GetCityBuildings()->GetNumBuilding(eBuilding) > 0)
+					int iGreatWorkIndex = pCity->GetCityBuildings()->GetBuildingGreatWork(eBuildingClass, iI);
+					if (iGreatWorkIndex != -1)
 					{
-						int iNumSlots = pkBuilding->GetGreatWorkCount();
-						for (int iI = 0; iI < iNumSlots; iI++)
+						if (GC.getGame().GetGameCulture()->m_CurrentGreatWorks[iGreatWorkIndex].m_eClassType == eGreatWorkClass)
 						{
-							int iGreatWorkIndex = pCity->GetCityBuildings()->GetBuildingGreatWork((BuildingClassTypes)iBuildingClassLoop, iI);
-							if (iGreatWorkIndex != -1)
-							{
-								if (GC.getGame().GetGameCulture()->m_CurrentGreatWorks[iGreatWorkIndex].m_eClassType == eGreatWorkClass)
-								{
-									lua_createtable(L, 0, 0);
-									const int t = lua_gettop(L);
-									lua_pushinteger(L, iGreatWorkIndex);
-									lua_setfield(L, t, "Index");
-									lua_pushinteger(L, GC.getGame().GetGameCulture()->m_CurrentGreatWorks[iGreatWorkIndex].m_ePlayer);
-									lua_setfield(L, t, "Creator");
-									int iEra = GC.getGame().GetGameCulture()->m_CurrentGreatWorks[iGreatWorkIndex].m_eEra;
-									lua_pushinteger(L, iEra);
-									lua_setfield(L, t, "Era");
-									lua_rawseti(L, -2, index++);
-								}
-							}
+							lua_createtable(L, 0, 0);
+							const int t = lua_gettop(L);
+							lua_pushinteger(L, iGreatWorkIndex);
+							lua_setfield(L, t, "Index");
+							lua_pushinteger(L, GC.getGame().GetGameCulture()->m_CurrentGreatWorks[iGreatWorkIndex].m_ePlayer);
+							lua_setfield(L, t, "Creator");
+							int iEra = GC.getGame().GetGameCulture()->m_CurrentGreatWorks[iGreatWorkIndex].m_eEra;
+							lua_pushinteger(L, iEra);
+							lua_setfield(L, t, "Era");
+							lua_rawseti(L, -2, index++);
 						}
 					}
 				}
@@ -6875,43 +6933,15 @@ int CvLuaPlayer::lGetNumPolicyBranchesUnlocked(lua_State* L)
 }
 
 //------------------------------------------------------------------------------
-//int GetNumPolicyBranchesAllowed();
-int CvLuaPlayer::lGetNumPolicyBranchesAllowed(lua_State* L)
-{
-	CvPlayerAI* pkPlayer = GetInstance(L);
-
-	const int iResult = pkPlayer->GetPlayerPolicies()->GetNumPolicyBranchesAllowed();
-	lua_pushinteger(L, iResult);
-	return 1;
-}
-
-//------------------------------------------------------------------------------
-//bool GetPolicyBranchChosen(PolicyTypes  iIndex);
-int CvLuaPlayer::lGetPolicyBranchChosen(lua_State* L)
-{
-	CvPlayerAI* pkPlayer = GetInstance(L);
-	const int iID = lua_tointeger(L, 2);
-
-	const int iResult = pkPlayer->GetPlayerPolicies()->GetPolicyBranchChosen(iID);
-	lua_pushinteger(L, iResult);
-	return 1;
-}
-
-
-//------------------------------------------------------------------------------
 //int GetNumPolicies();
 int CvLuaPlayer::lGetNumPolicies(lua_State* L)
 {
 	CvPlayerAI* pkPlayer = GetInstance(L);
-#if defined(MOD_BALANCE_CORE)
 	bool bIgnoreFinishers = luaL_optbool(L, 2, false);
 	bool bIgnoreDummy = luaL_optbool(L, 3, false);
 	if(pkPlayer->GetPlayerPolicies())
 	{
 		const int iResult = pkPlayer->GetPlayerPolicies()->GetNumPoliciesOwned(bIgnoreFinishers, bIgnoreDummy);
-#else
-		const int iResult = pkPlayer->GetPlayerPolicies()->GetNumPoliciesOwned();
-#endif
 		lua_pushinteger(L, iResult);
 		return 1;
 	}
@@ -7229,73 +7259,6 @@ int CvLuaPlayer::lChangeAnarchyNumTurns(lua_State* L)
 }
 
 //------------------------------------------------------------------------------
-//int getAdvancedStartPoints();
-int CvLuaPlayer::lGetAdvancedStartPoints(lua_State* L)
-{
-	return BasicLuaMethod(L, &CvPlayerAI::getAdvancedStartPoints);
-}
-//------------------------------------------------------------------------------
-//void setAdvancedStartPoints(int iNewValue);
-int CvLuaPlayer::lSetAdvancedStartPoints(lua_State* L)
-{
-	return BasicLuaMethod(L, &CvPlayerAI::setAdvancedStartPoints);
-}
-//------------------------------------------------------------------------------
-//void changeAdvancedStartPoints(int iChange);
-int CvLuaPlayer::lChangeAdvancedStartPoints(lua_State* L)
-{
-	return BasicLuaMethod(L, &CvPlayerAI::changeAdvancedStartPoints);
-}
-//------------------------------------------------------------------------------
-//int getAdvancedStartUnitCost(UnitTypes  eUnit, bool bAdd, CyPlot* pPlot);
-int CvLuaPlayer::lGetAdvancedStartUnitCost(lua_State* L)
-{
-	return BasicLuaMethod(L, &CvPlayerAI::getAdvancedStartUnitCost);
-}
-//------------------------------------------------------------------------------
-//int getAdvancedStartCityCost(bool bAdd, CyPlot* pPlot);
-int CvLuaPlayer::lGetAdvancedStartCityCost(lua_State* L)
-{
-	return BasicLuaMethod(L, &CvPlayerAI::getAdvancedStartCityCost);
-}
-//------------------------------------------------------------------------------
-//int getAdvancedStartPopCost(bool bAdd, CyCity* pCity);
-int CvLuaPlayer::lGetAdvancedStartPopCost(lua_State* L)
-{
-	return BasicLuaMethod(L, &CvPlayerAI::getAdvancedStartPopCost);
-}
-//------------------------------------------------------------------------------
-//int getAdvancedStartBuildingCost(BuildingTypes  eBuilding, bool bAdd, CyCity* pCity);
-int CvLuaPlayer::lGetAdvancedStartBuildingCost(lua_State* L)
-{
-	return BasicLuaMethod(L, &CvPlayerAI::getAdvancedStartBuildingCost);
-}
-//------------------------------------------------------------------------------
-//int getAdvancedStartImprovementCost(ImprovementTypes  eImprovement, bool bAdd, CyPlot* pPlot);
-int CvLuaPlayer::lGetAdvancedStartImprovementCost(lua_State* L)
-{
-	return BasicLuaMethod(L, &CvPlayerAI::getAdvancedStartImprovementCost);
-}
-//------------------------------------------------------------------------------
-//int getAdvancedStartRouteCost(RouteTypes  eRoute, bool bAdd, CyPlot* pPlot);
-int CvLuaPlayer::lGetAdvancedStartRouteCost(lua_State* L)
-{
-	return BasicLuaMethod(L, &CvPlayerAI::getAdvancedStartRouteCost);
-}
-//------------------------------------------------------------------------------
-//int getAdvancedStartTechCost(TechTypes  eTech, bool bAdd);
-int CvLuaPlayer::lGetAdvancedStartTechCost(lua_State* L)
-{
-	return BasicLuaMethod(L, &CvPlayerAI::getAdvancedStartTechCost);
-}
-//------------------------------------------------------------------------------
-//int getAdvancedStartVisibilityCost(bool bAdd, CyPlot* pPlot);
-int CvLuaPlayer::lGetAdvancedStartVisibilityCost(lua_State* L)
-{
-	return BasicLuaMethod(L, &CvPlayerAI::getAdvancedStartVisibilityCost);
-}
-
-//------------------------------------------------------------------------------
 //int GetAttackBonusTurns();
 int CvLuaPlayer::lGetAttackBonusTurns(lua_State* L)
 {
@@ -7306,15 +7269,11 @@ int CvLuaPlayer::lGetAttackBonusTurns(lua_State* L)
 //int GetCultureBonusTurns();
 int CvLuaPlayer::lGetCultureBonusTurns(lua_State* L)
 {
-#if defined(MOD_BALANCE_CORE)
 	CvPlayerAI* pkPlayer = GetInstance(L);
 
 	const int iResult = (pkPlayer->GetCultureBonusTurns() + pkPlayer->GetCultureBonusTurnsConquest()); 
 	lua_pushinteger(L, iResult);
 	return 1;
-#else
-	return BasicLuaMethod(L, &CvPlayerAI::GetCultureBonusTurns);
-#endif
 }
 
 //------------------------------------------------------------------------------
@@ -7525,13 +7484,8 @@ int CvLuaPlayer::lCreateGreatGeneral(lua_State* L)
 	const UnitTypes eGreatPersonUnit = (UnitTypes)lua_tointeger(L, 2);
 	const int x = lua_tointeger(L, 3);
 	const int y = lua_tointeger(L, 4);
-
-#if defined(MOD_GLOBAL_TRULY_FREE_GP)
 	const bool bIsFree = luaL_optint(L, 5, 0);
 	pkPlayer->createGreatGeneral(eGreatPersonUnit, x, y, bIsFree);
-#else
-	pkPlayer->createGreatGeneral(eGreatPersonUnit, x, y);
-#endif
 	return 0;
 }
 //------------------------------------------------------------------------------
@@ -7821,14 +7775,6 @@ int CvLuaPlayer::lGetProjectProductionModifier(lua_State* L)
 	return 1;
 }
 //------------------------------------------------------------------------------
-int CvLuaPlayer::lGetSpecialistProductionModifier(lua_State* L)
-{
-	CvPlayerAI* pkPlayer = GetInstance(L);
-	const SpecialistTypes eSpecialist = (SpecialistTypes)luaL_checkinteger(L, 2);
-	lua_pushinteger(L, pkPlayer->getProductionModifier(eSpecialist));
-	return 1;
-}
-//------------------------------------------------------------------------------
 //int getMaxGlobalBuildingProductionModifier();
 int CvLuaPlayer::lGetMaxGlobalBuildingProductionModifier(lua_State* L)
 {
@@ -8035,31 +7981,6 @@ int CvLuaPlayer::lGetHighestUnitLevel(lua_State* L)
 	return BasicLuaMethod(L, &CvPlayerAI::getHighestUnitLevel);
 }
 
-//------------------------------------------------------------------------------
-//int getConscriptCount();
-int CvLuaPlayer::lGetConscriptCount(lua_State* L)
-{
-	return BasicLuaMethod(L, &CvPlayerAI::getConscriptCount);
-}
-//------------------------------------------------------------------------------
-//void setConscriptCount(int iNewValue);
-int CvLuaPlayer::lSetConscriptCount(lua_State* L)
-{
-	return BasicLuaMethod(L, &CvPlayerAI::setConscriptCount);
-}
-//------------------------------------------------------------------------------
-//void changeConscriptCount(int iChange);
-int CvLuaPlayer::lChangeConscriptCount(lua_State* L)
-{
-	return BasicLuaMethod(L, &CvPlayerAI::changeConscriptCount);
-}
-
-//------------------------------------------------------------------------------
-//int getMaxConscript();
-int CvLuaPlayer::lGetMaxConscript(lua_State* L)
-{
-	return BasicLuaMethod(L, &CvPlayerAI::getMaxConscript);
-}
 //------------------------------------------------------------------------------
 //int getOverflowResearch();
 int CvLuaPlayer::lGetOverflowResearch(lua_State* L)
@@ -9226,22 +9147,15 @@ int CvLuaPlayer::lGetBullyUnit(lua_State* L)
 {
 	CvPlayerAI* pkPlayer = GetInstance(L);
 
-	UnitClassTypes  eUnitClass = pkPlayer->GetMinorCivAI()->GetBullyUnit();
-	if(eUnitClass != NO_UNITCLASS)
+	const UnitClassTypes eUnitClass = pkPlayer->GetMinorCivAI()->GetBullyUnit();
+	const UnitTypes eUnit = pkPlayer->GetSpecificUnitType(eUnitClass);
+	if (eUnit != NO_UNIT)
 	{
-		CvUnitClassInfo* pkUnitClassInfo = GC.getUnitClassInfo(eUnitClass);
-		if(pkUnitClassInfo != NULL)
-		{
-			const UnitTypes eUnit = ((UnitTypes)(pkPlayer->GetSpecificUnitType(eUnitClass)));
-			if(eUnit != NO_UNIT)
-			{
-				lua_pushinteger(L, eUnit);
-				return 1;
-			}
-		}
-	}		
+		lua_pushinteger(L, eUnit);
+		return 1;
+	}
 
-	lua_pushinteger(L, (UnitTypes) GC.getInfoTypeForString("UNIT_WORKER"));
+	lua_pushinteger(L, GC.getInfoTypeForString("UNIT_WORKER"));
 	return 1;
 }
 //------------------------------------------------------------------------------
@@ -9681,7 +9595,10 @@ int CvLuaPlayer::lIsExtendedGame(lua_State* L)
 //bool isFoundedFirstCity();
 int CvLuaPlayer::lIsFoundedFirstCity(lua_State* L)
 {
-	return BasicLuaMethod(L, &CvPlayerAI::isFoundedFirstCity);
+	CvPlayerAI* pkPlayer = GetInstance(L);
+	const bool bResult = pkPlayer->GetNumCitiesFounded() > 0;
+	lua_pushboolean(L, bResult);
+	return 1;
 }
 
 //------------------------------------------------------------------------------
@@ -10115,31 +10032,6 @@ int CvLuaPlayer::lGetBuildingClassCountPlusMaking(lua_State* L)
 {
 	return BasicLuaMethod(L, &CvPlayerAI::getBuildingClassCountPlusMaking);
 }
-//------------------------------------------------------------------------------
-//int getHurryCount(HurryTypes  eIndex);
-int CvLuaPlayer::lGetHurryCount(lua_State* L)
-{
-	return BasicLuaMethod(L, &CvPlayerAI::getHurryCount);
-}
-//------------------------------------------------------------------------------
-//bool IsHasAccessToHurry(HurryTypes  eIndex);
-int CvLuaPlayer::lIsHasAccessToHurry(lua_State* L)
-{
-	return BasicLuaMethod(L, &CvPlayerAI::IsHasAccessToHurry);
-}
-//------------------------------------------------------------------------------
-//bool IsCanHurry(HurryTypes  eIndex);
-int CvLuaPlayer::lIsCanHurry(lua_State* L)
-{
-	return BasicLuaMethod(L, &CvPlayerAI::IsCanHurry);
-}
-//------------------------------------------------------------------------------
-//int GetHurryGoldCost(HurryTypes  eIndex);
-int CvLuaPlayer::lGetHurryGoldCost(lua_State* L)
-{
-	return BasicLuaMethod(L, &CvPlayerAI::GetHurryGoldCost);
-}
-
 //------------------------------------------------------------------------------
 //bool isResearchingTech(TechTypes  iIndex);
 int CvLuaPlayer::lIsResearchingTech(lua_State* L)
@@ -11193,7 +11085,7 @@ int CvLuaPlayer::lIsPlayerBrokenMilitaryPromise(lua_State* L)
 	CvPlayerAI* pkPlayer = GetInstance(L);
 	PlayerTypes eOtherPlayer = (PlayerTypes) lua_tointeger(L, 2);
 
-	const bool bValue = pkPlayer->GetDiplomacyAI()->IsPlayerBrokenMilitaryPromise(eOtherPlayer);
+	const bool bValue = pkPlayer->GetDiplomacyAI()->BrokeMilitaryPromise(eOtherPlayer);
 
 	lua_pushboolean(L, bValue);
 	return 1;
@@ -11205,7 +11097,7 @@ int CvLuaPlayer::lIsPlayerIgnoredMilitaryPromise(lua_State* L)
 	CvPlayerAI* pkPlayer = GetInstance(L);
 	PlayerTypes eOtherPlayer = (PlayerTypes) lua_tointeger(L, 2);
 
-	const bool bValue = pkPlayer->GetDiplomacyAI()->IsPlayerIgnoredMilitaryPromise(eOtherPlayer);
+	const bool bValue = pkPlayer->GetDiplomacyAI()->IgnoredMilitaryPromise(eOtherPlayer);
 
 	lua_pushboolean(L, bValue);
 	return 1;
@@ -11216,7 +11108,7 @@ int CvLuaPlayer::lIsPlayerBrokenExpansionPromise(lua_State* L)
 	CvPlayerAI* pkPlayer = GetInstance(L);
 	PlayerTypes eOtherPlayer = (PlayerTypes) lua_tointeger(L, 2);
 
-	const bool bValue = pkPlayer->GetDiplomacyAI()->IsPlayerBrokenExpansionPromise(eOtherPlayer);
+	const bool bValue = pkPlayer->GetDiplomacyAI()->BrokeExpansionPromise(eOtherPlayer);
 
 	lua_pushboolean(L, bValue);
 	return 1;
@@ -11227,7 +11119,7 @@ int CvLuaPlayer::lIsPlayerIgnoredExpansionPromise(lua_State* L)
 	CvPlayerAI* pkPlayer = GetInstance(L);
 	PlayerTypes eOtherPlayer = (PlayerTypes) lua_tointeger(L, 2);
 
-	const bool bValue = pkPlayer->GetDiplomacyAI()->IsPlayerIgnoredExpansionPromise(eOtherPlayer);
+	const bool bValue = pkPlayer->GetDiplomacyAI()->IgnoredExpansionPromise(eOtherPlayer);
 
 	lua_pushboolean(L, bValue);
 	return 1;
@@ -11238,7 +11130,7 @@ int CvLuaPlayer::lIsPlayerBrokenBorderPromise(lua_State* L)
 	CvPlayerAI* pkPlayer = GetInstance(L);
 	PlayerTypes eOtherPlayer = (PlayerTypes) lua_tointeger(L, 2);
 
-	const bool bValue = pkPlayer->GetDiplomacyAI()->IsPlayerBrokenBorderPromise(eOtherPlayer);
+	const bool bValue = pkPlayer->GetDiplomacyAI()->BrokeBorderPromise(eOtherPlayer);
 
 	lua_pushboolean(L, bValue);
 	return 1;
@@ -11249,7 +11141,7 @@ int CvLuaPlayer::lIsPlayerIgnoredBorderPromise(lua_State* L)
 	CvPlayerAI* pkPlayer = GetInstance(L);
 	PlayerTypes eOtherPlayer = (PlayerTypes) lua_tointeger(L, 2);
 
-	const bool bValue = pkPlayer->GetDiplomacyAI()->IsPlayerIgnoredBorderPromise(eOtherPlayer);
+	const bool bValue = pkPlayer->GetDiplomacyAI()->IgnoredBorderPromise(eOtherPlayer);
 
 	lua_pushboolean(L, bValue);
 	return 1;
@@ -11260,7 +11152,7 @@ int CvLuaPlayer::lIsPlayerBrokenAttackCityStatePromise(lua_State* L)
 	CvPlayerAI* pkPlayer = GetInstance(L);
 	PlayerTypes eOtherPlayer = (PlayerTypes) lua_tointeger(L, 2);
 
-	const bool bValue = pkPlayer->GetDiplomacyAI()->IsPlayerBrokenAttackCityStatePromise(eOtherPlayer);
+	const bool bValue = pkPlayer->GetDiplomacyAI()->BrokeAttackCityStatePromise(eOtherPlayer);
 
 	lua_pushboolean(L, bValue);
 	return 1;
@@ -11271,7 +11163,7 @@ int CvLuaPlayer::lIsPlayerIgnoredAttackCityStatePromise(lua_State* L)
 	CvPlayerAI* pkPlayer = GetInstance(L);
 	PlayerTypes eOtherPlayer = (PlayerTypes) lua_tointeger(L, 2);
 
-	const bool bValue = pkPlayer->GetDiplomacyAI()->IsPlayerIgnoredAttackCityStatePromise(eOtherPlayer);
+	const bool bValue = pkPlayer->GetDiplomacyAI()->IgnoredAttackCityStatePromise(eOtherPlayer);
 
 	lua_pushboolean(L, bValue);
 	return 1;
@@ -11282,7 +11174,7 @@ int CvLuaPlayer::lIsPlayerBrokenBullyCityStatePromise(lua_State* L)
 	CvPlayerAI* pkPlayer = GetInstance(L);
 	PlayerTypes eOtherPlayer = (PlayerTypes) lua_tointeger(L, 2);
 
-	const bool bValue = pkPlayer->GetDiplomacyAI()->IsPlayerBrokenBullyCityStatePromise(eOtherPlayer);
+	const bool bValue = pkPlayer->GetDiplomacyAI()->BrokeBullyCityStatePromise(eOtherPlayer);
 
 	lua_pushboolean(L, bValue);
 	return 1;
@@ -11293,7 +11185,7 @@ int CvLuaPlayer::lIsPlayerIgnoredBullyCityStatePromise(lua_State* L)
 	CvPlayerAI* pkPlayer = GetInstance(L);
 	PlayerTypes eOtherPlayer = (PlayerTypes) lua_tointeger(L, 2);
 
-	const bool bValue = pkPlayer->GetDiplomacyAI()->IsPlayerIgnoredBullyCityStatePromise(eOtherPlayer);
+	const bool bValue = pkPlayer->GetDiplomacyAI()->IgnoredBullyCityStatePromise(eOtherPlayer);
 
 	lua_pushboolean(L, bValue);
 	return 1;
@@ -11304,7 +11196,7 @@ int CvLuaPlayer::lIsPlayerBrokenSpyPromise(lua_State* L)
 	CvPlayerAI* pkPlayer = GetInstance(L);
 	PlayerTypes eOtherPlayer = (PlayerTypes) lua_tointeger(L, 2);
 
-	const bool bValue = pkPlayer->GetDiplomacyAI()->IsPlayerBrokenSpyPromise(eOtherPlayer);
+	const bool bValue = pkPlayer->GetDiplomacyAI()->BrokeSpyPromise(eOtherPlayer);
 
 	lua_pushboolean(L, bValue);
 	return 1;
@@ -11315,7 +11207,7 @@ int CvLuaPlayer::lIsPlayerIgnoredSpyPromise(lua_State* L)
 	CvPlayerAI* pkPlayer = GetInstance(L);
 	PlayerTypes eOtherPlayer = (PlayerTypes) lua_tointeger(L, 2);
 
-	const bool bValue = pkPlayer->GetDiplomacyAI()->IsPlayerIgnoredSpyPromise(eOtherPlayer);
+	const bool bValue = pkPlayer->GetDiplomacyAI()->IgnoredSpyPromise(eOtherPlayer);
 
 	lua_pushboolean(L, bValue);
 	return 1;
@@ -11337,7 +11229,7 @@ int CvLuaPlayer::lIsPlayerBrokenNoConvertPromise(lua_State* L)
 	CvPlayerAI* pkPlayer = GetInstance(L);
 	PlayerTypes eOtherPlayer = (PlayerTypes) lua_tointeger(L, 2);
 
-	const bool bValue = pkPlayer->GetDiplomacyAI()->IsPlayerBrokenNoConvertPromise(eOtherPlayer);
+	const bool bValue = pkPlayer->GetDiplomacyAI()->BrokeNoConvertPromise(eOtherPlayer);
 
 	lua_pushboolean(L, bValue);
 	return 1;
@@ -11348,7 +11240,7 @@ int CvLuaPlayer::lIsPlayerIgnoredNoConvertPromise(lua_State* L)
 	CvPlayerAI* pkPlayer = GetInstance(L);
 	PlayerTypes eOtherPlayer = (PlayerTypes) lua_tointeger(L, 2);
 
-	const bool bValue = pkPlayer->GetDiplomacyAI()->IsPlayerIgnoredNoConvertPromise(eOtherPlayer);
+	const bool bValue = pkPlayer->GetDiplomacyAI()->IgnoredNoConvertPromise(eOtherPlayer);
 
 	lua_pushboolean(L, bValue);
 	return 1;
@@ -11359,7 +11251,7 @@ int CvLuaPlayer::lIsPlayerBrokenNoDiggingPromise(lua_State* L)
 	CvPlayerAI* pkPlayer = GetInstance(L);
 	PlayerTypes eOtherPlayer = (PlayerTypes) lua_tointeger(L, 2);
 
-	const bool bValue = pkPlayer->GetDiplomacyAI()->IsPlayerBrokenNoDiggingPromise(eOtherPlayer);
+	const bool bValue = pkPlayer->GetDiplomacyAI()->BrokeNoDiggingPromise(eOtherPlayer);
 
 	lua_pushboolean(L, bValue);
 	return 1;
@@ -11370,7 +11262,7 @@ int CvLuaPlayer::lIsPlayerIgnoredNoDiggingPromise(lua_State* L)
 	CvPlayerAI* pkPlayer = GetInstance(L);
 	PlayerTypes eOtherPlayer = (PlayerTypes) lua_tointeger(L, 2);
 
-	const bool bValue = pkPlayer->GetDiplomacyAI()->IsPlayerIgnoredNoDiggingPromise(eOtherPlayer);
+	const bool bValue = pkPlayer->GetDiplomacyAI()->IgnoredNoDiggingPromise(eOtherPlayer);
 
 	lua_pushboolean(L, bValue);
 	return 1;
@@ -11381,7 +11273,7 @@ int CvLuaPlayer::lIsPlayerBrokenCoopWarPromise(lua_State* L)
 	CvPlayerAI* pkPlayer = GetInstance(L);
 	PlayerTypes eOtherPlayer = (PlayerTypes) lua_tointeger(L, 2);
 
-	const bool bValue = pkPlayer->GetDiplomacyAI()->IsPlayerBrokenCoopWarPromise(eOtherPlayer);
+	const bool bValue = pkPlayer->GetDiplomacyAI()->BrokeCoopWarPromise(eOtherPlayer);
 
 	lua_pushboolean(L, bValue);
 	return 1;
@@ -11528,7 +11420,7 @@ int CvLuaPlayer::lIsHasPaidTributeTo(lua_State* L)
 	CvPlayerAI* pkPlayer = GetInstance(L);
 	PlayerTypes eOtherPlayer = (PlayerTypes) lua_tointeger(L, 2);
 
-	const bool bValue = pkPlayer->GetDiplomacyAI()->IsHasPaidTributeTo(eOtherPlayer);
+	const bool bValue = GET_PLAYER(eOtherPlayer).GetDiplomacyAI()->GetNumConsecutiveDemandsTheyAccepted(pkPlayer->GetID()) > 0;
 
 	lua_pushboolean(L, bValue);
 	return 1;
@@ -13047,65 +12939,32 @@ int CvLuaPlayer::lGetPlayerBuildingClassYieldChange(lua_State* L)
 //------------------------------------------------------------------------------
 int CvLuaPlayer::lGetPlayerBuildingClassHappiness(lua_State* L)
 {
-	const BuildingClassTypes eOtherBuildingClass = (BuildingClassTypes)luaL_checkint(L, 2);
-
-	CvPlayer* pkPlayer = GetInstance(L);
-	if (pkPlayer)
+	CvPlayer* pPlayer = GetInstance(L);
+	const BuildingClassTypes eOtherBuildingClass = static_cast<BuildingClassTypes>(luaL_checkint(L, 2));
+	int iChange = 0;
+	for (int iI = 0; iI < GC.getNumBuildingClassInfos(); iI++)
 	{
-		int iChange = 0;
-
-		for (int iI = 0; iI < GC.getNumBuildingClassInfos(); iI++)
+		const BuildingClassTypes eBuildingClass = static_cast<BuildingClassTypes>(iI);
+		if (pPlayer->getBuildingClassCount(eBuildingClass) > 0)
 		{
-			BuildingClassTypes eParentBuildingClass = (BuildingClassTypes) iI;
-
-			CvBuildingClassInfo* pkBuildingClassInfo = GC.getBuildingClassInfo(eParentBuildingClass);
-			if (!pkBuildingClassInfo)
-				continue;
-
-			if (MOD_BUILDINGS_THOROUGH_PREREQUISITES)
+			int iLoop = 0;
+			for (const CvCity* pLoopCity = pPlayer->firstCity(&iLoop); pLoopCity != NULL; pLoopCity = pPlayer->nextCity(&iLoop))
 			{
-				if (pkPlayer->getBuildingClassCount(eParentBuildingClass) > 0)
-				{
-					int iLoop = 0;
+				BuildingTypes eBuilding = pLoopCity->GetBuildingTypeFromClass(eBuildingClass);
+				if (eBuilding == NO_BUILDING)
+					continue;
 
-					for (const CvCity* pLoopCity = pkPlayer->firstCity(&iLoop); pLoopCity != NULL; pLoopCity = pkPlayer->nextCity(&iLoop))
-					{
-						if (pLoopCity->HasBuildingClass(eParentBuildingClass))
-						{
-							BuildingTypes eParentBuilding = pLoopCity->GetCityBuildings()->GetBuildingTypeFromClass(eParentBuildingClass);
-							if (eParentBuilding != NO_BUILDING)
-							{
-								CvBuildingEntry* pkParentBuilding = GC.getBuildingInfo(eParentBuilding);
-								if (pkParentBuilding)
-								{
-									iChange += pkParentBuilding->GetBuildingClassHappiness(eOtherBuildingClass);
-								}
-							}
-						}
-					}
-
-				}
-			}
-			else
-			{
-				BuildingTypes eParentBuilding = (BuildingTypes)pkPlayer->getCivilizationInfo().getCivilizationBuildings(eParentBuildingClass);
-				if (eParentBuilding != NO_BUILDING && pkPlayer->countNumBuildings(eParentBuilding) > 0)
+				int iNumBuilding = pLoopCity->GetCityBuildings()->GetNumBuilding(eBuilding);
+				CvBuildingEntry* pkBuildingInfo = GC.getBuildingInfo(eBuilding);
+				if (pkBuildingInfo)
 				{
-					CvBuildingEntry* pkParentBuilding = GC.getBuildingInfo(eParentBuilding);
-					if (pkParentBuilding)
-					{
-						iChange += pkParentBuilding->GetBuildingClassHappiness(eOtherBuildingClass) * pkPlayer->getNumBuildings(eParentBuilding);
-					}
+					iChange += pkBuildingInfo->GetBuildingClassHappiness(eOtherBuildingClass) * iNumBuilding;
 				}
 			}
 		}
-
-		lua_pushinteger(L, iChange);
-
-		return 1;
 	}
-
-	return 0;
+	lua_pushinteger(L, iChange);
+	return 1;
 }
 
 //------------------------------------------------------------------------------
@@ -14532,7 +14391,7 @@ int CvLuaPlayer::lGetOpinionTable(lua_State* L)
 		////////////////////////////////////
 
 		// Human Promises
-		iValue = pDiplo->GetNumTurnsMilitaryPromise(ePlayer);
+		iValue = pDiplo->GetNumTurnsMilitaryPromise(ePlayer); // This is a mutual promise and the turn counter will always be the same on both sides
 		if (iValue > 0)
 		{
 			Opinion kOpinion;
@@ -14560,15 +14419,6 @@ int CvLuaPlayer::lGetOpinionTable(lua_State* L)
 		}
 		
 		// AI Promises
-		iValue = GET_PLAYER(ePlayer).GetDiplomacyAI()->GetNumTurnsMilitaryPromise(pkPlayer->GetID());
-		if (iValue > 0)
-		{
-			Opinion kOpinion;
-			kOpinion.m_iValue = 0;
-			kOpinion.m_str = GetLocalizedText("TXT_KEY_DIPLO_AI_MILITARY_PROMISE_TURNS", iValue);
-			aOpinions.push_back(kOpinion);
-		}
-
 		iValue = GET_PLAYER(ePlayer).GetDiplomacyAI()->GetNumTurnsExpansionPromise(pkPlayer->GetID());
 		if (iValue > 0)
 		{
@@ -14581,7 +14431,7 @@ int CvLuaPlayer::lGetOpinionTable(lua_State* L)
 		// Timer to avoid backstabbing penalties
 		if (pDiplo->IsDoFBroken(ePlayer) && !pDiplo->IsAtWar(ePlayer) && !GET_PLAYER(ePlayer).IsVassalOfSomeone())
 		{
-			if (!pDiplo->IsFriendDenouncedUs(ePlayer) && !pDiplo->IsFriendDeclaredWarOnUs(ePlayer))
+			if (!pDiplo->IsFriendDenouncedUs(ePlayer) || !pDiplo->IsFriendDeclaredWarOnUs(ePlayer))
 			{
 				int iTurns = pDiplo->GetTurnsSinceDoFBroken(ePlayer);
 				int iTimer = /*10*/ GD_INT_GET(DOF_BROKEN_BACKSTAB_TIMER);
@@ -15179,8 +15029,8 @@ int CvLuaPlayer::lGetOpinionTable(lua_State* L)
 			kOpinion.m_iValue = iValue;
 			CvString str;
 
-			// Have we accepted a demand from our master? Then we've paid tribute.
-			if (pDiplo->IsHasPaidTributeTo(ePlayer))
+			// Streak of master demands accepted > 0? Then we were forced to pay tribute.
+			if (GET_PLAYER(ePlayer).GetDiplomacyAI()->GetNumConsecutiveDemandsTheyAccepted(pkPlayer->GetID()) > 0)
 			{
 				str = Localization::Lookup("TXT_KEY_DIPLO_PAID_TRIBUTE").toUTF8();
 			}
@@ -16239,6 +16089,11 @@ int CvLuaPlayer::lGetEspionageSpies(lua_State* L)
 	for(uint uiSpy = 0; uiSpy < pkPlayerEspionage->m_aSpyList.size(); ++uiSpy)
 	{
 		CvEspionageSpy* pSpy = &(pkPlayerEspionage->m_aSpyList[uiSpy]);
+		if (pSpy->GetSpyState() == SPY_STATE_TERMINATED)
+		{
+			// terminated spies are permanently dead and are not shown in the UI
+			continue;
+		}
 
 		lua_createtable(L, 0, 0);
 		const int t = lua_gettop(L);
@@ -16348,6 +16203,9 @@ int CvLuaPlayer::lGetEspionageSpies(lua_State* L)
 
 		lua_pushboolean(L, pkPlayerEspionage->IsDiplomat(uiSpy));
 		lua_setfield(L, t, "IsDiplomat");
+
+		lua_pushinteger(L, pSpy->GetVassalDiplomatPlayer());
+		lua_setfield(L, t, "VassalDiplomatPlayer");
 
 		lua_pushboolean(L, pSpy->m_bPassive);
 		lua_setfield(L, t, "Passive");
@@ -16851,7 +16709,7 @@ int CvLuaPlayer::lGetVassalGoldMaintenance(lua_State* L)
 {
 	CvPlayerAI* pkPlayer = GetInstance(L);
 
-	const int iResult = pkPlayer->GetTreasury()->GetVassalGoldMaintenance();
+	const int iResult = pkPlayer->GetTreasury()->GetVassalGoldMaintenance(NO_TEAM);
 	lua_pushinteger(L, iResult);
 	return 1;
 }
@@ -16895,18 +16753,6 @@ int CvLuaPlayer::lMoveRequestTooSoon(lua_State* L)
 	return 1;
 }
 
-int CvLuaPlayer::lGetPlayerMoveTroopsRequestCounter(lua_State* L)
-{
-	CvPlayerAI* pkPlayer = GetInstance(L);
-	PlayerTypes eOtherPlayer = (PlayerTypes) lua_tointeger(L, 2);
-
-	int iTurn = pkPlayer->GetDiplomacyAI()->GetPlayerMoveTroopsRequestAcceptedTurn(eOtherPlayer);
-	const int iValue = (iTurn != -1) ? (GC.getGame().getGameTurn() - iTurn) : -1;
-
-	lua_pushinteger(L, iValue);
-	return 1;
-}
-
 // CvTreasury::GetExpensePerTurnFromVassalTaxes()
 int CvLuaPlayer::lGetExpensePerTurnFromVassalTaxes(lua_State* L)
 {
@@ -16921,7 +16767,7 @@ int CvLuaPlayer::lGetMyShareOfVassalTaxes(lua_State* L)
 {
 	CvPlayerAI* pkPlayer = GetInstance(L);
 	
-	lua_pushinteger(L, pkPlayer->GetTreasury()->GetMyShareOfVassalTaxes());
+	lua_pushinteger(L, pkPlayer->GetTreasury()->GetMyShareOfVassalTaxes(NO_TEAM, -1));
 	return 1;
 }
 

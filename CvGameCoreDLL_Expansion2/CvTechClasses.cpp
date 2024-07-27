@@ -1,5 +1,5 @@
 /*	-------------------------------------------------------------------------------------------------------
-	© 1991-2012 Take-Two Interactive Software and its subsidiaries.  Developed by Firaxis Games.  
+	Â© 1991-2012 Take-Two Interactive Software and its subsidiaries.  Developed by Firaxis Games.  
 	Sid Meier's Civilization V, Civ, Civilization, 2K Games, Firaxis Games, Take-Two Interactive Software 
 	and their respective logos are all trademarks of Take-Two interactive Software, Inc.  
 	All other marks and trademarks are the property of their respective owners.  
@@ -21,10 +21,7 @@
 
 /// Constructor
 CvTechEntry::CvTechEntry(void):
-	m_iAIWeight(0),
-	m_iAITradeModifier(0),
 	m_iResearchCost(0),
-	m_iAdvancedStartCost(0),
 	m_iEra(NO_ERA),
 	m_iFeatureProductionModifier(0),
 	m_iUnitFortificationModifier(0),
@@ -109,10 +106,7 @@ bool CvTechEntry::CacheResults(Database::Results& kResults, CvDatabaseUtility& k
 		return false;
 
 	//Basic Properties
-	m_iAIWeight = kResults.GetInt("AIWeight");
-	m_iAITradeModifier = kResults.GetInt("AITradeModifier");
 	m_iResearchCost = kResults.GetInt("Cost");
-	m_iAdvancedStartCost = kResults.GetInt("AdvancedStartCost");
 	m_iFeatureProductionModifier = kResults.GetInt("FeatureProductionModifier");
 	m_iUnitFortificationModifier = kResults.GetInt("UnitFortificationModifier");
 	m_iUnitBaseHealModifier = kResults.GetInt("UnitBaseHealModifier");
@@ -266,28 +260,10 @@ bool CvTechEntry::CacheResults(Database::Results& kResults, CvDatabaseUtility& k
 	return true;
 }
 
-/// Additional weight to having AI purchase this
-int CvTechEntry::GetAIWeight() const
-{
-	return m_iAIWeight;
-}
-
-/// Additional weight to having AI trade for this
-int CvTechEntry::GetAITradeModifier() const
-{
-	return m_iAITradeModifier;
-}
-
 /// Research/science points required to obtain tech
 int CvTechEntry::GetResearchCost() const
 {
 	return m_iResearchCost;
-}
-
-/// Cost if starting midway through game
-int CvTechEntry::GetAdvancedStartCost() const
-{
-	return m_iAdvancedStartCost;
 }
 
 /// Historical era within tech tree
@@ -1411,7 +1387,7 @@ void CvPlayerTechs::SetGSPriorities()
 				{
 					m_piGSTechPriority[iTechLoop]++;
 				}
-				if (bDiploFocus && pkUnitInfo->IsTrade() || pkUnitInfo->GetBaseGold() > 0 || pkUnitInfo->GetDefaultUnitAIType() == UNITAI_MESSENGER)
+				if ((bDiploFocus && pkUnitInfo->IsTrade()) || pkUnitInfo->GetBaseGold() > 0 || pkUnitInfo->GetDefaultUnitAIType() == UNITAI_MESSENGER)
 				{
 					m_piGSTechPriority[iTechLoop]++;
 				}
@@ -1429,7 +1405,7 @@ void CvPlayerTechs::SetGSPriorities()
 bool CvPlayerTechs::IsResearch() const
 {
 	// Have we founded a city?
-	return m_pPlayer->isFoundedFirstCity();
+	return m_pPlayer->GetNumCitiesFounded() > 0;
 }
 
 /// Accessor: Is this tech disabled?
@@ -1499,7 +1475,7 @@ bool CvPlayerTechs::CanResearch(TechTypes eTech, bool bTrade) const
 	if(pkTechEntry == NULL)
 		return false;
 
-	if(!IsResearch() && m_pPlayer->getAdvancedStartPoints() < 0)
+	if(!IsResearch())
 	{
 		return false;
 	}
@@ -1934,7 +1910,7 @@ void CvPlayerTechs::CheckHasUUTech()
 							continue;
 
 						// Must be a combat or combat support unit
-						if (pkUnitEntry->GetCombat() > 0 || pkUnitEntry->GetRangedCombat() > 0 || pkUnitEntry->GetCultureBombRadius() > 0 || pkUnitEntry->IsCanRepairFleet() || pkUnitEntry->IsCityAttackSupport() || pkUnitEntry->GetNukeDamageLevel() != -1)
+						if (pkUnitEntry->GetCombat() > 0 || pkUnitEntry->GetRangedCombat() > 0 || pkUnitEntry->GetCultureBombRadius() > 0 || pkUnitEntry->IsCanRepairFleet() || pkUnitEntry->IsCityAttackSupport() || pkUnitEntry->GetNukeDamageLevel() > 0)
 						{
 							int iTech = pkUnitEntry->GetPrereqAndTech();
 							int iObsoleteTech = pkUnitEntry->GetObsoleteTech();
@@ -2004,7 +1980,7 @@ void CvPlayerTechs::CheckWillHaveUUTechSoon()
 							continue;
 
 						// Must be a combat or combat support unit
-						if (pkUnitEntry->GetCombat() > 0 || pkUnitEntry->GetRangedCombat() > 0 || pkUnitEntry->GetCultureBombRadius() > 0 || pkUnitEntry->IsCanRepairFleet() || pkUnitEntry->IsCityAttackSupport() || pkUnitEntry->GetNukeDamageLevel() != -1)
+						if (pkUnitEntry->GetCombat() > 0 || pkUnitEntry->GetRangedCombat() > 0 || pkUnitEntry->GetCultureBombRadius() > 0 || pkUnitEntry->IsCanRepairFleet() || pkUnitEntry->IsCityAttackSupport() || pkUnitEntry->GetNukeDamageLevel() > 0)
 						{
 							int iTech = pkUnitEntry->GetPrereqAndTech();
 							if (iTech != NO_TECH && !m_pPlayer->HasTech((TechTypes)iTech))

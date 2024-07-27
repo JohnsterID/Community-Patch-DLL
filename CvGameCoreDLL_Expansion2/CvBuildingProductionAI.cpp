@@ -1,5 +1,5 @@
 /*	-------------------------------------------------------------------------------------------------------
-	� 1991-2012 Take-Two Interactive Software and its subsidiaries.  Developed by Firaxis Games.  
+	© 1991-2012 Take-Two Interactive Software and its subsidiaries.  Developed by Firaxis Games.  
 	Sid Meier's Civilization V, Civ, Civilization, 2K Games, Firaxis Games, Take-Two Interactive Software 
 	and their respective logos are all trademarks of Take-Two interactive Software, Inc.  
 	All other marks and trademarks are the property of their respective owners.  
@@ -480,11 +480,11 @@ int CvBuildingProductionAI::CheckBuildingBuildSanity(BuildingTypes eBuilding, in
 			// the building needs aluminum? check if we'd still have enough for the spaceship
 			if (eResource == eAluminum && pkBuildingInfo->GetResourceQuantityRequirement(eResource) > 0)
 			{
-				vector<CvCity*> vCitiesForSpaceshipParts = kPlayer.GetCoreCitiesForSpaceshipProduction();
-				if (std::find(vCitiesForSpaceshipParts.begin(), vCitiesForSpaceshipParts.end(), m_pCity) == vCitiesForSpaceshipParts.end())
+				const vector<int>& vCitiesForSpaceshipParts = kPlayer.GetCoreCitiesForSpaceshipProduction();
+				if (std::find(vCitiesForSpaceshipParts.begin(), vCitiesForSpaceshipParts.end(), m_pCity->GetID()) == vCitiesForSpaceshipParts.end())
 				{
 					// this is not one of the core cities for spaceship parts. only build something if we'd still have enough aluminum for spaceship parts and for buildings in the core cities
-					int iNumAluminumWeCanUse = kPlayer.getNumResourceAvailable(eResource, false) - kPlayer.GetNumAluminumStillNeededForSpaceship() - kPlayer.GetNumAluminumStillNeededForCoreCities();
+					int iNumAluminumWeCanUse = kPlayer.getNumResourceAvailable(eResource, true) - kPlayer.GetNumAluminumStillNeededForSpaceship() - kPlayer.GetNumAluminumStillNeededForCoreCities();
 					if (pkBuildingInfo->GetResourceQuantityRequirement(eResource) > iNumAluminumWeCanUse)
 					{
 						return SR_STRATEGY;
@@ -493,7 +493,7 @@ int CvBuildingProductionAI::CheckBuildingBuildSanity(BuildingTypes eBuilding, in
 				else
 				{
 					// in the core cities we do want to build the building, unless we need the aluminum for the spaceship parts
-					int iNumAluminumWeCanUse = kPlayer.getNumResourceAvailable(eResource, false) - kPlayer.GetNumAluminumStillNeededForSpaceship();
+					int iNumAluminumWeCanUse = kPlayer.getNumResourceAvailable(eResource, true) - kPlayer.GetNumAluminumStillNeededForSpaceship();
 					if (pkBuildingInfo->GetResourceQuantityRequirement(eResource) > iNumAluminumWeCanUse)
 					{
 						return SR_STRATEGY;
@@ -835,9 +835,8 @@ int CvBuildingProductionAI::CheckBuildingBuildSanity(BuildingTypes eBuilding, in
 			if(eTestDomain != NO_DOMAIN)
 			{
 				int iTempBonus = 0;
-#if defined(MOD_BALANCE_CORE)
 				int iTempMod = 0;
-#endif
+
 				if(pkBuildingInfo->GetDomainFreeExperience(eTestDomain) > 0 || pkBuildingInfo->GetDomainFreeExperiencePerGreatWork(eTestDomain))
 				{
 					iTempBonus += (m_pCity->getDomainFreeExperience(eTestDomain) + pkBuildingInfo->GetDomainFreeExperience(eTestDomain) + pkBuildingInfo->GetDomainFreeExperiencePerGreatWork(eTestDomain));
@@ -850,7 +849,6 @@ int CvBuildingProductionAI::CheckBuildingBuildSanity(BuildingTypes eBuilding, in
 				{
 					iTempBonus += (m_pCity->getDomainFreeExperience(eTestDomain) +  pkBuildingInfo->GetDomainFreeExperiencePerGreatWorkGlobal(eTestDomain));
 				}
-#if defined(MOD_BALANCE_CORE)
 				if (pkBuildingInfo->GetDomainFreeExperienceGlobal(eTestDomain) > 0)
 				{
 					iTempBonus += m_pCity->getDomainFreeExperience(eTestDomain) + kPlayer.GetDomainFreeExperience(eTestDomain) + pkBuildingInfo->GetDomainFreeExperienceGlobal(eTestDomain);
@@ -862,7 +860,6 @@ int CvBuildingProductionAI::CheckBuildingBuildSanity(BuildingTypes eBuilding, in
 
 				iTempBonus *= (100 + iTempMod);
 				iTempBonus /= 100;
-#endif
 				if(iTempBonus > 0)
 				{
 					//Let's try to build our military buildings in our best cities only. More cities we have, the more this matters.
@@ -879,6 +876,7 @@ int CvBuildingProductionAI::CheckBuildingBuildSanity(BuildingTypes eBuilding, in
 			}
 		}
 	}
+
 	//Unitcombat Bonuses should stack too.
 	if (!CityStrategyAIHelpers::IsTestCityStrategy_IsPuppetAndAnnexable(m_pCity))
 	{

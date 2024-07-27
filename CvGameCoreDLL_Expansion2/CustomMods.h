@@ -22,8 +22,8 @@
  ****************************************************************************
  ****************************************************************************/
 #define MOD_DLL_GUID {0xbf9bf7f0, 0xe078, 0x4d4e, { 0x8a, 0x3e, 0x84, 0x71, 0x2f, 0x85, 0xaa, 0x2b }} //{BF9BF7F0-E078-4d4e-8A3E-84712F85AA2B}
-#define MOD_DLL_NAME "Community Patch v129 (PNM v51+)"
-#define MOD_DLL_VERSION_NUMBER ((uint) 129)
+#define MOD_DLL_NAME "Community Patch v136 (PNM v51+)"
+#define MOD_DLL_VERSION_NUMBER ((uint) 136)
 #define MOD_DLL_VERSION_STATUS ""			// a (alpha), b (beta) or blank (released)
 #define MOD_DLL_CUSTOM_BUILD_NAME ""
 
@@ -61,16 +61,16 @@
 #define MOD_BALANCE_RANGED_ATTACK_ONLY_IN_NATIVE_DOMAIN
 
 // for debugging only
-//#define MOD_UNIT_KILL_STATS
+#define MOD_UNIT_KILL_STATS gCustomMods.isUNIT_KILL_STATS()
 
 /// visible tiles stay visible until the end of the turn
-#define MOD_CORE_DELAYED_VISIBILITY
+#define MOD_CORE_DELAYED_VISIBILITY gCustomMods.isCORE_DELAYED_VISIBILITY()
 
 /// ignore ZOC for those units which are likely to be killed by the enemy (alternatively ignore ZOC for all owned units)
-//#define MOD_CORE_TWO_PASS_DANGER
+#define MOD_CORE_TWO_PASS_DANGER gCustomMods.isCORE_TWO_PASS_DANGER()
 
-/// define this if you need hovercraft support, but it costs performance
-//#define MOD_CORE_HOVERING_UNITS
+/// set this to true if you need hovercraft support, but it costs performance
+#define MOD_CORE_HOVERING_UNITS gCustomMods.isCORE_HOVERING_UNITS()
 
 /// unrevealed plots are impassable instead of passable by default
 #define MOD_CORE_UNREVEALED_IMPASSABLE
@@ -78,13 +78,10 @@
 /// for better multiplayer experience
 #define MOD_CORE_REDUCE_RANDOMNESS
 
-#define MOD_CORE_RESILIENT_PANTHEONS
+#define MOD_CORE_RESILIENT_PANTHEONS gCustomMods.isCORE_RESILIENT_PANTHEONS()
 
 // track how much damage a unit takes per turn in order to better predict whether it might die
 #define MOD_CORE_PER_TURN_DAMAGE
-
-// Comment out this line to include all the tutorials code
-#define NO_TUTORIALS
 
 // Comment out this line to switch off all custom mod logging
 #define CUSTOMLOGDEBUG "CustomMods.log"
@@ -125,6 +122,8 @@
 #define MOD_LOCAL_GENERALS_NEAREST_CITY             gCustomMods.isLOCAL_GENERALS_NEAREST_CITY()
 // Separates out the repair fleet and change port abilities of the Great Admiral (v61)
 #define MOD_GLOBAL_SEPARATE_GREAT_ADMIRAL           gCustomMods.isGLOBAL_SEPARATE_GREAT_ADMIRAL()
+// Lets all Civs get trade routes along rivers.
+#define MOD_RIVER_CITY_CONNECTIONS                      gCustomMods.isRIVER_CITY_CONNECTIONS()
 // Permits units to have promotion trees different from their assigned CombatClass
 #define MOD_GLOBAL_PROMOTION_CLASSES                gCustomMods.isGLOBAL_PROMOTION_CLASSES()
 // Permits ships to enter coastal forts/citadels in friendly lands
@@ -1282,6 +1281,7 @@ public:
 	MOD_OPT_DECL(GLOBAL_LOCAL_GENERALS);
 	MOD_OPT_DECL(LOCAL_GENERALS_NEAREST_CITY);
 	MOD_OPT_DECL(GLOBAL_SEPARATE_GREAT_ADMIRAL);
+	MOD_OPT_DECL(RIVER_CITY_CONNECTIONS);
 	MOD_OPT_DECL(GLOBAL_PROMOTION_CLASSES);
 	MOD_OPT_DECL(GLOBAL_PASSABLE_FORTS);
 	MOD_OPT_DECL(GLOBAL_ANYTIME_GOODY_GOLD);
@@ -1557,6 +1557,13 @@ public:
 	MOD_OPT_DECL(ISKA_GOLDENAGEPOINTS_TO_PRESTIGE);
 
 	MOD_OPT_DECL(BATTLE_ROYALE);
+
+	MOD_OPT_DECL(UNIT_KILL_STATS);
+
+	MOD_OPT_DECL(CORE_TWO_PASS_DANGER);
+	MOD_OPT_DECL(CORE_DELAYED_VISIBILITY);
+	MOD_OPT_DECL(CORE_HOVERING_UNITS);
+	MOD_OPT_DECL(CORE_RESILIENT_PANTHEONS);
 
 	MOD_OPT_DECL(AI_UNIT_PRODUCTION);
 	MOD_OPT_DECL(ADJACENT_BLOCKADE);

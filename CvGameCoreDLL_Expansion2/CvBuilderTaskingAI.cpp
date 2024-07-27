@@ -44,17 +44,6 @@ void CvBuilderTaskingAI::Init(CvPlayer* pPlayer)
 
 	m_bLogging = GC.getLogging() && GC.getAILogging() && GC.GetBuilderAILogging();
 
-	// if we get a unique improvement that needs a certain feature, leave that feature until tech is researched
-	for (int i = 0; i < NUM_FEATURE_TYPES; i++)
-	{
-		m_aeUniqueFeatureImprovement[i] = NO_IMPROVEMENT;
-	}
-
-	// special case to evaluate plots adjacent to city
-	m_eUniqueCityAdjacentImprovement = NO_IMPROVEMENT;
-	m_eUniqueCoastalImprovement = NO_IMPROVEMENT;
-	m_eUniqueHillImprovement = NO_IMPROVEMENT;
-
 	CivilizationTypes eCiv = m_pPlayer->getCivilizationType();
 
 	for(int i = 0; i < GC.getNumBuildInfos(); i++)
@@ -83,25 +72,8 @@ void CvBuilderTaskingAI::Init(CvPlayer* pPlayer)
 			CivilizationTypes eRequiredCiv = pkImprovementInfo->GetRequiredCivilization();
 			if (eRequiredCiv == eCiv)
 			{
-				for (int i = 0; i < NUM_FEATURE_TYPES; i++)
-				{
-					if (pkImprovementInfo->GetFeatureMakesValid(i))
-					{
-						m_aeUniqueFeatureImprovement[i] = eImprovement;
-					}
-				}
-				if (pkImprovementInfo->IsAdjacentCity())
-				{
-					m_eUniqueCityAdjacentImprovement = eImprovement;
-				}
-				if (pkImprovementInfo->IsCoastal())
-				{
-					m_eUniqueCoastalImprovement = eImprovement;
-				}
-				if (pkImprovementInfo->IsHillsMakesValid())
-				{
-					m_eUniqueHillImprovement = eImprovement;
-				}
+				// Store this civ's unique improvements for special placement considerations as necessary
+				m_uniqueImprovements.push_back(eImprovement);
 			}
 		}
 	}
@@ -117,11 +89,7 @@ void CvBuilderTaskingAI::Uninit(void)
 	m_eFalloutFeature = NO_FEATURE;
 	m_eFalloutRemove = NO_BUILD;
 
-	for (int i = 0; i < NUM_FEATURE_TYPES; i++)
-		m_aeUniqueFeatureImprovement[i] = NO_IMPROVEMENT;
-	m_eUniqueCityAdjacentImprovement = NO_IMPROVEMENT;
-	m_eUniqueCoastalImprovement = NO_IMPROVEMENT;
-	m_eUniqueHillImprovement = NO_IMPROVEMENT;
+	m_uniqueImprovements.clear();
 }
 
 template<typename BuilderTaskingAI, typename Visitor>
@@ -131,10 +99,7 @@ void CvBuilderTaskingAI::Serialize(BuilderTaskingAI& builderTaskingAI, Visitor& 
 	visitor(builderTaskingAI.m_plotRoutePurposes);
 	visitor(builderTaskingAI.m_anyRoutePlanned);
 	visitor(builderTaskingAI.m_canalWantedPlots);
-	visitor(builderTaskingAI.m_aeUniqueFeatureImprovement);
-	visitor(builderTaskingAI.m_eUniqueCityAdjacentImprovement);
-	visitor(builderTaskingAI.m_eUniqueCoastalImprovement);
-	visitor(builderTaskingAI.m_eUniqueHillImprovement);
+	visitor(builderTaskingAI.m_uniqueImprovements);
 }
 
 /// Serialization read
@@ -174,6 +139,7 @@ FDataStream& operator<<(FDataStream& stream, const CvBuilderTaskingAI& builderTa
 /// Update
 void CvBuilderTaskingAI::Update(void)
 {
+	SetupExtraXAdjacentPlots();
 	UpdateRoutePlots();
 	UpdateCanalPlots();
 	UpdateImprovementPlots();
@@ -332,21 +298,24 @@ static int GetYieldBaseModifierTimes100(YieldTypes eYield)
 	case YIELD_FOOD:
 		return /*180*/ GD_INT_GET(BUILDER_TASKING_BASELINE_ADDS_FOOD);
 	case YIELD_PRODUCTION:
-		return /*200*/ GD_INT_GET(BUILDER_TASKING_BASELINE_ADDS_PRODUCTION);
+		return /*180*/ GD_INT_GET(BUILDER_TASKING_BASELINE_ADDS_PRODUCTION);
 	case YIELD_GOLD:
-		return /*40*/ GD_INT_GET(BUILDER_TASKING_BASELINE_ADDS_GOLD);
+		return /*80*/ GD_INT_GET(BUILDER_TASKING_BASELINE_ADDS_GOLD);
 	case YIELD_SCIENCE:
 		return /*200*/ GD_INT_GET(BUILDER_TASKING_BASELINE_ADDS_SCIENCE);
 	case YIELD_CULTURE:
 		return /*200*/ GD_INT_GET(BUILDER_TASKING_BASELINE_ADDS_CULTURE);
 	case YIELD_FAITH:
-		return /*150*/ GD_INT_GET(BUILDER_TASKING_BASELINE_ADDS_FAITH);
+		return /*200*/ GD_INT_GET(BUILDER_TASKING_BASELINE_ADDS_FAITH);
 	case YIELD_TOURISM:
+		return /*200*/ GD_INT_GET(BUILDER_TASKING_BASELINE_ADDS_TOURISM);
+	case YIELD_CULTURE_LOCAL:
+		return /*100*/ GD_INT_GET(BUILDER_TASKING_BASELINE_ADDS_CULTURE_LOCAL);
 	case YIELD_GOLDEN_AGE_POINTS:
+		return /*200*/ GD_INT_GET(BUILDER_TASKING_BASELINE_ADDS_GOLDEN_AGE_POINTS);
 	case YIELD_GREAT_GENERAL_POINTS:
 	case YIELD_GREAT_ADMIRAL_POINTS:
 	case YIELD_POPULATION:
-	case YIELD_CULTURE_LOCAL:
 	case YIELD_JFD_HEALTH:
 	case YIELD_JFD_DISEASE:
 	case YIELD_JFD_CRIME:
@@ -356,18 +325,6 @@ static int GetYieldBaseModifierTimes100(YieldTypes eYield)
 	default:
 		return 0;
 	}
-}
-
-int CvBuilderTaskingAI::GetPlotYieldModifierTimes100(CvPlot* pPlot, YieldTypes eYield)
-{
-	CvCity* pOwningCity = pPlot->getEffectiveOwningCity();
-	int iBaseModifier = GetYieldBaseModifierTimes100(eYield);
-
-	if (!pOwningCity)
-		return iBaseModifier;
-
-	YieldTypes eDeficientYield = pOwningCity->GetCityStrategyAI()->GetMostDeficientYield();
-	return iBaseModifier + ((eDeficientYield == eYield) ? iBaseModifier / 2 : 0);
 }
 
 void CvBuilderTaskingAI::GetPathValues(const SPath& path, RouteTypes eRoute, int& iVillageBonusesIfCityConnected, int& iMovementBonus, int& iNumRoadsNeededToBuild)
@@ -736,7 +693,7 @@ void CvBuilderTaskingAI::ConnectCitiesForShortcuts(CvCity* pCity1, CvCity* pCity
 		return;
 
 	ShortcutConnectionHelper(pCity1, pCity2, eBuild, eRoute, iPlotDistance, false);
-	if (MOD_BALANCE_VP && eRoute == ROUTE_ROAD)
+	if (MOD_RIVER_CITY_CONNECTIONS && eRoute == ROUTE_ROAD)
 		ShortcutConnectionHelper(pCity1, pCity2, eBuild, eRoute, iPlotDistance, true);
 }
 
@@ -1013,25 +970,36 @@ bool CvBuilderTaskingAI::WillNeverBuildVillageOnPlot(CvPlot* pPlot, RouteTypes e
 	return false;
 }
 
-ImprovementTypes CvBuilderTaskingAI::SavePlotForUniqueImprovement(CvPlot* pPlot) const
+ImprovementTypes CvBuilderTaskingAI::SavePlotForUniqueImprovement(const CvPlot* pPlot) const
 {
-	FeatureTypes eFeature = pPlot->getFeatureType();
+	if (m_uniqueImprovements.empty())
+		return NO_IMPROVEMENT;
 
-	if (eFeature != NO_FEATURE && pPlot->canHaveImprovement(m_aeUniqueFeatureImprovement[eFeature], m_pPlayer->GetID(), false, true))
+	FeatureTypes eFeature = pPlot->getFeatureType();
+	ImprovementTypes eImprovement = NO_IMPROVEMENT;
+	for (size_t i = 0; i < m_uniqueImprovements.size(); ++i)
 	{
-		return m_aeUniqueFeatureImprovement[eFeature];
-	}
-	else if (m_eUniqueCityAdjacentImprovement != NO_IMPROVEMENT && pPlot->IsAdjacentCity() && pPlot->canHaveImprovement(m_eUniqueCityAdjacentImprovement, m_pPlayer->GetID(), false, true))
-	{
-		return m_eUniqueCityAdjacentImprovement;
-	}
-	else if (m_eUniqueCoastalImprovement != NO_IMPROVEMENT && pPlot->isCoastalLand() && pPlot->canHaveImprovement(m_eUniqueCoastalImprovement, m_pPlayer->GetID(), false, true))
-	{
-		return m_eUniqueCoastalImprovement;
-	}
-	else if (m_eUniqueHillImprovement != NO_IMPROVEMENT && pPlot->getPlotType() == PLOT_HILLS && pPlot->canHaveImprovement(m_eUniqueHillImprovement, m_pPlayer->GetID(), false, true))
-	{
-		return m_eUniqueHillImprovement;
+		eImprovement = m_uniqueImprovements[i];
+		CvImprovementEntry* pkImprovementInfo = GC.getImprovementInfo(eImprovement);
+
+		if ((pkImprovementInfo->GetFeatureMakesValid(eFeature)) ||
+			(pkImprovementInfo->IsAdjacentCity() && pPlot->IsAdjacentCity()) ||
+			(pkImprovementInfo->IsCoastal() && pPlot->isCoastalLand()) ||
+			(pkImprovementInfo->IsHillsMakesValid() && pPlot->isHills()))
+		{
+			if (pPlot->canHaveImprovement(eImprovement, m_pPlayer->GetID(), false, true))
+				return eImprovement;
+		}
+
+		if (pkImprovementInfo->GetXSameAdjacentMakesValid() > 0)
+		{
+			std::tr1::unordered_map<ImprovementTypes, std::tr1::unordered_set<const CvPlot*>>::const_iterator it = m_extraPlotsForXAdjacentImprovements.find(eImprovement);
+			if (it != m_extraPlotsForXAdjacentImprovements.end())
+			{
+				if (it->second.find(pPlot) != it->second.end())
+					return eImprovement;
+			}
+		}
 	}
 
 	return NO_IMPROVEMENT;
@@ -1677,8 +1645,6 @@ vector<OptionWithScore<BuilderDirective>> CvBuilderTaskingAI::GetRouteDirectives
 		if (!ShouldAnyBuilderConsiderPlot(pPlot))
 			continue;
 
-		iValue /= 10;
-
 		AddRouteOrRepairDirective(aDirectives, pPlot, eRoute, iValue, plotPurposes[pPlot]);
 	}
 
@@ -1709,6 +1675,8 @@ static vector<OptionWithScore<BuilderDirective>> FilterNonOptimalNoTwoAdjacentIm
 			continue;
 		}
 
+		int iPotentialScore = it->option.GetPotentialScore();
+
 		bool bInclude = true;
 		for (vector<OptionWithScore<BuilderDirective>>::const_iterator it2 = aDirectives.begin(); it2 != aDirectives.end(); ++it2)
 		{
@@ -1718,13 +1686,15 @@ static vector<OptionWithScore<BuilderDirective>> FilterNonOptimalNoTwoAdjacentIm
 			if (it->option.m_sX != it2->option.m_sX || it->option.m_sY != it2->option.m_sY)
 				continue;
 
-			if (it->score > it2->score)
+			int iPotentialOtherScore = it2->option.GetPotentialScore();
+
+			if (iPotentialScore > iPotentialOtherScore)
 				continue;
 
 			BuildTypes eOtherBuild = it2->option.m_eBuild;
 			CvBuildInfo* pkOtherBuild = GC.getBuildInfo(eOtherBuild);
 
-			ImprovementTypes eOtherImprovement = (ImprovementTypes)pkOtherBuild->getImprovement();
+			ImprovementTypes eOtherImprovement = pkOtherBuild ? (ImprovementTypes)pkOtherBuild->getImprovement() : NO_IMPROVEMENT;
 			if (eOtherImprovement == NO_IMPROVEMENT)
 				continue;
 
@@ -1751,6 +1721,12 @@ static vector<OptionWithScore<BuilderDirective>> FilterNoTwoAdjacentDirectives(v
 	{
 		BuildTypes eBuild = it->option.m_eBuild;
 		CvBuildInfo* pkBuild = GC.getBuildInfo(eBuild);
+
+		if (!pkBuild)
+		{
+			aNewDirectives.push_back(*it);
+			continue;
+		}
 
 		ImprovementTypes eImprovement = (ImprovementTypes)pkBuild->getImprovement();
 		if (eImprovement == NO_IMPROVEMENT)
@@ -1805,9 +1781,6 @@ static vector<OptionWithScore<BuilderDirective>> FilterNoTwoAdjacentDirectives(v
 			if (it->option.m_eBuild != it2->option.m_eBuild)
 				continue;
 
-			if (it->score > it2->score)
-				continue;
-
 			CvPlot* pOtherPlot = GC.getMap().plot(it2->option.m_sX, it2->option.m_sY);
 			if (plotDistance(*pPlot, *pOtherPlot) != 1)
 				continue;
@@ -1832,9 +1805,7 @@ static void UpdateGreatPersonDirectives(vector<OptionWithScore<BuilderDirective>
 		BuildTypes eBuild = it->option.m_eBuild;
 		CvBuildInfo* pkBuild = GC.getBuildInfo(eBuild);
 
-		ImprovementTypes eImprovement = (ImprovementTypes)pkBuild->getImprovement();
-		if (eImprovement == NO_IMPROVEMENT)
-			continue;
+		ImprovementTypes eImprovement = pkBuild ? (ImprovementTypes)pkBuild->getImprovement() : NO_IMPROVEMENT;
 
 		CvImprovementEntry* pkImprovementInfo = GC.getImprovementInfo(eImprovement);
 		if (!pkImprovementInfo || !pkImprovementInfo->IsCreatedByGreatPerson())
@@ -1852,16 +1823,16 @@ static void UpdateGreatPersonDirectives(vector<OptionWithScore<BuilderDirective>
 			BuildTypes eOtherBuild = it2->option.m_eBuild;
 			CvBuildInfo* pkOtherBuild = GC.getBuildInfo(eOtherBuild);
 
-			ImprovementTypes eOtherImprovement = (ImprovementTypes)pkOtherBuild->getImprovement();
-			if (eOtherImprovement == NO_IMPROVEMENT)
-				continue;
+			ImprovementTypes eOtherImprovement = pkOtherBuild ? (ImprovementTypes)pkOtherBuild->getImprovement() : NO_IMPROVEMENT;
 
 			CvImprovementEntry* pkOtherImprovementInfo = GC.getImprovementInfo(eOtherImprovement);
-			if (!pkOtherImprovementInfo || pkOtherImprovementInfo->IsCreatedByGreatPerson())
+			if (pkOtherImprovementInfo && pkOtherImprovementInfo->IsCreatedByGreatPerson())
 				continue;
 
-			if (it2->score > iBestScoreInPlot)
-				iBestScoreInPlot = it2->score;
+			int iPotentialScore = it2->option.GetPotentialScore();
+
+			if (iPotentialScore > iBestScoreInPlot)
+				iBestScoreInPlot = iPotentialScore;
 		}
 
 		it->option.m_iScorePenalty = iBestScoreInPlot;
@@ -1909,18 +1880,16 @@ vector<OptionWithScore<BuilderDirective>> CvBuilderTaskingAI::GetImprovementDire
 		if (!ShouldAnyBuilderConsiderPlot(pPlot))
 			continue;
 
-		int iBestScore = 0;
-
 		// Evaluate the improvement currently on the tile
-		if ((pPlot->getOwner() == ePlayer) || (!pPlot->isOwned() && pPlot->isAdjacentPlayer(m_pPlayer->GetID())))
+		if (pPlot->getOwner() == ePlayer)
 		{
 			if (pPlot->getImprovementType() != NO_IMPROVEMENT && !pPlot->IsImprovementPillaged())
 			{
 				ImprovementTypes eImprovement = pPlot->getImprovementType();
 
-				int iScore = ScorePlotBuild(pPlot, eImprovement, NO_BUILD);
+				pair<int,int> pScore = ScorePlotBuild(pPlot, eImprovement, NO_BUILD);
 
-				iBestScore = iScore;
+				aDirectives.push_back(OptionWithScore<BuilderDirective>(BuilderDirective(BuilderDirective::NUM_DIRECTIVES, NO_BUILD, NO_RESOURCE, false, pPlot->getX(), pPlot->getY(), pScore.first, pScore.second), pScore.first));
 			}
 		}
 
@@ -1931,14 +1900,14 @@ vector<OptionWithScore<BuilderDirective>> CvBuilderTaskingAI::GetImprovementDire
 		{
 			UpdateCurrentPlotYields(pPlot);
 
-			AddImprovingPlotsDirective(aDirectives, pPlot, pWorkingCity, aPossibleBuilds, iBestScore);
+			AddImprovingPlotsDirective(aDirectives, pPlot, pWorkingCity, aPossibleBuilds);
 			AddScrubFalloutDirectives(aDirectives, pPlot, pWorkingCity);
 			AddRepairImprovementDirective(aDirectives, pPlot, pWorkingCity);
 		}
 		else if (!pPlot->isOwned() && pPlot->isAdjacentPlayer(m_pPlayer->GetID()))
 		{
 			//some special improvements
-			AddImprovingPlotsDirective(aDirectives, pPlot, pWorkingCity, aPossibleBuilds, iBestScore);
+			AddImprovingPlotsDirective(aDirectives, pPlot, pWorkingCity, aPossibleBuilds);
 			AddRepairImprovementDirective(aDirectives, pPlot, pWorkingCity);
 		}
 		if (pPlot->GetPlayerResponsibleForRoute() == m_pPlayer->GetID())
@@ -1961,7 +1930,7 @@ vector<OptionWithScore<BuilderDirective>> CvBuilderTaskingAI::GetImprovementDire
 }
 
 /// Evaluating a plot to determine what improvement could be best there
-void CvBuilderTaskingAI::AddImprovingPlotsDirective(vector<OptionWithScore<BuilderDirective>> &aDirectives, CvPlot* pPlot, CvCity* pCity, const vector<BuildTypes> aBuildsToConsider, int iMinScore)
+void CvBuilderTaskingAI::AddImprovingPlotsDirective(vector<OptionWithScore<BuilderDirective>> &aDirectives, CvPlot* pPlot, CvCity* pCity, const vector<BuildTypes> aBuildsToConsider)
 {
 	ImprovementTypes eExistingImprovement = pPlot->getImprovementType();
 
@@ -2010,12 +1979,18 @@ void CvBuilderTaskingAI::AddImprovingPlotsDirective(vector<OptionWithScore<Build
 		if (pkImprovementInfo == NULL)
 			continue;
 
-		if (!m_pPlayer->canBuild(pPlot, eBuild, true))
-			continue;
-
 		//Check for test below.
 		if (pkImprovementInfo->IsSpecificCivRequired() && m_pPlayer->getCivilizationType() != pkImprovementInfo->GetRequiredCivilization())
 			continue;
+
+		if (!pPlot->canBuild(eBuild, m_pPlayer->GetID()))
+		{
+			if (pkImprovementInfo->GetXSameAdjacentMakesValid() == 0)
+				continue;
+
+			if (m_extraPlotsForXAdjacentImprovements[eImprovement].find(pPlot) == m_extraPlotsForXAdjacentImprovements[eImprovement].end())
+				continue;
+		}
 
 		ResourceTypes eResource = pPlot->getResourceType(m_pPlayer->getTeam());
 		bool bWillConnectResource = eResource != NO_RESOURCE && pkImprovementInfo->IsConnectsResource(eResource);
@@ -2042,38 +2017,61 @@ void CvBuilderTaskingAI::AddImprovingPlotsDirective(vector<OptionWithScore<Build
 			}
 		}
 
-		int iScore = ScorePlotBuild(pPlot, eImprovement, eBuild);
+		pair<int,int> pScore = ScorePlotBuild(pPlot, eImprovement, eBuild);
+
+		int iScore = pScore.first;
+		int iPotentialScore = pScore.second;
 
 		// if we're going backward, bail out!
 		if(iScore <= 0)
 		{
 			continue;
 		}
-
-		iScore /= 10;
 		
-		if (iScore > iMinScore)
+		BuilderDirective::BuilderDirectiveType eDirectiveType = bWillConnectResource ? BuilderDirective::BUILD_IMPROVEMENT_ON_RESOURCE : BuilderDirective::BUILD_IMPROVEMENT;
+		ResourceTypes eConnectedResource = bWillConnectResource ? eResource : NO_RESOURCE;
+
+		BuilderDirective directive(eDirectiveType, eBuild, eConnectedResource, pkImprovementInfo->IsCreatedByGreatPerson(), pPlot->getX(), pPlot->getY(), iScore, iPotentialScore);
+
+		if (m_bLogging)
 		{
+			CvString strTemp;
+			strTemp.Format(
+				"Weight,Directive Score Added,%s,%i,%i,%d",
+				GC.getBuildInfo(eBuild)->GetType(),
+				directive.m_sX,
+				directive.m_sY,
+				iScore
+			);
+			LogInfo(strTemp, m_pPlayer);
+		}
 
-			BuilderDirective::BuilderDirectiveType eDirectiveType = bWillConnectResource ? BuilderDirective::BUILD_IMPROVEMENT_ON_RESOURCE : BuilderDirective::BUILD_IMPROVEMENT;
-			ResourceTypes eConnectedResource = bWillConnectResource ? eResource : NO_RESOURCE;
+		aDirectives.push_back(OptionWithScore<BuilderDirective>(directive, iScore));
 
-			BuilderDirective directive(eDirectiveType, eBuild, eConnectedResource, pkImprovementInfo->IsCreatedByGreatPerson(), pPlot->getX(), pPlot->getY(), iScore);
-
-			if (m_bLogging)
+		// If we can't build it yet, we may still want to prechop it
+		TechTypes eRequiredTech = (TechTypes)pkBuild->getTechPrereq();
+		if (eRequiredTech != NO_TECH && eFeature != NO_FEATURE && pkBuild->isFeatureRemove(eFeature) && !pkImprovementInfo->IsCreatedByGreatPerson())
+		{
+			if (!(GET_TEAM(m_pPlayer->getTeam()).GetTeamTechs()->HasTech(eRequiredTech)))
 			{
-				CvString strTemp;
-				strTemp.Format(
-					"Weight,Directive Score Added,%s,%i,%i,%d",
-					GC.getBuildInfo(eBuild)->GetType(),
-					directive.m_sX,
-					directive.m_sY,
-					iScore
-				);
-				LogInfo(strTemp, m_pPlayer);
-			}
+				BuildTypes eChopBuild = NO_BUILD;
+				for (int iBuildIndex = 0; iBuildIndex < GC.getNumBuildInfos(); iBuildIndex++)
+				{
+					BuildTypes eLoopBuild = (BuildTypes)iBuildIndex;
+					CvBuildInfo* pkBuild = GC.getBuildInfo(eLoopBuild);
+					if (pkBuild && pkBuild->getImprovement() == NO_IMPROVEMENT && pkBuild->isFeatureRemoveOnly(eFeature) && m_pPlayer->canBuild(pPlot, eLoopBuild))
+					{
+						eChopBuild = eLoopBuild;
+						break;
+					}
+				}
 
-			aDirectives.push_back(OptionWithScore<BuilderDirective>(directive, iScore));
+				if (eChopBuild != NO_BUILD)
+				{
+					BuilderDirective chopDirective(BuilderDirective::CHOP, eChopBuild, NO_RESOURCE, false, pPlot->getX(), pPlot->getY(), iScore / 3, iPotentialScore / 3);
+					aDirectives.push_back(OptionWithScore<BuilderDirective>(chopDirective, iScore / 3));
+				}
+			}
 		}
 	}
 }
@@ -2138,11 +2136,9 @@ void CvBuilderTaskingAI::AddRemoveRouteDirective(vector<OptionWithScore<BuilderD
 
 	//if we are losing gold, be more aggressive
 	if (iNetGoldTimes100 < -1000)
-		iWeight = iWeight *= 10;
+		iWeight *= 10;
 
-	iWeight /= 10;
-
-	BuilderDirective directive(BuilderDirective::REMOVE_ROAD, m_eRemoveRouteBuild, NO_RESOURCE, false, pPlot->getX(), pPlot->getY(), iWeight);
+	BuilderDirective directive(BuilderDirective::REMOVE_ROAD, m_eRemoveRouteBuild, NO_RESOURCE, false, pPlot->getX(), pPlot->getY(), iWeight, 0);
 
 	if (m_bLogging)
 	{
@@ -2182,7 +2178,7 @@ void CvBuilderTaskingAI::AddRouteOrRepairDirective(vector<OptionWithScore<Builde
 	}
 
 	if (!bAnyAdjacentRoute)
-		iValue /= 2;
+		iValue = (iValue * 4) / 5;
 
 	if (pPlot->getRouteType() == eRoute && pPlot->IsRoutePillaged())
 	{
@@ -2210,7 +2206,7 @@ void CvBuilderTaskingAI::AddRouteDirective(vector<OptionWithScore<BuilderDirecti
 	if (!pRouteInfo)
 		return;
 
-	BuilderDirective directive(BuilderDirective::BUILD_ROUTE, eRouteBuild, NO_RESOURCE, false, pPlot->getX(), pPlot->getY(), iValue);
+	BuilderDirective directive(BuilderDirective::BUILD_ROUTE, eRouteBuild, NO_RESOURCE, false, pPlot->getX(), pPlot->getY(), iValue, 0);
 
 	if(m_bLogging)
 	{
@@ -2399,9 +2395,7 @@ void CvBuilderTaskingAI::AddChopDirectives(vector<OptionWithScore<BuilderDirecti
 
 	if(iWeight > 0)
 	{
-		BuilderDirective directive(BuilderDirective::CHOP, eChopBuild, NO_RESOURCE, false, pPlot->getX(), pPlot->getY(), iWeight);
-
-		aDirectives.push_back(OptionWithScore<BuilderDirective>(directive, iWeight));
+		aDirectives.push_back(OptionWithScore<BuilderDirective>(BuilderDirective(BuilderDirective::CHOP, eChopBuild, NO_RESOURCE, false, pPlot->getX(), pPlot->getY(), iWeight, 0), iWeight));
 	}
 }
 
@@ -2421,15 +2415,14 @@ void CvBuilderTaskingAI::AddRepairImprovementDirective(vector<OptionWithScore<Bu
 	if (pWorkingCity && pWorkingCity->IsRazing())
 		return;
 
-	int iWeight = ScorePlotBuild(pPlot, pPlot->getImprovementType(), m_eRepairBuild);
+	pair<int,int> pScore = ScorePlotBuild(pPlot, pPlot->getImprovementType(), m_eRepairBuild);
 
-	iWeight /= 10;
+	int iScore = pScore.first;
+	int iPotentialScore = pScore.second;
 
-	if (iWeight > 0)
+	if (iScore > 0)
 	{
-		BuilderDirective directive(BuilderDirective::REPAIR, m_eRepairBuild, NO_RESOURCE, false, pPlot->getX(), pPlot->getY(), iWeight);
-
-		aDirectives.push_back(OptionWithScore<BuilderDirective>(directive, iWeight));
+		aDirectives.push_back(OptionWithScore<BuilderDirective>(BuilderDirective(BuilderDirective::REPAIR, m_eRepairBuild, NO_RESOURCE, false, pPlot->getX(), pPlot->getY(), iScore, iPotentialScore), iScore));
 	}
 }
 
@@ -2448,9 +2441,7 @@ void CvBuilderTaskingAI::AddRepairRouteDirective(vector<OptionWithScore<BuilderD
 
 	if (iValue > 0)
 	{
-		BuilderDirective directive(BuilderDirective::REPAIR, m_eRepairBuild, NO_RESOURCE, false, pPlot->getX(), pPlot->getY(), iValue);
-
-		aDirectives.push_back(OptionWithScore<BuilderDirective>(directive, iValue));
+		aDirectives.push_back(OptionWithScore<BuilderDirective>(BuilderDirective(BuilderDirective::REPAIR, m_eRepairBuild, NO_RESOURCE, false, pPlot->getX(), pPlot->getY(), iValue, 0), iValue));
 	}
 }
 
@@ -2475,10 +2466,7 @@ void CvBuilderTaskingAI::AddScrubFalloutDirectives(vector<OptionWithScore<Builde
 	{
 		int iWeight =/*20000*/ GD_INT_GET(BUILDER_TASKING_BASELINE_SCRUB_FALLOUT);
 
-		iWeight /= 10;
-
-		BuilderDirective directive(BuilderDirective::CHOP, m_eFalloutRemove, NO_RESOURCE, false, pPlot->getX(), pPlot->getY(), iWeight);
-		aDirectives.push_back(OptionWithScore<BuilderDirective>(directive, iWeight));
+		aDirectives.push_back(OptionWithScore<BuilderDirective>(BuilderDirective(BuilderDirective::CHOP, m_eFalloutRemove, NO_RESOURCE, false, pPlot->getX(), pPlot->getY(), iWeight, 0), iWeight));
 	}
 }
 
@@ -2574,41 +2562,23 @@ bool CvBuilderTaskingAI::ShouldBuilderConsiderPlot(CvUnit* pUnit, CvPlot* pPlot)
 }
 
 /// Return the weight of this resource
-int CvBuilderTaskingAI::GetResourceWeight(ResourceTypes eResource, int iQuantity, int iAdditionalOwned)
+int CvBuilderTaskingAI::GetResourceWeight(ResourceTypes eResource, int iQuantity)
 {
 	CvResourceInfo* pkResource = GC.getResourceInfo(eResource);
 	if (!pkResource)
 		return 0;
 
 	// if this is a luxury resource the player doesn't have, provide a bonus to getting it
-	if (pkResource->getResourceUsage() == RESOURCEUSAGE_LUXURY)
+	if (pkResource->getResourceUsage() == RESOURCEUSAGE_LUXURY && !GC.getGame().GetGameLeagues()->IsLuxuryHappinessBanned(m_pPlayer->GetID(), eResource))
 	{
-		int iValue = (pkResource->getHappiness() * /*750*/ GD_INT_GET(BUILDER_TASKING_PLOT_EVAL_MULTIPLIER_LUXURY_RESOURCE));
-
-		int iNumResourceAvailable = m_pPlayer->getNumResourceAvailable(eResource) + iAdditionalOwned;
-
-		// We have plenty to spare
-		if (iNumResourceAvailable > 1)
-			iValue /= 10;
-		// We have one already
-		else if (iNumResourceAvailable > 0)
-			iValue /= 2;
+		int iValue = pkResource->getHappiness() * /*750*/ GD_INT_GET(BUILDER_TASKING_PLOT_EVAL_MULTIPLIER_LUXURY_RESOURCE) * iQuantity;
 
 		return iValue;
 	}
 	else if (pkResource->getResourceUsage() == RESOURCEUSAGE_STRATEGIC)
 	{
 		// measure quantity
-		int iValue = iQuantity * 250;
-
-		int iNumResourceAvailable = m_pPlayer->getNumResourceAvailable(eResource) + iAdditionalOwned;
-
-		// We have plenty to spare
-		if (iNumResourceAvailable > 5)
-			iValue /= 10;
-		// We have some already
-		else if (iNumResourceAvailable > 0)
-			iValue /= 2;
+		int iValue = (iQuantity + 1) * 250;
 
 		return iValue;
 	}
@@ -2616,7 +2586,7 @@ int CvBuilderTaskingAI::GetResourceWeight(ResourceTypes eResource, int iQuantity
 	return 0;
 }
 
-/// Does this city want to rush a unit?
+/// Does this city want to rush a build?
 bool CvBuilderTaskingAI::DoesBuildHelpRush(CvPlot* pPlot, BuildTypes eBuild)
 {
 	CvCity* pCity = NULL;
@@ -2644,10 +2614,10 @@ bool CvBuilderTaskingAI::DoesBuildHelpRush(CvPlot* pPlot, BuildTypes eBuild)
 		return false;
 	}
 
-	return false;
+	return true;
 }
 
-static int GetNumAdjacent(CvPlot* pPlot, ImprovementTypes eImprovement, SBuilderState sState)
+static int GetNumAdjacent(CvPlot* pPlot, ImprovementTypes eImprovement, const SBuilderState& sState)
 {
 	int iNumAdjacent = 0;
 
@@ -2661,7 +2631,8 @@ static int GetNumAdjacent(CvPlot* pPlot, ImprovementTypes eImprovement, SBuilder
 
 		int iAdjacentPlotIndex = pAdjacentPlot->GetPlotIndex();
 
-		ImprovementTypes eAdjacentImprovement = sState.mChangedPlotImprovements.find(iAdjacentPlotIndex) != sState.mChangedPlotImprovements.end() ? sState.mChangedPlotImprovements[iAdjacentPlotIndex] : NO_IMPROVEMENT;
+		map<int, ImprovementTypes>::const_iterator it = sState.mChangedPlotImprovements.find(iAdjacentPlotIndex);
+		ImprovementTypes eAdjacentImprovement = it != sState.mChangedPlotImprovements.end() ? it->second : NO_IMPROVEMENT;
 
 		// If we are not planning on building an improvement here, use the one that exists already
 		if (eAdjacentImprovement == NO_IMPROVEMENT && !pAdjacentPlot->IsImprovementPillaged())
@@ -2674,11 +2645,11 @@ static int GetNumAdjacent(CvPlot* pPlot, ImprovementTypes eImprovement, SBuilder
 	return iNumAdjacent;
 }
 
-int CvBuilderTaskingAI::ScorePlotBuild(CvPlot* pPlot, ImprovementTypes eImprovement, BuildTypes eBuild, SBuilderState sState)
+pair<int,int> CvBuilderTaskingAI::ScorePlotBuild(CvPlot* pPlot, ImprovementTypes eImprovement, BuildTypes eBuild, const SBuilderState& sState)
 {
 	const CvBuildInfo* pkBuildInfo = GC.getBuildInfo(eBuild);
 
-	if (eImprovement == NO_IMPROVEMENT && pPlot->IsImprovementPillaged() && pkBuildInfo->isRepair())
+	if (eImprovement == NO_IMPROVEMENT && pPlot->IsImprovementPillaged() && pkBuildInfo && pkBuildInfo->isRepair())
 		eImprovement = pPlot->getImprovementType();
 
 	const CvImprovementEntry* pkImprovementInfo = GC.getImprovementInfo(eImprovement);
@@ -2689,12 +2660,15 @@ int CvBuilderTaskingAI::ScorePlotBuild(CvPlot* pPlot, ImprovementTypes eImprovem
 	const ImprovementTypes eOldImprovement = !pPlot->IsImprovementPillaged() ? pPlot->getImprovementType() : NO_IMPROVEMENT;
 	const CvImprovementEntry* pkOldImprovementInfo = GC.getImprovementInfo(eOldImprovement);
 	const ResourceTypes eResourceFromOldImprovement = pkOldImprovementInfo ? (ResourceTypes)pkOldImprovementInfo->GetResourceFromImprovement() : NO_RESOURCE;
-	const FeatureTypes eFeatureFromOldImprovement = pkOldImprovementInfo ? pkOldImprovementInfo->GetCreatedFeature() : NO_FEATURE;
 
 	//Some base value.
 	int iYieldScore = 0;
-	int iBaseYieldScore = 0;
 	int iSecondaryScore = 0;
+	int iPotentialScore = 0;
+
+	// Not building anything has some inherent value
+	if (eBuild == NO_BUILD)
+		iSecondaryScore += 150;
 
 	const CvCity* pOwningCity = pPlot->getEffectiveOwningCity();
 
@@ -2730,8 +2704,6 @@ int CvBuilderTaskingAI::ScorePlotBuild(CvPlot* pPlot, ImprovementTypes eImprovem
 	{
 		iSecondaryScore += 300;
 	}
-
-	const CvReligion* pCityReligion = pOwningCity ? pOwningCity->GetCityReligions()->GetMajorityReligion() : NULL;
 	
 	// Do we have or will we build a road here?
 	RouteTypes eRouteNeeded = GetBestRouteTypeAndValue(pPlot).first;
@@ -2742,17 +2714,11 @@ int CvBuilderTaskingAI::ScorePlotBuild(CvPlot* pPlot, ImprovementTypes eImprovem
 		eForceCityConnection = NO_ROUTE;
 	}
 
-	const bool bIsWithinWorkRange = pOwningCity && pOwningCity->IsWithinWorkRange(pPlot);
-	bool bCityIsSated = true;
+	const bool bIsWithinWorkRange = pPlot->isPlayerCityRadius(m_pPlayer->GetID());
 
 	const ResourceTypes eResourceFromImprovement = pkImprovementInfo ? (ResourceTypes)pkImprovementInfo->GetResourceFromImprovement() : NO_RESOURCE;
 	const FeatureTypes eFeatureFromImprovement = pkImprovementInfo ? pkImprovementInfo->GetCreatedFeature() : NO_FEATURE;
 
-	bool bChangedFeatureState = (eFeatureFromImprovement != NO_FEATURE && eFeatureFromImprovement != eFeature)
-		                     || (eImprovement != NO_IMPROVEMENT && eImprovement != eOldImprovement && eFeatureFromOldImprovement != NO_FEATURE && eFeatureFromImprovement != eFeatureFromOldImprovement)
-		                     || (pkBuildInfo && pkBuildInfo->isFeatureRemove(eFeature));
-
-	const FeatureTypes eNaturalFeature = eFeatureFromOldImprovement == NO_FEATURE ? eFeature : NO_FEATURE;
 	const ResourceTypes eNaturalResource = eResourceFromOldImprovement == NO_RESOURCE ? eResource : NO_RESOURCE;
 
 	// Give a bonus for chopping
@@ -2766,69 +2732,20 @@ int CvBuilderTaskingAI::ScorePlotBuild(CvPlot* pPlot, ImprovementTypes eImprovem
 	int iExtraResource = 0;
 	if ((pkImprovementInfo && pkImprovementInfo->IsConnectsResource(eResource)) || eResourceFromImprovement != NO_RESOURCE)
 	{
+		map<ResourceTypes, int>::const_iterator it;
 		if (eResourceFromImprovement != NO_RESOURCE)
-			iExtraResource = sState.mExtraResources[eResourceFromImprovement];
+		{
+			it = sState.mExtraResources.find(eResourceFromImprovement);
+			if (it != sState.mExtraResources.end())
+				iExtraResource = it->second;
+		}
 		else
-			iExtraResource = sState.mExtraResources[eResource];
-	}
-
-	/*
-	* TODO fix sated logic
-	if (pOwningCity)
-	{
-		// A city is considered "sated" if all the plots they are working have an improvement on them
-		int iWorkedUnimproved = 0;
-		int iImprovementsPlanned = 0;
-
-		std::vector<int> aWorkedPlots = pOwningCity->GetCityCitizens()->GetWorkedPlots();
-
-		for (std::vector<int>::iterator it = aWorkedPlots.begin(); it != aWorkedPlots.end(); ++it)
 		{
-			CvPlot* pWorkedPlot = GC.getMap().plotByIndex(*it);
-
-			if (!pWorkedPlot)
-				continue;
-
-			if (pWorkedPlot == pPlot)
-			{
-				iWorkedUnimproved++;
-				continue;
-			}
-
-			if (pWorkedPlot->isImpassable(m_pPlayer->getTeam()))
-				continue;
-
-			if (pWorkedPlot->IsNaturalWonder())
-				continue;
-
-			if (pWorkedPlot->isWater())
-				continue;
-
-			if (pWorkedPlot->IsFeatureOasis())
-				continue;
-
-			if (pWorkedPlot->getImprovementType() == NO_IMPROVEMENT || pWorkedPlot->IsImprovementPillaged())
-				iWorkedUnimproved++;
+			it = sState.mExtraResources.find(eResource);
+			if (it != sState.mExtraResources.end())
+				iExtraResource = it->second;
 		}
-
-		if (iWorkedUnimproved > 0)
-		{
-			std::vector<int> aOwnedPlots = m_pPlayer->GetPlots();
-			int iWorkDistance = pOwningCity->getWorkPlotDistance();
-
-			for (std::vector<int>::iterator it = aOwnedPlots.begin(); it != aOwnedPlots.end(); ++it)
-			{
-				CvPlot* pOwnedPlot = GC.getMap().plotByIndex(*it);
-
-				if (plotDistance(pOwningCity->getX(), pOwningCity->getY(), pOwnedPlot->getX(), pOwnedPlot->getY()) <= iWorkDistance && sState.mChangedPlotImprovements.find(pOwnedPlot->GetPlotIndex()) != sState.mChangedPlotImprovements.end())
-					iImprovementsPlanned++;
-			}
-		}
-
-		if (iWorkedUnimproved > iImprovementsPlanned)
-			bCityIsSated = false;
 	}
-	*/
 
 	if (bIsWithinWorkRange)
 	{
@@ -2846,51 +2763,185 @@ int CvBuilderTaskingAI::ScorePlotBuild(CvPlot* pPlot, ImprovementTypes eImprovem
 		if (eYield > YIELD_CULTURE_LOCAL && !MOD_BALANCE_CORE_JFD)
 			break;
 
-		int iBasePlotYield = bIsWithinWorkRange ? pPlot->calculateNatureYield(eYield, m_pPlayer->GetID(), eNaturalFeature, eNaturalResource, pOwningCity) : 0;
+		const CvYieldInfo& kYield = *GC.getYieldInfo(eYield);
+		int iGoldenAgeYieldThresholdTimes100 = kYield.getGoldenAgeYieldThreshold() * 100;
 
-		int iOldYieldTimes100 = bIsWithinWorkRange ? 100 * m_aiCurrentPlotYields[ui] : 0;
-		int iNewYieldTimes100 = iOldYieldTimes100;
+		int iYieldModifier = GetYieldBaseModifierTimes100(eYield);
+		int iNewYieldTimes100 = 0;
+		int iProjectedNewYieldsTimes100 = eBuild != NO_BUILD ? 100 * m_aiProjectedPlotYields[ui] : 100 * m_aiCurrentPlotYields[ui];
 
 		if (bIsWithinWorkRange)
 		{
-			iNewYieldTimes100 = eBuild != NO_BUILD ? 100 * m_aiProjectedPlotYields[ui] : iNewYieldTimes100;
+			iNewYieldTimes100 = iProjectedNewYieldsTimes100;
 
-			// Assume we love the king day is active 85% of the time
+			// Normalize Golden Age gold yields (assume active 40% of the time)
+			if (iNewYieldTimes100 >= iGoldenAgeYieldThresholdTimes100)
+			{
+				int iGoldenAgeYield = kYield.getGoldenAgeYield();
+				if (iGoldenAgeYield != 0)
+				{
+					if (m_pPlayer->getGoldenAgeTurns() == 0)
+						iNewYieldTimes100 += 40 * iGoldenAgeYield;
+					else
+						iNewYieldTimes100 -= 60 * iGoldenAgeYield;
+				}
+			}
+
 			if (pkImprovementInfo)
 			{
-				if (pOwningCity->GetWeLoveTheKingDayCounter() == 0)
-					iNewYieldTimes100 += 85 * pkImprovementInfo->GetWLTKDYieldChange(eYield);
-				else
-					iNewYieldTimes100 -= 15 * pkImprovementInfo->GetWLTKDYieldChange(eYield);
-			}
-			if (pkOldImprovementInfo)
-			{
-				if (pOwningCity->GetWeLoveTheKingDayCounter() == 0)
-					iNewYieldTimes100 -= 85 * pkOldImprovementInfo->GetWLTKDYieldChange(eYield);
-				else
-					iNewYieldTimes100 += 15 * pkOldImprovementInfo->GetWLTKDYieldChange(eYield);
-			}
-
-			if (bChangedFeatureState)
-			{
-				// If we are creating a feature, check if city gets any extra yield gains
-				if (eFeatureFromImprovement != NO_FEATURE)
+				// Assume we love the king day is active 85% of the time
+				int iWLTKDYieldChange = pkImprovementInfo->GetWLTKDYieldChange(eYield);
+				if (iWLTKDYieldChange != 0)
 				{
-					// Give double value to this yield because we don't need to work the tile
-					iNewYieldTimes100 += pOwningCity->GetYieldPerXFeatureFromBuildingsTimes100(eFeatureFromImprovement, eYield) * 2;
-
-					if (pCityReligion)
-						iNewYieldTimes100 += pCityReligion->m_Beliefs.GetYieldPerXFeatureTimes100(eFeatureFromImprovement, eYield) * 2;
+					if (pOwningCity && pOwningCity->GetWeLoveTheKingDayCounter() == 0)
+						iNewYieldTimes100 += 85 * iWLTKDYieldChange;
+					else
+						iNewYieldTimes100 -= 15 * iWLTKDYieldChange;
 				}
 
-				// If we are removing a feature, check if city gets any extra yield losses
-				if (eFeature != NO_FEATURE)
+				// Assume golden ages are active 40% of the time
+				int iGoldenAgeYieldChange = pkImprovementInfo->GetGoldenAgeYieldChange(eYield);
+				if (iGoldenAgeYieldChange != 0)
 				{
-					// Give double value to this yield because we don't need to work the tile
-					iNewYieldTimes100 -= pOwningCity->GetYieldPerXFeatureFromBuildingsTimes100(eFeature, eYield) * 2;
+					if (m_pPlayer->getGoldenAgeTurns() == 0)
+						iNewYieldTimes100 += 40 * iGoldenAgeYieldChange;
+					else
+						iNewYieldTimes100 -= 60 * iGoldenAgeYieldChange;
+				}
+			}
 
-					if (pCityReligion)
-						iNewYieldTimes100 -= pCityReligion->m_Beliefs.GetYieldPerXFeatureTimes100(eFeature, eYield) * 2;
+			// If we are creating a feature, check if city gets any extra yield gains
+			// TODO how to handle yield per X worked plots with feature Y...
+			/*if (eFeatureFromImprovement != NO_FEATURE && eFeatureFromImprovement != eFeature)
+			{
+				iNewYieldTimes100 += pOwningCity->GetYieldPerXFeatureFromBuildingsTimes100(eFeatureFromImprovement, eYield);
+
+				if (pCityReligion)
+					iNewYieldTimes100 += pCityReligion->m_Beliefs.GetYieldPerXFeatureTimes100(eFeatureFromImprovement, eYield);
+			}
+
+			// If we are removing a feature, check if city gets any extra yield losses
+			if (eFeature != NO_FEATURE && pkBuildInfo && pkBuildInfo->isFeatureRemove(eFeature) && bIsWorkingPlot)
+			{
+				iNewYieldTimes100 -= pOwningCity->GetYieldPerXFeatureFromBuildingsTimes100(eFeature, eYield);
+
+				if (pCityReligion)
+					iNewYieldTimes100 -= pCityReligion->m_Beliefs.GetYieldPerXFeatureTimes100(eFeature, eYield);
+			}*/
+
+			// if we are in a modified state, we may want to change the yields in the current plot based on planned adjacent improvements
+			if (MOD_BALANCE_VP)
+			{
+				CvPlot** pAdjacentPlots = GC.getMap().getNeighborsUnchecked(pPlot->GetPlotIndex());
+				int iTwoAdjacentNewYield = 0;
+				int iTwoAdjacentOldYield = 0;
+
+				for (int iI = 0; iI < NUM_DIRECTION_TYPES; iI++)
+				{
+					CvPlot* pAdjacentPlot = pAdjacentPlots[iI];
+
+					if (!pAdjacentPlot)
+						continue;
+
+					map<int, FeatureTypes>::const_iterator changedFeatureIt = sState.mChangedPlotFeatures.find(pAdjacentPlot->GetPlotIndex());
+					bool bFeatureChanged = changedFeatureIt != sState.mChangedPlotFeatures.end();
+
+					FeatureTypes eOldAdjacentFeature = pAdjacentPlot->getFeatureType();
+					FeatureTypes eNewAdjacentFeature = bFeatureChanged ? changedFeatureIt->second : eOldAdjacentFeature;
+					// The feature in an adjacent plot has been changed
+					if (eNewAdjacentFeature != eOldAdjacentFeature)
+					{
+
+						if (eOldAdjacentFeature != NO_FEATURE && pkImprovementInfo->GetAdjacentFeatureYieldChanges(eOldAdjacentFeature, eYield) > 0)
+						{
+							iNewYieldTimes100 -= 100 * pkImprovementInfo->GetAdjacentFeatureYieldChanges(eOldAdjacentFeature, eYield);
+						}
+						if (eNewAdjacentFeature != NO_FEATURE && pkImprovementInfo->GetAdjacentFeatureYieldChanges(eNewAdjacentFeature, eYield) > 0)
+						{
+							iNewYieldTimes100 += 100 * pkImprovementInfo->GetAdjacentFeatureYieldChanges(eNewAdjacentFeature, eYield);
+						}
+					}
+
+					map<int, ImprovementTypes>::const_iterator changedImprovementIt = sState.mChangedPlotImprovements.find(pAdjacentPlot->GetPlotIndex());
+					bool bImprovementChanged = changedImprovementIt != sState.mChangedPlotImprovements.end();
+
+					const ImprovementTypes eOldAdjacentImprovement = !pAdjacentPlot->IsImprovementPillaged() ? pAdjacentPlot->getImprovementType() : NO_IMPROVEMENT;
+					const ImprovementTypes eNewAdjacentImprovement = bImprovementChanged ? changedImprovementIt->second : eOldAdjacentImprovement;
+
+					// Changes based on adjacent similar planned or planned to be removed improvements
+					if (pkImprovementInfo->GetYieldAdjacentTwoSameType(eYield) > 0)
+					{
+						if (eImprovement == eOldAdjacentImprovement)
+						{
+							iTwoAdjacentOldYield += pkImprovementInfo->GetYieldAdjacentTwoSameType(eYield);
+						}
+						if (eImprovement == eNewAdjacentImprovement)
+						{
+							iTwoAdjacentNewYield += pkImprovementInfo->GetYieldAdjacentTwoSameType(eYield);
+						}
+					}
+
+					// The improvement in an adjacent plot has been changed
+					if (eNewAdjacentImprovement != eOldAdjacentImprovement)
+					{
+						if (pkImprovementInfo->GetAdjacentSameTypeYield(eYield) > 0)
+						{
+							if (eImprovement == eOldAdjacentImprovement)
+							{
+								iNewYieldTimes100 -= 100 * pkImprovementInfo->GetAdjacentSameTypeYield(eYield);
+							}
+							else if (eImprovement == eNewAdjacentImprovement)
+							{
+								iNewYieldTimes100 += 100 * pkImprovementInfo->GetAdjacentSameTypeYield(eYield);
+							}
+						}
+
+						CvImprovementEntry* pkOldAdjacentImprovementInfo = GC.getImprovementInfo(eOldAdjacentImprovement);
+						CvImprovementEntry* pkNewAdjacentImprovementInfo = GC.getImprovementInfo(eNewAdjacentImprovement);
+
+						// Bonuses an adjacent improvement would give/gave to this improvement
+						if (eOldAdjacentImprovement != NO_IMPROVEMENT && pkOldAdjacentImprovementInfo->GetAdjacentImprovementYieldChanges(eImprovement, eYield) > 0)
+						{
+							iNewYieldTimes100 -= 100 * pkOldAdjacentImprovementInfo->GetAdjacentImprovementYieldChanges(eImprovement, eYield);
+						}
+						if (eNewAdjacentImprovement != NO_IMPROVEMENT && pkNewAdjacentImprovementInfo->GetAdjacentImprovementYieldChanges(eImprovement, eYield) > 0)
+						{
+							iNewYieldTimes100 += 100 * pkNewAdjacentImprovementInfo->GetAdjacentImprovementYieldChanges(eImprovement, eYield);
+						}
+
+						ResourceTypes eResourceFromOldAdjacentImprovement = pkOldAdjacentImprovementInfo ? (ResourceTypes)pkOldAdjacentImprovementInfo->GetResourceFromImprovement() : NO_RESOURCE;
+						ResourceTypes eResourceFromNewAdjacentImprovement = pkNewAdjacentImprovementInfo ? (ResourceTypes)pkNewAdjacentImprovementInfo->GetResourceFromImprovement() : NO_RESOURCE;
+
+						// Bonuses we would get based on adjacent a resource created by an adjacent improvement
+						if (eResourceFromOldAdjacentImprovement != NO_RESOURCE && pkImprovementInfo->GetAdjacentResourceYieldChanges(eResourceFromOldAdjacentImprovement, eYield) > 0)
+						{
+							iNewYieldTimes100 -= 100 * pkImprovementInfo->GetAdjacentResourceYieldChanges(eResourceFromOldAdjacentImprovement, eYield);
+						}
+						if (eResourceFromNewAdjacentImprovement != NO_RESOURCE && pkImprovementInfo->GetAdjacentResourceYieldChanges(eResourceFromNewAdjacentImprovement, eYield) > 0)
+						{
+							iNewYieldTimes100 += 100 * pkImprovementInfo->GetAdjacentResourceYieldChanges(eResourceFromNewAdjacentImprovement, eYield);
+						}
+					}
+				}
+
+				if (iTwoAdjacentOldYield > 1)
+				{
+					iNewYieldTimes100 -= 100 * (iTwoAdjacentOldYield / 2);
+				}
+				if (iTwoAdjacentNewYield > 1)
+				{
+					iNewYieldTimes100 += 100 * (iTwoAdjacentNewYield / 2);
+				}
+			}
+
+			// Normalize Golden Age gold yields (assume active 40% of the time)
+			// Yield was below the threshold when we calculated the yields, but above with the extra yields from planned adjacenct builds
+			if (iNewYieldTimes100 >= iGoldenAgeYieldThresholdTimes100 && iProjectedNewYieldsTimes100 < iGoldenAgeYieldThresholdTimes100)
+			{
+				int iGoldenAgeYield = kYield.getGoldenAgeYield();
+				if (iGoldenAgeYield != 0)
+				{
+					iNewYieldTimes100 += 40 * iGoldenAgeYield;
 				}
 			}
 		}
@@ -2898,7 +2949,7 @@ int CvBuilderTaskingAI::ScorePlotBuild(CvPlot* pPlot, ImprovementTypes eImprovem
 		// Special handling for vanilla celts
 		if (!MOD_BALANCE_VP && eYield == YIELD_FAITH && m_pPlayer->GetPlayerTraits()->IsFaithFromUnimprovedForest())
 		{
-			if ((bChangedFeatureState || eImprovement != NO_IMPROVEMENT) && eFeature == FEATURE_FOREST && eOldImprovement == NO_IMPROVEMENT)
+			if (eFeature == FEATURE_FOREST && pPlot->getImprovementType() == NO_IMPROVEMENT && (eImprovement != NO_IMPROVEMENT || (pkBuildInfo && pkBuildInfo->isFeatureRemove(eFeature))))
 			{
 				CvCity* pNextCity = pPlot->GetAdjacentCity();
 				if (pNextCity && pNextCity->getOwner() == m_pPlayer->GetID())
@@ -2909,8 +2960,11 @@ int CvBuilderTaskingAI::ScorePlotBuild(CvPlot* pPlot, ImprovementTypes eImprovem
 					{
 						CvPlot* pCityAdjacentPlot = plotDirection(pNextCity->getX(), pNextCity->getY(), ((DirectionTypes)iDirectionLoop));
 						int iAdjacentPlotIndex = pCityAdjacentPlot->GetPlotIndex();
-						FeatureTypes eAdjacentFeature = sState.mChangedPlotFeatures.find(iAdjacentPlotIndex) != sState.mChangedPlotFeatures.end() ? sState.mChangedPlotFeatures[iAdjacentPlotIndex] : pCityAdjacentPlot->getFeatureType();
-						if (pCityAdjacentPlot && eAdjacentFeature == eFeature && pCityAdjacentPlot->getImprovementType() == NO_IMPROVEMENT)
+						map<int, FeatureTypes>::const_iterator it = sState.mChangedPlotFeatures.find(iAdjacentPlotIndex);
+						FeatureTypes eAdjacentFeature = it != sState.mChangedPlotFeatures.end() ? it->second : pCityAdjacentPlot->getFeatureType();
+						map<int, ImprovementTypes>::const_iterator it2 = sState.mChangedPlotImprovements.find(iAdjacentPlotIndex);
+						ImprovementTypes eAdjacentImprovement = it2 != sState.mChangedPlotImprovements.end() ? it2->second : pCityAdjacentPlot->getImprovementType();
+						if (pCityAdjacentPlot && eAdjacentFeature == eFeature && eAdjacentImprovement == NO_IMPROVEMENT)
 						{
 							iAdjacentForests++;
 						}
@@ -2918,15 +2972,14 @@ int CvBuilderTaskingAI::ScorePlotBuild(CvPlot* pPlot, ImprovementTypes eImprovem
 
 					if (iAdjacentForests == 3 || (iAdjacentForests == 2 && MOD_ALTERNATE_CELTS) || iAdjacentForests == 1)
 					{
-						// Give double value to this yield because we don't need to work the tile
-						iNewYieldTimes100 -= 200;
+						iNewYieldTimes100 -= (100 * GetYieldBaseModifierTimes100(eYield)) / GetYieldBaseModifierTimes100(YIELD_GOLD);
 					}
 				}
 			}
 		}
 
-		// Bonuses yield that this improvement provides to adjacent improvements
-		if (pOwningCity || (pkImprovementInfo && pkImprovementInfo->IsInAdjacentFriendly()))
+		// Bonus yields that this improvement provides to adjacent improvements
+		if (MOD_BALANCE_VP)
 		{
 			CvPlot** pAdjacentPlots = GC.getMap().getNeighborsUnchecked(pPlot->GetPlotIndex());
 			for (int iI = 0; iI < NUM_DIRECTION_TYPES; iI++)
@@ -2936,17 +2989,18 @@ int CvBuilderTaskingAI::ScorePlotBuild(CvPlot* pPlot, ImprovementTypes eImprovem
 				if (!pAdjacentPlot)
 					continue;
 
+				if (pAdjacentPlot->isCity())
+					continue;
+
 				if (pAdjacentPlot->getOwner() != m_pPlayer->GetID())
 					continue;
 
-				CvCity* pAdjacentOwningCity = pAdjacentPlot->getEffectiveOwningCity();
-				if (!pAdjacentOwningCity)
+				bool bAdjacentIsWorkable = pAdjacentPlot->isPlayerCityRadius(m_pPlayer->GetID());
+				if (!bAdjacentIsWorkable)
 					continue;
 
-				if (!pAdjacentOwningCity->IsWithinWorkRange(pAdjacentPlot))
-					continue;
-
-				if (pAdjacentOwningCity->IsRazing())
+				CvCity* pAdjacentOwningCity = pAdjacentPlot->getOwningCity();
+				if (!pAdjacentOwningCity || pAdjacentOwningCity->IsRazing())
 					continue;
 
 				int iAdjacentPlotIndex = pAdjacentPlot->GetPlotIndex();
@@ -2957,13 +3011,12 @@ int CvBuilderTaskingAI::ScorePlotBuild(CvPlot* pPlot, ImprovementTypes eImprovem
 				if (pAdjacentPlot->getTerrainType() != NO_TERRAIN)
 				{
 					int iAdjacentTerrainYieldChange = pkImprovementInfo ? pkImprovementInfo->GetAdjacentTerrainYieldChanges(pAdjacentPlot->getTerrainType(), eYield) : 0;
-					// Losing yield from removing old improvement
-					iAdjacentTerrainYieldChange -= pkOldImprovementInfo ? pkOldImprovementInfo->GetAdjacentTerrainYieldChanges(pAdjacentPlot->getTerrainType(), eYield) : 0;
 					if (iAdjacentTerrainYieldChange != 0)
 						iTempYieldScore += iAdjacentTerrainYieldChange;
 				}
 
-				ImprovementTypes eAdjacentImprovement = sState.mChangedPlotImprovements.find(iAdjacentPlotIndex) != sState.mChangedPlotImprovements.end() ? sState.mChangedPlotImprovements[iAdjacentPlotIndex] : NO_IMPROVEMENT;
+				map<int, ImprovementTypes>::const_iterator it = sState.mChangedPlotImprovements.find(iAdjacentPlotIndex);
+				ImprovementTypes eAdjacentImprovement = it != sState.mChangedPlotImprovements.end() ? it->second : NO_IMPROVEMENT;
 
 				// If we are not planning on building an improvement here, use the one that exists already
 				if (eAdjacentImprovement == NO_IMPROVEMENT && !pAdjacentPlot->IsImprovementPillaged())
@@ -2973,8 +3026,6 @@ int CvBuilderTaskingAI::ScorePlotBuild(CvPlot* pPlot, ImprovementTypes eImprovem
 				{
 					// How much extra yield we give to adjacent tiles with a certain improvement
 					int iAdjacentImprovementYieldChange = pkImprovementInfo ? pkImprovementInfo->GetAdjacentImprovementYieldChanges(eAdjacentImprovement, eYield) : 0;
-					// Losing yield from removing old improvement
-					iAdjacentImprovementYieldChange -= pkOldImprovementInfo ? pkOldImprovementInfo->GetAdjacentImprovementYieldChanges(eAdjacentImprovement, eYield) : 0;
 					if (iAdjacentImprovementYieldChange != 0)
 						iTempYieldScore += iAdjacentImprovementYieldChange;
 
@@ -2994,22 +3045,6 @@ int CvBuilderTaskingAI::ScorePlotBuild(CvPlot* pPlot, ImprovementTypes eImprovem
 						}
 					}
 
-					// Losing adjacency yield from removing old improvement
-					if (eOldImprovement != NO_IMPROVEMENT && eAdjacentImprovement == eOldImprovement)
-					{
-						int iAdjacentSameTypeYield = pkOldImprovementInfo->GetYieldAdjacentSameType(eYield);
-						if (iAdjacentSameTypeYield != 0)
-							iTempYieldScore -= iAdjacentSameTypeYield;
-
-						int iAdjacentTwoSameTypeYield = pkOldImprovementInfo->GetYieldAdjacentTwoSameType(eYield);
-						if (iAdjacentTwoSameTypeYield != 0)
-						{
-							int iDoubleAdjacentSame = GetNumAdjacent(pAdjacentPlot, eOldImprovement, sState);
-							if (iDoubleAdjacentSame % 2 == 0)
-								iTempYieldScore -= iAdjacentTwoSameTypeYield;
-						}
-					}
-
 					CvImprovementEntry* pkAdjacentImprovementInfo = GC.getImprovementInfo(eAdjacentImprovement);
 
 					if (pkAdjacentImprovementInfo)
@@ -3021,105 +3056,245 @@ int CvBuilderTaskingAI::ScorePlotBuild(CvPlot* pPlot, ImprovementTypes eImprovem
 							if (iAdjacentResourceYieldChanges != 0)
 								iTempYieldScore += iAdjacentResourceYieldChanges;
 						}
-						// Losing yield from deleting an old resource
-						if (eResourceFromOldImprovement != NO_RESOURCE || (eResource != NO_RESOURCE && eResourceFromImprovement != NO_RESOURCE))
-						{
-							ResourceTypes eOldResource = eResourceFromOldImprovement != NO_RESOURCE ? eResourceFromOldImprovement : eResource;
-							int iAdjacentResourceYieldChanges = pkAdjacentImprovementInfo->GetAdjacentResourceYieldChanges(eOldResource, eYield);
-							if (iAdjacentResourceYieldChanges != 0)
-								iTempYieldScore -= iAdjacentResourceYieldChanges;
-						}
 
-						// How much extra yield an adjacent improvement will get if we create a feature
-						if (eFeatureFromImprovement != NO_FEATURE)
+						// How much extra yield an adjacent improvement will get if we create a feature (or keep the one that's here)
+						if (eFeatureFromImprovement != NO_FEATURE || (eFeature != NO_FEATURE && (!pkBuildInfo || !pkBuildInfo->isFeatureRemove(eFeature))))
 						{
-							int iAdjacentFeatureYieldChanges = pkAdjacentImprovementInfo->GetAdjacentFeatureYieldChanges(eFeatureFromImprovement, eYield);
+							FeatureTypes eNewFeature = eFeatureFromImprovement != NO_FEATURE ? eFeatureFromImprovement : eFeature;
+							int iAdjacentFeatureYieldChanges = pkAdjacentImprovementInfo->GetAdjacentFeatureYieldChanges(eNewFeature, eYield);
 							if (iAdjacentFeatureYieldChanges != 0)
 								iTempYieldScore += iAdjacentFeatureYieldChanges;
-						}
-						// Losing yield from removing an old feature
-						if (eFeatureFromOldImprovement != NO_FEATURE || (eFeature != NO_FEATURE && (eFeatureFromImprovement != NO_FEATURE || (pkBuildInfo && pkBuildInfo->isFeatureRemove(eFeature)))))
-						{
-							FeatureTypes eOldFeature = eFeatureFromOldImprovement != NO_FEATURE ? eFeatureFromOldImprovement : eFeature;
-							int iAdjacentFeatureYieldChanges = pkAdjacentImprovementInfo->GetAdjacentFeatureYieldChanges(eOldFeature, eYield);
-							if (iAdjacentFeatureYieldChanges != 0)
-								iTempYieldScore -= iAdjacentFeatureYieldChanges;
 						}
 					}
 				}
 
 				if (iTempYieldScore != 0)
 				{
-					// Adjacency bonuses are applied to the city the other plot belongs to
-					// Use base modifier to avoid expensive computation
-					int iYieldModifier = GetYieldBaseModifierTimes100(eYield);
-
-					iYieldScore += (iTempYieldScore * iYieldModifier);
+					iNewYieldTimes100 += iTempYieldScore * 100;
 				}
 			}
 		}
 
-		if (iNewYieldTimes100 != iOldYieldTimes100 || iBasePlotYield != 0)
+		if (iNewYieldTimes100 != 0)
 		{
-			int iYieldModifier = GetPlotYieldModifierTimes100(pPlot, eYield);
+			iYieldScore += (iNewYieldTimes100 * iYieldModifier) / 100;
+		}
 
-			if (bCityIsSated)
+		int iPotentialNewYieldTimes100 = 0;
+
+		// Extra adjacency bonuses from potential adjacent same improvements
+		if (MOD_BALANCE_VP && bIsWithinWorkRange && eImprovement != NO_IMPROVEMENT)
+		{
+			int iOneAdjacentBonus = pkImprovementInfo->GetAdjacentSameTypeYield(eYield);
+			int iTwoAdjacentBonus = pkImprovementInfo->GetAdjacentTwoSameTypeYield(eYield);
+
+			if (iOneAdjacentBonus > 0 || iTwoAdjacentBonus > 0)
 			{
-				iYieldModifier *= 2;
-				iYieldModifier /= 3;
-			}
+				int iCurrentSameAdjacent = 0;
+				int iPotentialSameAdjacent = 0;
 
-			iYieldScore += ((iNewYieldTimes100 - iOldYieldTimes100) * iYieldModifier) / 100;
-			iBaseYieldScore += iBasePlotYield * iYieldModifier;
+				CvPlot** pAdjacentPlots = GC.getMap().getNeighborsUnchecked(pPlot->GetPlotIndex());
+				for (int iI = 0; iI < NUM_DIRECTION_TYPES; iI++)
+				{
+					CvPlot* pAdjacentPlot = pAdjacentPlots[iI];
+
+					if (!pAdjacentPlot)
+						continue;
+
+					if (pAdjacentPlot->isCity())
+						continue;
+
+					map<int, ImprovementTypes>::const_iterator changedImprovementIt = sState.mChangedPlotImprovements.find(pAdjacentPlot->GetPlotIndex());
+					bool bImprovementChanged = changedImprovementIt != sState.mChangedPlotImprovements.end();
+
+					const ImprovementTypes eAdjacentImprovement = bImprovementChanged ? changedImprovementIt->second : !pAdjacentPlot->IsImprovementPillaged() ? pAdjacentPlot->getImprovementType() : NO_IMPROVEMENT;
+
+					if (eAdjacentImprovement == eImprovement)
+						iCurrentSameAdjacent++;
+
+					if (eAdjacentImprovement != NO_IMPROVEMENT)
+						continue;
+
+					if (pAdjacentPlot->getOwner() != m_pPlayer->GetID() && (!pAdjacentPlot->isPlayerCityRadius(m_pPlayer->GetID()) || pAdjacentPlot->getOwner() != NO_PLAYER))
+						continue;
+
+					if (!pAdjacentPlot->canHaveImprovement(eImprovement, m_pPlayer->GetID()))
+						continue;
+
+					ResourceTypes eAdjacentResource = pAdjacentPlot->getResourceType(m_pPlayer->getTeam());
+					if (eAdjacentResource != NO_RESOURCE && !pkImprovementInfo->IsConnectsResource(eAdjacentResource))
+						continue;
+
+					iPotentialSameAdjacent++;
+				}
+
+				if (iOneAdjacentBonus > 0)
+				{
+					if (iPotentialSameAdjacent > 0)
+						iPotentialNewYieldTimes100 += iOneAdjacentBonus * iPotentialSameAdjacent * 100;
+				}
+
+				if (iTwoAdjacentBonus > 0)
+				{
+					if (iCurrentSameAdjacent % 2 == 1)
+						iPotentialSameAdjacent++;
+
+					if (iPotentialSameAdjacent > 1)
+						iPotentialNewYieldTimes100 += iTwoAdjacentBonus * (iPotentialSameAdjacent / 2) * 100;
+				}
+			}
+		}
+
+		// Yield was below the threshold, but including potential adjacent improvements we get above the threshold
+		if (iNewYieldTimes100 + iPotentialNewYieldTimes100 >= iGoldenAgeYieldThresholdTimes100 && iNewYieldTimes100 < iGoldenAgeYieldThresholdTimes100)
+		{
+			int iGoldenAgeYield = kYield.getGoldenAgeYield();
+			if (iGoldenAgeYield != 0)
+			{
+				iPotentialNewYieldTimes100 += 40 * iGoldenAgeYield;
+			}
+		}
+
+		if (iPotentialNewYieldTimes100 != 0)
+		{
+			iPotentialScore += (iPotentialNewYieldTimes100 * iYieldModifier) / 100;
 		}
 	}
 
 	//Improvement grants or connects resource
 	//Don't give any bonus if we are creating a resource on top of an existing one
-	if (pOwningCity && ((eResourceFromImprovement != NO_RESOURCE && eResource == NO_RESOURCE) || (eResource != NO_RESOURCE && pkImprovementInfo && pkImprovementInfo->IsConnectsResource(eResource))))
+	bool bOldCreatedResource = eResourceFromOldImprovement != NO_RESOURCE;
+	bool bOldConnectedResource = eNaturalResource != NO_RESOURCE && pkOldImprovementInfo && pkOldImprovementInfo->IsConnectsResource(eNaturalResource);
+	bool bNewCreatesResource = eResourceFromImprovement != NO_RESOURCE;
+	bool bNewConnectsResource = eNaturalResource != NO_RESOURCE && pkImprovementInfo && pkImprovementInfo->IsConnectsResource(eNaturalResource);
+	if (pPlot->getOwner() == m_pPlayer->GetID())
 	{
-		ResourceTypes eConnectedResource = eResourceFromImprovement != NO_RESOURCE ? eResourceFromImprovement : eResource;
-		int iResourceAmount = eResourceFromImprovement != NO_RESOURCE ? pkImprovementInfo->GetResourceQuantityFromImprovement() : pPlot->getNumResource();
-		int iResourceWeight = GetResourceWeight(eConnectedResource, iResourceAmount, iExtraResource);
-		iSecondaryScore += iResourceWeight;
-
-		CvResourceInfo* pkConnectedResource = GC.getResourceInfo(eConnectedResource);
-		//amp up monopoly alloc!
-		if (pkConnectedResource && pkConnectedResource->isMonopoly())
+		ResourceTypes eRemovedResource = NO_RESOURCE;
+		ResourceTypes eCreatedResource = NO_RESOURCE;
+		if (bOldCreatedResource)
 		{
-			if (pkConnectedResource->getResourceUsage() == RESOURCEUSAGE_LUXURY)
+			eRemovedResource = eResourceFromOldImprovement;
+		}
+		if (bOldConnectedResource && !bNewConnectsResource)
+		{
+			eRemovedResource = eNaturalResource;
+		}
+		if (!bOldConnectedResource && bNewConnectsResource)
+		{
+			eCreatedResource = eNaturalResource;
+		}
+		if (bNewCreatesResource)
+		{
+			eCreatedResource = eResourceFromImprovement;
+		}
+
+		if (eCreatedResource != NO_RESOURCE)
+		{
+			int iResourceAmount = eResourceFromImprovement != NO_RESOURCE ? pkImprovementInfo->GetResourceQuantityFromImprovement() : pPlot->getNumResource();
+			int iResourceWeight = GetResourceWeight(eCreatedResource, iResourceAmount);
+			int iNumResourceAvailable = m_pPlayer->getNumResourceAvailable(eResource) + iExtraResource;
+
+			iSecondaryScore += iResourceWeight;
+
+			// give a priority reduction if we have this resource already
+			int iDownPrio = 0;
+			// We have plenty to spare
+			if (iNumResourceAvailable > 1)
+				iDownPrio = (iResourceWeight * 2) / 3;
+			// We have one already
+			else if (iNumResourceAvailable > 0)
+				iDownPrio = iResourceWeight / 3;
+
+			if (iDownPrio > 0)
 			{
-				if (m_pPlayer->GetMonopolyPercent(eConnectedResource) > 0 && m_pPlayer->GetMonopolyPercent(eConnectedResource) <= /*50*/ GD_INT_GET(GLOBAL_RESOURCE_MONOPOLY_THRESHOLD))
-					iSecondaryScore += (iResourceWeight * m_pPlayer->GetMonopolyPercent(eConnectedResource)) / 25;
+				iSecondaryScore -= iDownPrio;
+				iPotentialScore += iDownPrio;
 			}
-			else if (pkConnectedResource->getResourceUsage() == RESOURCEUSAGE_STRATEGIC)
+
+			CvResourceInfo* pkConnectedResource = GC.getResourceInfo(eCreatedResource);
+			//amp up monopoly alloc!
+			if (pkConnectedResource && pkConnectedResource->isMonopoly())
 			{
-				if (m_pPlayer->GetMonopolyPercent(eConnectedResource) > 0 && m_pPlayer->GetMonopolyPercent(eConnectedResource) <= /*50*/ GD_INT_GET(GLOBAL_RESOURCE_MONOPOLY_THRESHOLD))
-					iSecondaryScore += (iResourceWeight * m_pPlayer->GetMonopolyPercent(eConnectedResource)) / 25;
+				int iCurrentMonopolyPercent = m_pPlayer->GetMonopolyPercent(eCreatedResource) + (iExtraResource * 100) / max(1, GC.getMap().getNumResources(eCreatedResource));
+				int iExtraMonopolyPercent = (iResourceAmount * 100) / max(1, GC.getMap().getNumResources(eCreatedResource));
+
+				int iThreshold = 0;
+				if (pkConnectedResource && pkConnectedResource->getResourceUsage() == RESOURCEUSAGE_LUXURY && !GC.getGame().GetGameLeagues()->IsLuxuryHappinessBanned(m_pPlayer->GetID(), eCreatedResource))
+					iThreshold = /*50*/ GD_INT_GET(GLOBAL_RESOURCE_MONOPOLY_THRESHOLD);
+				else if (pkConnectedResource && pkConnectedResource->getResourceUsage() == RESOURCEUSAGE_STRATEGIC)
+					iThreshold = /*25*/ GD_INT_GET(STRATEGIC_RESOURCE_MONOPOLY_THRESHOLD);
+
+				if (iThreshold != 0)
+				{
+					if (iCurrentMonopolyPercent <= iThreshold)
+					{
+						if (iCurrentMonopolyPercent + iExtraMonopolyPercent > iThreshold)
+							iSecondaryScore += 700;
+						else
+							iSecondaryScore += 400;
+					}
+				}
+			}
+		}
+		if (eRemovedResource != NO_RESOURCE)
+		{
+			int iResourceAmount = eResourceFromOldImprovement != NO_RESOURCE ? pkOldImprovementInfo->GetResourceQuantityFromImprovement() : pPlot->getNumResource();
+			int iResourceWeight = GetResourceWeight(eRemovedResource, iResourceAmount);
+			iSecondaryScore -= iResourceWeight;
+
+			CvResourceInfo* pkConnectedResource = GC.getResourceInfo(eRemovedResource);
+			if (pkConnectedResource && pkConnectedResource->isMonopoly())
+			{
+				int iCurrentMonopolyPercent = m_pPlayer->GetMonopolyPercent(eRemovedResource) + (iExtraResource * 100) / max(1, GC.getMap().getNumResources(eRemovedResource));
+				int iLostMonopolyPercent = (iResourceAmount * 100) / max(1, GC.getMap().getNumResources(eRemovedResource));
+
+				int iThreshold = 0;
+				if (pkConnectedResource && pkConnectedResource->getResourceUsage() == RESOURCEUSAGE_LUXURY && !GC.getGame().GetGameLeagues()->IsLuxuryHappinessBanned(m_pPlayer->GetID(), eRemovedResource))
+					iThreshold = /*50*/ GD_INT_GET(GLOBAL_RESOURCE_MONOPOLY_THRESHOLD);
+				else if (pkConnectedResource && pkConnectedResource->getResourceUsage() == RESOURCEUSAGE_STRATEGIC)
+					iThreshold = /*25*/ GD_INT_GET(STRATEGIC_RESOURCE_MONOPOLY_THRESHOLD);
+
+				if (iThreshold != 0)
+				{
+					if (iCurrentMonopolyPercent > iThreshold)
+					{
+						if (iCurrentMonopolyPercent - iLostMonopolyPercent <= iThreshold)
+							iSecondaryScore -= 700;
+					}
+					else
+					{
+						iSecondaryScore -= 400;
+					}
+				}
 			}
 		}
 	}
 
-	bool bBenefitsFromRoads = false;
-	for (int iI = 0; iI <= YIELD_FAITH; iI++)
+	if (MOD_BALANCE_VP)
 	{
-		if (pkImprovementInfo->GetRouteYieldChanges(ROUTE_ROAD, iI) > 0)
+		bool bBenefitsFromRoads = false;
+		for (int iI = 0; iI <= YIELD_FAITH; iI++)
 		{
-			bBenefitsFromRoads = true;
-			break;
+			if (pkImprovementInfo && pkImprovementInfo->GetRouteYieldChanges(ROUTE_ROAD, iI) > 0)
+			{
+				bBenefitsFromRoads = true;
+				break;
+			}
 		}
-	}
 
-	if (bBenefitsFromRoads && eForceCityConnection == NO_ROUTE)
-		iSecondaryScore -= 100;
-	else if (!bBenefitsFromRoads && (eForceCityConnection == ROUTE_ROAD || eForceCityConnection == ROUTE_RAILROAD))
-		iSecondaryScore -= 100;
+		int iPenalty = pkImprovementInfo && pkImprovementInfo->IsCreatedByGreatPerson() ? 1000 : 100;
+
+		if (bBenefitsFromRoads && eForceCityConnection == NO_ROUTE)
+			iSecondaryScore -= iPenalty;
+		else if (!bBenefitsFromRoads && (eForceCityConnection == ROUTE_ROAD || eForceCityConnection == ROUTE_RAILROAD))
+			iSecondaryScore -= iPenalty;
+	}
 
 	// Don't build on antiquity sites
-	if (eResource != NO_RESOURCE)
+	if (eResource != NO_RESOURCE && eBuild != NO_BUILD)
 	{
-		BuildTypes eDigBuild = (BuildTypes)GC.getInfoTypeForString("BUILD_ARCHAEOLOGY_DIG");
-		if (m_pPlayer->canBuild(pPlot, eDigBuild))
+		static const BuildTypes eDigBuild = (BuildTypes)GC.getInfoTypeForString("BUILD_ARCHAEOLOGY_DIG");
+		if (m_pPlayer->canBuild(pPlot, eDigBuild) && eDigBuild != eBuild)
 			iSecondaryScore -= 1000;
 	}
 
@@ -3151,8 +3326,11 @@ int CvBuilderTaskingAI::ScorePlotBuild(CvPlot* pPlot, ImprovementTypes eImprovem
 	}
 
 	// Do we want a canal here?
-	if ((pOwningCity || (bIsCultureBomb && pPlot->isAdjacentPlayer(m_pPlayer->GetID()))) && MOD_GLOBAL_PASSABLE_FORTS && pkImprovementInfo && pkImprovementInfo->IsMakesPassable() && WantCanalAtPlot(pPlot) && pkImprovementInfo->GetNearbyEnemyDamage() == 0)
-		iSecondaryScore += 3000;
+	if ((pOwningCity || (bIsCultureBomb && pPlot->isAdjacentPlayer(m_pPlayer->GetID()))) && MOD_GLOBAL_PASSABLE_FORTS && WantCanalAtPlot(pPlot))
+	{
+		if (pkImprovementInfo && pkImprovementInfo->IsMakesPassable() && (pkImprovementInfo->GetNearbyEnemyDamage() == 0 || eBuild == NO_BUILD))
+			iSecondaryScore += 3000;
+	}
 
 	// TODO flesh out culture bomb logic and move it from TacticalAI?
 	// Currently this is only for human player recommendations.
@@ -3177,9 +3355,7 @@ int CvBuilderTaskingAI::ScorePlotBuild(CvPlot* pPlot, ImprovementTypes eImprovem
 	const int iImprovementMaintenanceTimes100 = pkImprovementInfo ? pkImprovementInfo->GetGoldMaintenance() * (100 + m_pPlayer->GetImprovementGoldMaintenanceMod()) : 0;
 	iSecondaryScore -= iImprovementMaintenanceTimes100;
 
-	if (iYieldScore + iSecondaryScore <= 0)
-		return iYieldScore + iSecondaryScore;
-	return iYieldScore + iBaseYieldScore + iSecondaryScore;
+	return make_pair(iYieldScore + iSecondaryScore, iPotentialScore);
 }
 
 BuildTypes CvBuilderTaskingAI::GetRepairBuild(void)
@@ -3265,6 +3441,101 @@ BuildTypes CvBuilderTaskingAI::GetBuildRoute(RouteTypes eRoute) const
 	}
 
 	return eRouteBuild;
+}
+
+void CvBuilderTaskingAI::SetupExtraXAdjacentPlots()
+{
+	m_extraPlotsForXAdjacentImprovements.clear();
+
+	vector<BuildTypes> aPossibleBuilds;
+	for (int iBuildIndex = 0; iBuildIndex < GC.getNumBuildInfos(); iBuildIndex++)
+	{
+		BuildTypes eBuild = (BuildTypes)iBuildIndex;
+
+		if (!m_pPlayer->canBuild(NULL, eBuild, true))
+			continue;
+
+		int iLoopUnit = 0;
+		for (CvUnit* pLoopUnit = m_pPlayer->firstUnit(&iLoopUnit); pLoopUnit != NULL; pLoopUnit = m_pPlayer->nextUnit(&iLoopUnit))
+		{
+			if (pLoopUnit->canBuild(NULL, eBuild))
+			{
+				aPossibleBuilds.push_back(eBuild);
+				break;
+			}
+		}
+	}
+
+	for (vector<BuildTypes>::const_iterator it = aPossibleBuilds.begin(); it != aPossibleBuilds.end(); ++it)
+	{
+		BuildTypes eBuild = *it;
+		CvBuildInfo* pkBuildInfo = GC.getBuildInfo(eBuild);
+
+		if (!pkBuildInfo)
+			continue;
+
+		ImprovementTypes eImprovement = (ImprovementTypes)pkBuildInfo->getImprovement();
+		if (eImprovement == NO_IMPROVEMENT)
+			continue;
+
+		CvImprovementEntry* pkImprovementInfo = GC.getImprovementInfo(eImprovement);
+		if (!pkImprovementInfo)
+			continue;
+
+		if (pkImprovementInfo->GetXSameAdjacentMakesValid() == 0)
+			continue;
+
+		for (int iI = 0; iI < GC.getMap().numPlots(); iI++)
+		{
+			CvPlot* pPlot = GC.getMap().plotByIndexUnchecked(iI);
+
+			if (!ShouldAnyBuilderConsiderPlot(pPlot))
+				continue;
+
+			if (pPlot->getOwner() != m_pPlayer->GetID())
+				continue;
+
+			SetupExtraXAdjacentBuildPlot(pPlot, eBuild, eImprovement, pkImprovementInfo->GetXSameAdjacentMakesValid());
+		}
+	}
+}
+
+bool CvBuilderTaskingAI::SetupExtraXAdjacentBuildPlot(const CvPlot* pPlot, BuildTypes eBuild, ImprovementTypes eImprovement, int iAdjacencyRequirement, std::tr1::unordered_set<const CvPlot*> sIgnoredPlots)
+{
+	if (m_extraPlotsForXAdjacentImprovements[eImprovement].find(pPlot) != m_extraPlotsForXAdjacentImprovements[eImprovement].end())
+		return true;
+
+	if (sIgnoredPlots.find(pPlot) != sIgnoredPlots.end())
+		return false;
+
+	if (!pPlot->canBuild(eBuild, m_pPlayer->GetID(), false, true, true))
+		return false;
+
+	if (pPlot->canBuild(eBuild, m_pPlayer->GetID()))
+		return true;
+
+	std::tr1::unordered_set<const CvPlot*> newIgnoredPlots = sIgnoredPlots;
+	newIgnoredPlots.insert(pPlot);
+
+	int iAdjacentCanBuild = 0;
+
+	for (int iI = 0; iI < NUM_DIRECTION_TYPES; iI++)
+	{
+		DirectionTypes eDirection = (DirectionTypes)iI;
+		CvPlot* pAdjacentPlot = plotDirection(pPlot->getX(), pPlot->getY(), eDirection);
+
+		if (!pAdjacentPlot)
+			continue;
+
+		if (SetupExtraXAdjacentBuildPlot(pAdjacentPlot, eBuild, eImprovement, iAdjacencyRequirement, newIgnoredPlots))
+			iAdjacentCanBuild++;
+	}
+
+	bool bRet = iAdjacentCanBuild >= iAdjacencyRequirement;
+	if (bRet)
+		m_extraPlotsForXAdjacentImprovements[eImprovement].insert(pPlot);
+
+	return bRet;
 }
 
 /// Central logging repository!

@@ -1,5 +1,5 @@
 /*	-------------------------------------------------------------------------------------------------------
-	� 1991-2012 Take-Two Interactive Software and its subsidiaries.  Developed by Firaxis Games.  
+	© 1991-2012 Take-Two Interactive Software and its subsidiaries.  Developed by Firaxis Games.  
 	Sid Meier's Civilization V, Civ, Civilization, 2K Games, Firaxis Games, Take-Two Interactive Software 
 	and their respective logos are all trademarks of Take-Two interactive Software, Inc.  
 	All other marks and trademarks are the property of their respective owners.  
@@ -350,8 +350,6 @@ public:
 	bool IsMountain() const;
 	bool IsHill() const;
 	bool IsFlat() const;
-	bool IsFoundsReligion() const;
-	bool IsReligious() const;
 	bool IsBorderObstacle() const;
 #if defined(MOD_BALANCE_CORE)
 	bool IsAnyBodyOfWater() const;
@@ -908,8 +906,6 @@ private:
 	bool m_bMountain;
 	bool m_bHill;
 	bool m_bFlat;
-	bool m_bFoundsReligion;
-	bool m_bIsReligious;
 	bool m_bBorderObstacle;
 #if defined(MOD_BALANCE_CORE)
 	int m_iCityAirStrikeDefense;
@@ -1193,19 +1189,15 @@ public:
 	void SetBuildingOriginalTime(BuildingTypes eIndex, int iNewValue);
 
 	int GetNumRealBuilding(BuildingTypes eIndex) const;
-#if defined(MOD_BALANCE_CORE)
 	void SetNumRealBuilding(BuildingTypes eIndex, int iNewValue, bool bNoBonus = false);
 	void SetNumRealBuildingTimed(BuildingTypes eIndex, int iNewValue, bool bFirst, PlayerTypes eOriginalOwner, int iOriginalTime, bool bNoBonus = false);
-#else
-	void SetNumRealBuilding(BuildingTypes eIndex, int iNewValue);
-	void SetNumRealBuildingTimed(BuildingTypes eIndex, int iNewValue, bool bFirst, PlayerTypes eOriginalOwner, int iOriginalTime);
-#endif
+
 	int GetNumFreeBuilding(BuildingTypes eIndex) const;
 	void SetNumFreeBuilding(BuildingTypes eIndex, int iNewValue);
-#if defined(MOD_BALANCE_CORE)
+
 	int IsFirstTimeBuilding(BuildingTypes eBuilding);
 	void SetFirstTimeBuilding(BuildingTypes eBuilding, int iValue);
-#endif
+
 	int GetBuildingYieldChange(BuildingClassTypes eBuildingClass, YieldTypes eYield) const;
 	void SetBuildingYieldChange(BuildingClassTypes eBuildingClass, YieldTypes eYield, int iChange);
 	void ChangeBuildingYieldChange(BuildingClassTypes eBuildingClass, YieldTypes eYield, int iChange);
@@ -1219,32 +1211,25 @@ public:
 	bool HasAvailableGreatWorkSlot(GreatWorkSlotType eSlotType) const;
 	int GetNumAvailableGreatWorkSlots(GreatWorkSlotType eSlotType = NO_GREAT_WORK_SLOT) const;
 	int GetNumFilledGreatWorkSlots(GreatWorkSlotType eSlotType = NO_GREAT_WORK_SLOT) const;
-	bool GetNextAvailableGreatWorkSlot(BuildingClassTypes *eBuildingClass, int *iSlot) const;
-	bool GetNextAvailableGreatWorkSlot(GreatWorkSlotType eGreatWorkSlot, BuildingClassTypes *eBuildingClass, int *iSlot) const;
+	bool GetNextAvailableGreatWorkSlot(BuildingClassTypes& eBuildingClass, int& iSlot) const;
+	bool GetNextAvailableGreatWorkSlot(GreatWorkSlotType eGreatWorkSlot, BuildingClassTypes& eBuildingClass, int& iSlot) const;
 
 	int GetYieldFromGreatWorks(YieldTypes eYield) const;
 	int GetCultureFromGreatWorks() const;
-#if defined(MOD_GLOBAL_GREATWORK_YIELDTYPES)
+
 	int GetNumGreatWorks(bool bIgnoreYield = true) const;
-#else
-	int GetNumGreatWorks() const;
-#endif
 	int GetNumGreatWorks(GreatWorkSlotType eGreatWorkSlot, bool bArtifact = false, bool bArt = false) const;
-#if defined(MOD_BALANCE_CORE)
+
 	int GetThemingBonusIndex(BuildingTypes eBuilding) const;
 	void SetThemingBonusIndex(BuildingTypes eBuilding, int iIndex);
-#endif
 
 	int GetLandmarksTourismPercent() const;
 	void ChangeLandmarksTourismPercent(int iChange);
 	int GetGreatWorksTourismModifier() const;
 	void ChangeGreatWorksTourismModifier(int iChange);
 
-#if defined(MOD_GLOBAL_GREATWORK_YIELDTYPES)
 	int GetCurrentThemingBonuses(YieldTypes eYield) const;
-#else
-	int GetCurrentThemingBonuses() const;
-#endif
+
 	int GetTotalNumThemedBuildings() const;
 	int GetNumBuildingsFromFaith() const;
 

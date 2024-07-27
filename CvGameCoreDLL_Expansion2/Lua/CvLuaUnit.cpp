@@ -163,10 +163,7 @@ void CvLuaUnit::PushMethods(lua_State* L, int t)
 	Method(CanUpgradeInTerritory);
 #endif
 	Method(GetNumResourceNeededToUpgrade);
-
-#if defined(MOD_UNITS_RESOURCE_QUANTITY_TOTALS)
 	Method(GetNumResourceTotalNeededToUpgrade);
-#endif
 
 	Method(GetHandicapType);
 	Method(GetCivilizationType);
@@ -282,8 +279,6 @@ void CvLuaUnit::PushMethods(lua_State* L, int t)
 	Method(SetBaseRangedCombatStrength);
 	Method(GetDamageCombatModifier);
 	Method(GetMaxRangedCombatStrength);
-	Method(GetCombatLimit);
-	Method(GetRangedCombatLimit);
 	Method(CanAirAttack);
 	Method(CanAirDefend);
 	Method(GetAirCombatDamage);
@@ -300,17 +295,11 @@ void CvLuaUnit::PushMethods(lua_State* L, int t)
 	Method(IsEverFortifyable);
 	Method(FortifyModifier);
 	Method(ExperienceNeeded);
-	Method(AttackXPValue);
-	Method(DefenseXPValue);
 	Method(MaxXPValue);
-	Method(FirstStrikes);
-	Method(ChanceFirstStrikes);
-	Method(MaxFirstStrikes);
 	Method(IsRanged);
 	Method(IsMustSetUpToRangedAttack);
 	Method(CanSetUpForRangedAttack);
 	Method(IsSetUpForRangedAttack);
-	Method(ImmuneToFirstStrikes);
 	Method(NoDefensiveBonus);
 	Method(IgnoreBuildingDefense);
 	Method(CanMoveImpassable);
@@ -479,8 +468,6 @@ void CvLuaUnit::PushMethods(lua_State* L, int t)
 	Method(GetExtraRange);
 	Method(GetExtraIntercept);
 	Method(GetExtraEvasion);
-	Method(GetExtraFirstStrikes);
-	Method(GetExtraChanceFirstStrikes);
 	Method(GetExtraWithdrawal);
 	Method(GetExtraEnemyHeal);
 	Method(GetExtraNeutralHeal);
@@ -509,8 +496,6 @@ void CvLuaUnit::PushMethods(lua_State* L, int t)
 	Method(GetPillageChange);
 	Method(GetUpgradeDiscount);
 	Method(GetExperiencePercent);
-	Method(GetKamikazePercent);
-
 
 	Method(IsOutOfAttacks);
 	Method(SetMadeAttack);
@@ -1157,9 +1142,10 @@ int CvLuaUnit::lRebaseAt(lua_State* L)
 	CvUnit* pkUnit = GetInstance(L);
 	const int iX = lua_tointeger(L, 2);
 	const int iY = lua_tointeger(L, 3);
-	const bool bResult = pkUnit->rebase(iX,iY);
+	const bool bResult = pkUnit->rebase(iX, iY);
 
-	return 0;
+	lua_pushboolean(L, bResult);
+	return 1;
 }
 //------------------------------------------------------------------------------
 //bool canScrap();
@@ -1905,31 +1891,25 @@ int CvLuaUnit::lCanDiscover(lua_State* L)
 int CvLuaUnit::lGetDiscoverAmount(lua_State* L)
 {
 	CvUnit* pkUnit = GetInstance(L);
-#if defined(MOD_BALANCE_CORE)
 	const int iResult = pkUnit->GetScienceBlastStrength();
-#else
-	const int iResult = pkUnit->getDiscoverAmount();
-#endif
 	lua_pushinteger(L, iResult);
 	return 1;
 }
 //------------------------------------------------------------------------------
-//int GetHurryProduction(CvPlot* pPlot);
+//int GetHurryProduction();
 int CvLuaUnit::lGetHurryProduction(lua_State* L)
 {
 	CvUnit* pkUnit = GetInstance(L);
-	CvPlot* pkPlot = CvLuaPlot::GetInstance(L, 2);
 
 	const int iResult = pkUnit->GetHurryStrength();
 	lua_pushinteger(L, iResult);
 	return 1;
 }
 //------------------------------------------------------------------------------
-//int GetTradeGold(CyPlot* pPlot);
+//int GetTradeGold();
 int CvLuaUnit::lGetTradeGold(lua_State* L)
 {
 	CvUnit* pkUnit = GetInstance(L);
-	CvPlot* pkPlot = CvLuaPlot::GetInstance(L, 2); // not used anymore
 
 	const int iResult = pkUnit->getTradeGold();
 	lua_pushinteger(L, iResult);
@@ -1997,7 +1977,7 @@ int CvLuaUnit::lCanRepairFleet(lua_State* L)
 	lua_pushboolean(L, bResult);
 	return 1;
 }
-#if defined(MOD_GLOBAL_SEPARATE_GREAT_ADMIRAL)
+
 //------------------------------------------------------------------------------
 //bool canChangePort(CvPlot* pPlot);
 int CvLuaUnit::lCanChangePort(lua_State* L)
@@ -2009,7 +1989,7 @@ int CvLuaUnit::lCanChangePort(lua_State* L)
 	lua_pushboolean(L, bResult);
 	return 1;
 }
-#endif
+
 //------------------------------------------------------------------------------
 //bool CanBuildSpaceship(CyPlot* pPlot, bool bVisible);
 int CvLuaUnit::lCanBuildSpaceship(lua_State* L)
@@ -2279,7 +2259,6 @@ int CvLuaUnit::lGetNumResourceNeededToUpgrade(lua_State* L)
 	lua_pushinteger(L, iResult);
 	return 1;
 }
-#if defined(MOD_UNITS_RESOURCE_QUANTITY_TOTALS)
 //------------------------------------------------------------------------------
 int CvLuaUnit::lGetNumResourceTotalNeededToUpgrade(lua_State* L)
 {
@@ -2299,7 +2278,6 @@ int CvLuaUnit::lGetNumResourceTotalNeededToUpgrade(lua_State* L)
 	lua_pushinteger(L, iResult);
 	return 1;
 }
-#endif
 //------------------------------------------------------------------------------
 //int /*HandicapTypes*/ getHandicapType();
 int CvLuaUnit::lGetHandicapType(lua_State* L)
@@ -3256,26 +3234,6 @@ int CvLuaUnit::lGetMaxRangedCombatStrength(lua_State* L)
 	return 1;
 }
 //------------------------------------------------------------------------------
-//int combatLimit();
-int CvLuaUnit::lGetCombatLimit(lua_State* L)
-{
-	CvUnit* pkUnit = GetInstance(L);
-
-	const int iResult = pkUnit->GetCombatLimit();
-	lua_pushinteger(L, iResult);
-	return 1;
-}
-//------------------------------------------------------------------------------
-//int GetRangedCombatLimit();
-int CvLuaUnit::lGetRangedCombatLimit(lua_State* L)
-{
-	CvUnit* pkUnit = GetInstance(L);
-
-	const int iResult = pkUnit->GetRangedCombatLimit();
-	lua_pushinteger(L, iResult);
-	return 1;
-}
-//------------------------------------------------------------------------------
 //bool canAirAttack();
 int CvLuaUnit::lCanAirAttack(lua_State* L)
 {
@@ -3471,62 +3429,12 @@ int CvLuaUnit::lExperienceNeeded(lua_State* L)
 	return 1;
 }
 //------------------------------------------------------------------------------
-//int attackXPValue();
-int CvLuaUnit::lAttackXPValue(lua_State* L)
-{
-	CvUnit* pkUnit = GetInstance(L);
-
-	const int iResult = pkUnit->attackXPValue();
-	lua_pushinteger(L, iResult);
-	return 1;
-}
-//------------------------------------------------------------------------------
-//int defenseXPValue();
-int CvLuaUnit::lDefenseXPValue(lua_State* L)
-{
-	CvUnit* pkUnit = GetInstance(L);
-
-	const int iResult = pkUnit->defenseXPValue();
-	lua_pushinteger(L, iResult);
-	return 1;
-}
-//------------------------------------------------------------------------------
 //int maxXPValue();
 int CvLuaUnit::lMaxXPValue(lua_State* L)
 {
 	CvUnit* pkUnit = GetInstance(L);
 
 	const int iResult = pkUnit->maxXPValue();
-	lua_pushinteger(L, iResult);
-	return 1;
-}
-//------------------------------------------------------------------------------
-//int firstStrikes();
-int CvLuaUnit::lFirstStrikes(lua_State* L)
-{
-	CvUnit* pkUnit = GetInstance(L);
-
-	const int iResult = pkUnit->firstStrikes();
-	lua_pushinteger(L, iResult);
-	return 1;
-}
-//------------------------------------------------------------------------------
-//int chanceFirstStrikes();
-int CvLuaUnit::lChanceFirstStrikes(lua_State* L)
-{
-	CvUnit* pkUnit = GetInstance(L);
-
-	const int iResult = pkUnit->chanceFirstStrikes();
-	lua_pushinteger(L, iResult);
-	return 1;
-}
-//------------------------------------------------------------------------------
-//int maxFirstStrikes();
-int CvLuaUnit::lMaxFirstStrikes(lua_State* L)
-{
-	CvUnit* pkUnit = GetInstance(L);
-
-	const int iResult = pkUnit->maxFirstStrikes();
 	lua_pushinteger(L, iResult);
 	return 1;
 }
@@ -3554,16 +3462,6 @@ int CvLuaUnit::lCanSetUpForRangedAttack(lua_State* L)
 int CvLuaUnit::lIsSetUpForRangedAttack(lua_State* L)
 {
 	return BasicLuaMethod(L, &CvUnit::isSetUpForRangedAttack);
-}
-//------------------------------------------------------------------------------
-//bool immuneToFirstStrikes();
-int CvLuaUnit::lImmuneToFirstStrikes(lua_State* L)
-{
-	CvUnit* pkUnit = GetInstance(L);
-	const bool bResult = pkUnit->immuneToFirstStrikes();
-
-	lua_pushboolean(L, bResult);
-	return 1;
 }
 //------------------------------------------------------------------------------
 //bool noDefensiveBonus();
@@ -5167,26 +5065,6 @@ int CvLuaUnit::lGetExtraEvasion(lua_State* L)
 	return 1;
 }
 //------------------------------------------------------------------------------
-//int getExtraFirstStrikes();
-int CvLuaUnit::lGetExtraFirstStrikes(lua_State* L)
-{
-	CvUnit* pkUnit = GetInstance(L);
-
-	const int iResult = pkUnit->getExtraFirstStrikes();
-	lua_pushinteger(L, iResult);
-	return 1;
-}
-//------------------------------------------------------------------------------
-//int getExtraChanceFirstStrikes();
-int CvLuaUnit::lGetExtraChanceFirstStrikes(lua_State* L)
-{
-	CvUnit* pkUnit = GetInstance(L);
-
-	const int iResult = pkUnit->getExtraChanceFirstStrikes();
-	lua_pushinteger(L, iResult);
-	return 1;
-}
-//------------------------------------------------------------------------------
 //int getExtraWithdrawal();
 int CvLuaUnit::lGetExtraWithdrawal(lua_State* L)
 {
@@ -5422,16 +5300,6 @@ int CvLuaUnit::lGetExperiencePercent(lua_State* L)
 {
 	CvUnit* pkUnit = GetInstance(L);
 	const int iResult = pkUnit->getExperiencePercent();
-
-	lua_pushinteger(L, iResult);
-	return 1;
-}
-//------------------------------------------------------------------------------
-//int getKamikazePercent() const;
-int CvLuaUnit::lGetKamikazePercent(lua_State* L)
-{
-	CvUnit* pkUnit = GetInstance(L);
-	const int iResult = pkUnit->getKamikazePercent();
 
 	lua_pushinteger(L, iResult);
 	return 1;
@@ -6398,7 +6266,6 @@ int CvLuaUnit::lCanStartMission(lua_State* L)
 	const int iData2 = lua_tointeger(L, 4);
 	CvPlot* pkPlot = CvLuaPlot::GetInstance(L, 5, false);
 	const bool bTestVisible = luaL_optint(L, 6, 0);
-	const bool bUseCache = luaL_optint(L, 7, 0);
 
 	const bool bResult = pkUnit->CanStartMission(iMission, iData1, iData2, pkPlot, bTestVisible);
 	lua_pushboolean(L, bResult);

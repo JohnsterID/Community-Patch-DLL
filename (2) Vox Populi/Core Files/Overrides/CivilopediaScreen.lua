@@ -3042,11 +3042,9 @@ CivilopediaCategory[CategoryUnits].SelectArticle = function( unitID, shouldAddTo
 		AnalyzeUnit("OneShotTourismPercentOthers");
 		AnalyzeUnit("IgnoreBuildingDefense");
 		AnalyzeUnit("PrereqResources");
-		AnalyzeUnit("Mechanized");
 		AnalyzeUnit("Suicide");
 		AnalyzeUnit("CaptureWhileEmbarked");
 		AnalyzeUnit("HurryCostModifier");
-		AnalyzeUnit("AdvancedStartCost");
 		AnalyzeUnit("AirInterceptRange", "[ICON_RANGE_STRENGTH]");
 		AnalyzeUnit("AirUnitCap", "[ICON_AIRSTRIKE_DEFENSE]");
 		AnalyzeUnit("NukeDamageLevel");
@@ -3067,13 +3065,9 @@ CivilopediaCategory[CategoryUnits].SelectArticle = function( unitID, shouldAddTo
 		AnalyzeUnit("RequiresEnhancedReligion");
 		AnalyzeUnit("ProhibitsSpread");
 		AnalyzeUnit("CanBuyCityState");
-		--AnalyzeUnit("CombatLimit", ""); -- intrernal
-		-- AnalyzeUnit("RangedCombatLimit"); -- internal
 		AnalyzeUnit("RangeAttackOnlyInDomain");
 		AnalyzeUnit("RangeAttackIgnoreLOS");
 		AnalyzeUnit("NumExoticGoods", "");
-		--AnalyzeUnit("XPValueAttack", ""); -- internal
-		--AnalyzeUnit("XPValueDefense", ""); -- internal
 		AnalyzeUnit("DomainCargo", "Domains", "Cargo domain");
 		AnalyzeUnit("SpecialCargo", "SpecialUnits", "Special cargo");
 		AnalyzeUnit("SpecialUnitCargoLoad", "SpecialUnits", "Special cargo load");
@@ -3489,7 +3483,6 @@ CivilopediaCategory[CategoryPromotions].SelectArticle = function( promotionID, s
 		AnalyzePromotion("AdjacentCityDefenseMod");
 		AnalyzePromotion("NearbyEnemyDamage", "");
 		AnalyzePromotion("MilitaryProductionModifier");
-		AnalyzePromotion("HighSeaRaider");
 		AnalyzePromotion("AuraRangeChange", "");
 		AnalyzePromotion("AuraEffectChange", "");
 		AnalyzePromotion("NearbyHealEnemyTerritory");
@@ -3517,7 +3510,7 @@ CivilopediaCategory[CategoryPromotions].SelectArticle = function( promotionID, s
 		AnalyzePromotion("MaxHitPointsModifier");
 		-- Domains
 		for row in DB.Query("SELECT Domains.Description, UnitPromotions_Domains.Modifier, UnitPromotions_Domains.Attack, UnitPromotions_Domains.Defense FROM UnitPromotions_Domains INNER JOIN Domains ON UnitPromotions_Domains.DomainType = Domains.Type WHERE PromotionType = ?", thisPromotion.Type) do
-			if row.Modifier ~= 0 then sText = sText.."[NEWLINE][ICON_BULLET]"..string.format("%+d", row.Modifier).."% strength against [COLOR_CYAN]"..Locale.Lookup(row.Description).."[ENDCOLOR]"; end
+			if row.Modifier and row.Modifier ~= 0 then sText = sText.."[NEWLINE][ICON_BULLET]"..string.format("%+d", row.Modifier).."% strength against [COLOR_CYAN]"..Locale.Lookup(row.Description).."[ENDCOLOR]"; end
 			if row.Attack ~= 0 then sText = sText.."[NEWLINE][ICON_BULLET]"..string.format("%+d", row.Attack).."% strength when attacking [COLOR_CYAN]"..Locale.Lookup(row.Description).."[ENDCOLOR]"; end
 			if row.Defense ~= 0 then sText = sText.."[NEWLINE][ICON_BULLET]"..string.format("%+d", row.Defense).."% strength when defending against [COLOR_CYAN]"..Locale.Lookup(row.Description).."[ENDCOLOR]"; end
 		end
@@ -4360,8 +4353,6 @@ function SelectBuildingOrWonderArticle( buildingID )
 		if thisBuilding.NearbyTerrainRequired ~= nil then sText = sText.."[NEWLINE][ICON_BULLET]Requires [COLOR_CYAN]"..Locale.Lookup(GameInfo.Terrains[thisBuilding.NearbyTerrainRequired].Description).."[ENDCOLOR]"; end
 		--AnalyzeBuilding("ProhibitedCityTerrain");
 		if thisBuilding.ProhibitedCityTerrain ~= nil then sText = sText.."[NEWLINE][ICON_BULLET]Prohibited [COLOR_NEGATIVE_TEXT]"..Locale.Lookup(GameInfo.Terrains[thisBuilding.ProhibitedCityTerrain].Description).."[ENDCOLOR]"; end
-		AnalyzeBuilding("FoundsReligion");
-		AnalyzeBuilding("IsReligious");
 		AnalyzeBuilding("BorderObstacle", "");
 		AnalyzeBuilding("PlayerBorderObstacle", "");
 		AnalyzeBuilding("Capital");

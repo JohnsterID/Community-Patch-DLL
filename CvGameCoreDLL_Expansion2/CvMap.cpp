@@ -578,6 +578,7 @@ void CvMap::init(CvMapInitData* pInitInfo/*=NULL*/)
 	// Init containers
 	m_areas.RemoveAll();
 	m_landmasses.RemoveAll();
+	m_rivers.RemoveAll();
 
 	//--------------------------------
 	// Init non-saved data
@@ -752,6 +753,7 @@ void CvMap::reset(CvMapInitData* pInitInfo)
 
 	m_areas.RemoveAll();
 	m_landmasses.RemoveAll();
+	m_rivers.RemoveAll();
 
 	m_vDeferredFogPlots.clear();
 
@@ -1051,11 +1053,7 @@ CvPlot* CvMap::syncRandPlot(int iFlags, int iArea, int iMinUnitDistance, int iTi
 			{
 				if(iFlags & RANDPLOT_PASSIBLE)
 				{
-#if defined(MOD_BALANCE_CORE)
 					if(pTestPlot->isImpassable(BARBARIAN_TEAM))
-#else
-					if(pTestPlot->isImpassable())
-#endif
 					{
 						bValid = false;
 					}
@@ -1908,11 +1906,7 @@ void CvMap::DoPlaceNaturalWonders()
 	{
 		eFeature = (FeatureTypes) iFeatureLoop;
 		CvFeatureInfo* feature = GC.getFeatureInfo(eFeature);
-#if defined(MOD_PSEUDO_NATURAL_WONDER)
-		if(feature && feature->IsNaturalWonder(true))
-#else
-		if(feature && feature->IsNaturalWonder())
-#endif
+		if (feature && feature->IsNaturalWonder(true))
 		{
 			eNWFeature = eFeature;
 
@@ -2572,8 +2566,7 @@ void CvMap::RecalculateRivers()
 //	--------------------------------------------------------------------------------
 void CvMap::CalculateRivers()
 {
-	// No need to calculate rivers for CP
-	if (!MOD_BALANCE_VP)
+	if (!MOD_RIVER_CITY_CONNECTIONS)
 		return;
 
 	CvPlot* pLoopPlot = NULL;
@@ -2729,7 +2722,6 @@ int CvMap::GetAIMapHint()
 	return m_iAIMapHints;
 }
 
-#if defined(MOD_UNIT_KILL_STATS)
 int CvMap::GetUnitKillCount(PlayerTypes ePlayer, int iPlotIndex)
 {
 	if (killCount.find(ePlayer) != killCount.end())
@@ -2785,7 +2777,6 @@ void CvMap::DoKillCountDecay(float fDecayFactor)
 		for (UnitKillCount::value_type::second_type::iterator itPlot = itPlayer->second.begin(); itPlot != itPlayer->second.end(); ++itPlot)
 			itPlot->second = int(itPlot->second*fDecayFactor);
 }
-#endif
 
 void CvMap::LineOfSightChanged(const CvPlot* pPlot)
 {

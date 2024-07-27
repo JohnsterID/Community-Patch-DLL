@@ -168,10 +168,10 @@ public:
 	void updateSeeFromSight(bool bIncrement, bool bRecalculate);
 
 	bool canHaveResource(ResourceTypes eResource, bool bIgnoreLatitude = false, bool bIgnoreCiv = false) const;
-	bool canHaveImprovement(ImprovementTypes eImprovement, PlayerTypes ePlayer = NO_PLAYER, bool bOnlyTestVisible = false, bool bCheckAdjacency = false) const;
+	bool canHaveImprovement(ImprovementTypes eImprovement, PlayerTypes ePlayer = NO_PLAYER, bool bOnlyTestVisible = false, bool bCheckAdjacency = false, bool bTestXAdjacent = false) const;
 	BuildTypes GetBuildTypeFromImprovement(ImprovementTypes eImprovement) const;
 
-	bool canBuild(BuildTypes eBuild, PlayerTypes ePlayer = NO_PLAYER, bool bTestVisible = false, bool bTestPlotOwner = true) const;
+	bool canBuild(BuildTypes eBuild, PlayerTypes ePlayer = NO_PLAYER, bool bTestVisible = false, bool bTestPlotOwner = true, bool bTestXAdjacent = false) const;
 	int getBuildTime(BuildTypes eBuild, PlayerTypes ePlayer) const;
 	int getBuildTurnsTotal(BuildTypes eBuild, PlayerTypes ePlayer) const;
 	int getBuildTurnsLeft(BuildTypes eBuild, PlayerTypes ePlayer, int iNowExtra, int iThenExtra) const;
@@ -477,11 +477,7 @@ public:
 	void setPlotType(PlotTypes eNewValue, bool bRecalculate = true, bool bRebuildGraphics = true, bool bEraseUnitsIfWater = true);
 	void setTerrainType(TerrainTypes eNewValue, bool bRecalculate = true, bool bRebuildGraphics = true);
 	void setFeatureType(FeatureTypes eNewValue);
-#if defined(MOD_PSEUDO_NATURAL_WONDER)
 	bool IsNaturalWonder(bool orPseudoNatural = true) const;
-#else
-	bool IsNaturalWonder(bool orPseudoNatural = false) const;
-#endif
 
 	ResourceTypes getResourceType(TeamTypes eTeam = NO_TEAM, bool bIgnoreTechPrereq = false) const;
 	ResourceTypes getNonObsoleteResourceType(TeamTypes eTeam = NO_TEAM) const;
@@ -501,11 +497,7 @@ public:
 	bool IsImprovementPassable() const;
 	void SetImprovementPassable(bool bPassable);
 	bool IsImprovementPillaged() const;
-#if defined(MOD_EVENTS_TILE_IMPROVEMENTS)
 	void SetImprovementPillaged(bool bPillaged, bool bEvents = true);
-#else
-	void SetImprovementPillaged(bool bPillaged);
-#endif
 
 	// Someone gifted an improvement in an owned plot? (major civ gift to city-state)
 	bool IsImprovedByGiftFromMajor() const;
@@ -538,11 +530,7 @@ public:
 	void updateCityRoute();
 
 	bool IsRoutePillaged() const;
-#if defined(MOD_EVENTS_TILE_IMPROVEMENTS)
 	void SetRoutePillaged(bool bPillaged, bool bEvents = true);
-#else
-	void SetRoutePillaged(bool bPillaged);
-#endif
 
 	PlayerTypes GetLandmarkCreditMinor() const;
 	void SetLandmarkCreditMinor(PlayerTypes eNewValue);
@@ -588,36 +576,20 @@ public:
 
 	int calculateImprovementYield(YieldTypes eYield, PlayerTypes ePlayer, ImprovementTypes eImprovement, RouteTypes eRoute, FeatureTypes eFeature, ResourceTypes eResource, RouteTypes eForceCityConnection, const CvCity* pOwningCity, bool bOptimal = false) const;
 
-#if defined(MOD_RELIGION_PERMANENT_PANTHEON)
 	int calculatePlayerYield(YieldTypes eYield, int iCurrentYield, PlayerTypes ePlayer, ImprovementTypes eImprovement, FeatureTypes eFeature, ResourceTypes eResource, RouteTypes eForceCityConnection, const CvCity* pOwningCity, const CvReligion* pMajorityReligion, const CvBeliefEntry* pSecondaryPantheon, const CvReligion* pPlayerPantheon, bool bDisplay) const;
-#else
-	int calculatePlayerYield(YieldTypes eYield, int iCurrentYield, PlayerTypes ePlayer, ImprovementTypes eImprovement, FeatureTypes eFeature, ResourceTypes eResource, RouteTypes eForceCityConnection, const CvCity* pOwningCity, const CvReligion* pMajorityReligion, const CvBeliefEntry* pSecondaryPantheon, bool bDisplay) const;
-#endif
 
 	int calculateReligionNatureYield(YieldTypes eYield, PlayerTypes ePlayer, ImprovementTypes eImprovement, FeatureTypes eFeature, ResourceTypes eResource, const CvCity* pOwningCity, const CvReligion* pMajorityReligion, const CvBeliefEntry* pSecondaryPantheon) const;
 	int calculateReligionImprovementYield(YieldTypes eYield, PlayerTypes ePlayer, ImprovementTypes eImprovement, ResourceTypes eResource, const CvCity* pOwningCity, const CvReligion* pMajorityReligion, const CvBeliefEntry* pSecondaryPantheon) const;
 
 	int calculateYield(YieldTypes eYield, bool bDisplay = false, const CvCity* pOwningCity=NULL);
-#if defined(MOD_RELIGION_PERMANENT_PANTHEON)
 	int calculateYieldFast(YieldTypes eYield, bool bDisplay, const CvCity* pOwningCity, const CvReligion* pMajorityReligion, const CvBeliefEntry* pSecondaryPantheon, const CvReligion* pPlayerPantheon=NULL);
-#else
-	int calculateYieldFast(YieldTypes eYield, bool bDisplay, const CvCity* pOwningCity, const CvReligion* pMajorityReligion, const CvBeliefEntry* pSecondaryPantheon);
-#endif
 
 	bool hasYield() const;
 
 	void updateYield();
-#if defined(MOD_RELIGION_PERMANENT_PANTHEON)
 	void updateYieldFast(CvCity* pWorkingCity, const CvReligion* pMajorityReligion, const CvBeliefEntry* pSecondaryPantheon, const CvReligion* pPlayerPantheon = NULL);
-#else
-	void updateYieldFast(CvCity* pOwningCity, const CvReligion* pMajorityReligion, const CvBeliefEntry* pSecondaryPantheon);
-#endif
 
-#if defined(MOD_RELIGION_PERMANENT_PANTHEON)
 	int getYieldWithBuild(BuildTypes eBuild, YieldTypes eYield, bool bWithUpgrade, RouteTypes eForceCityConnection, PlayerTypes ePlayer, const CvCity* pOwningCity, const CvReligion* pMajorityReligion, const CvBeliefEntry* pSecondaryPantheon, const CvReligion* pPlayerPantheon = NULL) const;
-#else
-	int getYieldWithBuild(BuildTypes eBuild, YieldTypes eYield, bool bWithUpgrade, RouteTypes eForceCityConnection, PlayerTypes ePlayer, const CvCity* pOwningCity, const CvReligion* pMajorityReligion, const CvBeliefEntry* pSecondaryPantheon) const;
-#endif
 
 	int countNumAirUnits(TeamTypes eTeam, bool bNoSuicide = false) const;
 
@@ -636,12 +608,8 @@ public:
 		CvAssertMsg(eTeam >= 0, "eTeam is expected to be non-negative (invalid Index)");
 		CvAssertMsg(eTeam < MAX_TEAMS, "eTeam is expected to be within maximum bounds (invalid Index)");
 
-#if defined(MOD_CORE_DELAYED_VISIBILITY)
-		//return the hacked visibility count so plots which were once visible this turn stay that way
-		return m_aiVisibilityCountThisTurnMax[eTeam];
-#else
-		return m_aiVisibilityCount[eTeam];
-#endif
+		//With delayed visibility, return the hacked visibility count so plots which were once visible this turn stay that way
+		return MOD_CORE_DELAYED_VISIBILITY ? m_aiVisibilityCountThisTurnMax[eTeam] : m_aiVisibilityCount[eTeam];
 	}
 
 	void flipVisibility(TeamTypes eTeam);
@@ -871,7 +839,7 @@ public:
 	int GetNumSpecificPlayerUnitsAdjacent(PlayerTypes ePlayer, const CvUnit* pUnitToExclude = NULL, const CvUnit* pExampleUnitType = NULL, bool bCombatOnly = true) const;
 
 	int GetStrategicValue(PlayerTypes ePlayer) const;
-	int GetDefenseBuildValue(PlayerTypes eOwner, BuildTypes eBuild=NO_BUILD, ImprovementTypes eImprovement=NO_IMPROVEMENT, SBuilderState sState=SBuilderState()) const;
+	int GetDefenseBuildValue(PlayerTypes eOwner, BuildTypes eBuild=NO_BUILD, ImprovementTypes eImprovement=NO_IMPROVEMENT, const SBuilderState& sState=SBuilderState::DefaultInstance()) const;
 
 	void updateImpassable(TeamTypes eTeam = NO_TEAM);
 

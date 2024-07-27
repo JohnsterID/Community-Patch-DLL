@@ -1,6 +1,13 @@
 -- General Changes to the DLL's Global Values
 
 -------------------------------------------------------------------------------------------------------------------
+-- Game Options
+-------------------------------------------------------------------------------------------------------------------
+
+-- If > -1, a player with no cities but who is still alive (Complete Kills) will be granted a free Settler after this many turns
+UPDATE Defines SET Value = 10 WHERE Name = 'COMPLETE_KILLS_TURN_TIMER';
+
+-------------------------------------------------------------------------------------------------------------------
 -- Defensive Pact
 -------------------------------------------------------------------------------------------------------------------
 
@@ -107,9 +114,6 @@ UPDATE Defines SET Value = 1.35 WHERE Name = 'CULTURE_COST_LATER_PLOT_EXPONENT';
 -- % Extra gold cost to buy a resource tile
 UPDATE Defines SET Value = 0 WHERE Name = 'PLOT_BUY_RESOURCE_COST';
 
--- Unused
-UPDATE Defines SET Value = 0 WHERE Name = 'PLOT_BUY_NW_COST';
-
 -- Population required for training settlers
 UPDATE Defines SET Value = 4 WHERE Name = 'CITY_MIN_SIZE_FOR_SETTLERS';
 
@@ -145,9 +149,8 @@ UPDATE Defines SET Value = 5 WHERE Name = 'GROWTH_PENALTY_PER_UNIT_OVER_SUPPLY';
 UPDATE Defines SET Value = 100 WHERE Name = 'UNIT_SUPPLY_BASE_TECH_REDUCTION_PER_ERA';
 
 -- Supply from city
--- City supply /= (1 + Tech progress * UNIT_SUPPLY_CITIES_TECH_REDUCTION_MULTIPLIER / UNIT_SUPPLY_CITIES_TECH_REDUCTION_DIVISOR)
-UPDATE Defines SET Value = 5 WHERE Name = 'UNIT_SUPPLY_CITIES_TECH_REDUCTION_MULTIPLIER';
-UPDATE Defines SET Value = 6 WHERE Name = 'UNIT_SUPPLY_CITIES_TECH_REDUCTION_DIVISOR';
+-- City supply /= (1 + Tech progress * UNIT_SUPPLY_CITIES_TECH_REDUCTION_MULTIPLIER / 100)
+UPDATE Defines SET Value = 83 WHERE Name = 'UNIT_SUPPLY_CITIES_TECH_REDUCTION_MULTIPLIER';
 
 -- Supply from population
 -- % provided by puppet city population
@@ -349,9 +352,6 @@ UPDATE Defines SET Value = 10 WHERE Name = 'MINOR_CIV_BUYOUT_TURNS';
 -- Sane value in case gold gift is re-enabled
 UPDATE Defines SET Value = 18 WHERE Name = 'GOLD_GIFT_FRIENDSHIP_DIVISOR';
 
--- First meeting gold, unused in VP
-UPDATE Defines SET Value = 20 WHERE Name = 'MINOR_CIV_CONTACT_GOLD_OTHER';
-
 -------------------------------------------------------------------------------------------------------------------
 -- Policies
 -------------------------------------------------------------------------------------------------------------------
@@ -377,6 +377,9 @@ UPDATE Defines SET Value = 15 WHERE Name = 'TOURISM_MODIFIER_OPEN_BORDERS';
 UPDATE Defines SET Value = 10 WHERE Name = 'TOURISM_MODIFIER_TRADE_ROUTE';
 UPDATE Defines SET Value = -10 WHERE Name = 'TOURISM_MODIFIER_DIFFERENT_IDEOLOGIES';
 UPDATE Defines SET Value = 20 WHERE Name = 'TOURISM_MODIFIER_DIPLOMAT';
+UPDATE Defines SET Value = 1 WHERE Name = 'TOURISM_MODIFIER_SHARED_RELIGION'; -- percentage
+UPDATE Defines SET Value = 50 WHERE Name = 'TOURISM_MODIFIER_SHARED_RELIGION_MAX';
+UPDATE Defines SET Value = 2 WHERE Name = 'TOURISM_MODIFIER_SHARED_RELIGION_TYPE'; -- 0 = no scaling, 1 = scaling per city, 2 = scaling per population
 
 -------------------------------------------------------------------------------------------------------------------
 -- Religion
@@ -555,7 +558,8 @@ UPDATE Defines SET Value = 3 WHERE Name = 'SCORE_RELIGION_CITIES_MULTIPLIER';
 -- Don't rush workers until city has reached this population
 UPDATE Defines SET Value = 4 WHERE Name = 'AI_CITYSTRATEGY_WANT_TILE_IMPROVERS_MINIMUM_SIZE';
 
-UPDATE Defines SET Value = 5 WHERE Name = 'AI_CITIZEN_VALUE_GPP';
+UPDATE Defines SET Value = 10 WHERE Name = 'AI_CITIZEN_VALUE_GPP';
+UPDATE Defines SET Value = 8 WHERE Name = 'AI_CITIZEN_VALUE_GOLD';
 
 -- War progress score modifier per % happiness below 50%
 UPDATE Defines SET Value = -2 WHERE Name = 'WAR_PROGRESS_PER_UNHAPPY';

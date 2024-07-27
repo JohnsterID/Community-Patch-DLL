@@ -234,10 +234,10 @@ UPDATE Buildings SET MinAreaSize = (
 ) WHERE Water = 1;
 
 -----------------------------------------------------------------
--- Nuke Immunity (unused in VP, as nukes don't destroy buildings)
+-- Nuke Immunity (only used by "destroy random buildings" event in VP, as nukes don't destroy buildings)
 -----------------------------------------------------------------
 
--- Only wonders and dummy buildings are nuke immune
+-- Only wonders, dummy buildings, and Strategic Defense System are nuke immune
 UPDATE Buildings SET NukeImmune = 0;
 
 UPDATE Buildings
@@ -246,6 +246,7 @@ WHERE BuildingClass IN (
 	SELECT Type FROM BuildingClasses
 	WHERE MaxPlayerInstances = 1
 )
+OR BuildingClass = 'BUILDINGCLASS_BOMB_SHELTER'
 OR WonderSplashImage IS NOT NULL
 OR IsDummy = 1;
 

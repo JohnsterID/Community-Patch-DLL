@@ -1,5 +1,5 @@
 /*	-------------------------------------------------------------------------------------------------------
-	© 1991-2012 Take-Two Interactive Software and its subsidiaries.  Developed by Firaxis Games.  
+	Â© 1991-2012 Take-Two Interactive Software and its subsidiaries.  Developed by Firaxis Games.  
 	Sid Meier's Civilization V, Civ, Civilization, 2K Games, Firaxis Games, Take-Two Interactive Software 
 	and their respective logos are all trademarks of Take-Two interactive Software, Inc.  
 	All other marks and trademarks are the property of their respective owners.  
@@ -68,8 +68,6 @@ void CvLuaGame::RegisterMembers(lua_State* L)
 	Method(CityPurchaseBuilding);
 	Method(CityPurchaseProject);
 
-	Method(GetProductionPerPopulation);
-
 	Method(GetAdjustedPopulationPercent);
 	Method(GetAdjustedLandPercent);
 
@@ -119,8 +117,6 @@ void CvLuaGame::RegisterMembers(lua_State* L)
 	Method(ChangeMaxTurns);
 	Method(GetMaxCityElimination);
 	Method(SetMaxCityElimination);
-	Method(GetNumAdvancedStartPoints);
-	Method(SetNumAdvancedStartPoints);
 	Method(GetStartTurn);
 	Method(GetWinningTurn);
 	Method(GetStartYear);
@@ -196,6 +192,8 @@ void CvLuaGame::RegisterMembers(lua_State* L)
 
 	Method(GetActivePlayer);
 	Method(SetActivePlayer);
+	Method(GetObserverUIOverridePlayer);
+	Method(SetObserverUIOverridePlayer);
 	Method(GetPausePlayer);
 	Method(SetPausePlayer);
 	Method(IsPaused);
@@ -248,7 +246,6 @@ void CvLuaGame::RegisterMembers(lua_State* L)
 	Method(MakeSpecialUnitValid);
 	Method(IsNukesValid);
 	Method(MakeNukesValid);
-	Method(IsInAdvancedStart);
 
 	Method(SetName);
 	Method(GetName);
@@ -296,9 +293,7 @@ void CvLuaGame::RegisterMembers(lua_State* L)
 
 	Method(GetResourceUsageType);
 
-#if defined(MOD_UNITS_RESOURCE_QUANTITY_TOTALS)
 	Method(GetNumResourceTotalRequiredForUnit);
-#endif
 
 	Method(GetNumResourceRequiredForUnit);
 	Method(GetNumResourceRequiredForBuilding);
@@ -346,7 +341,9 @@ void CvLuaGame::RegisterMembers(lua_State* L)
 	Method(GetScienceMedianModifierBuildingGlobal);
 	Method(GetCultureMedianModifierBuildingGlobal);
 	Method(GetReligiousUnrestModifierBuildingGlobal);
-	Method(GetPromiseDuration);
+	Method(GetMilitaryPromiseDuration);
+	Method(GetExpansionPromiseDuration);
+	Method(GetBorderPromiseDuration);
 	Method(GetCorporationFounder);
 	Method(GetCorporationHeadquarters);
 	Method(GetNumCorporationsFounded);
@@ -662,12 +659,6 @@ int CvLuaGame::lCityPurchaseProject(lua_State* L)
 	return 0;
 }
 //------------------------------------------------------------------------------
-// int getProductionPerPopulation(HurryTypes eHurry);
-int CvLuaGame::lGetProductionPerPopulation(lua_State* L)
-{
-	return BasicLuaMethod(L, &CvGame::getProductionPerPopulation);
-}
-//------------------------------------------------------------------------------
 // int getAdjustedPopulationPercent(VictoryTypes eVictory);
 int CvLuaGame::lGetAdjustedPopulationPercent(lua_State* L)
 {
@@ -927,18 +918,6 @@ int CvLuaGame::lGetMaxCityElimination(lua_State* L)
 int CvLuaGame::lSetMaxCityElimination(lua_State* L)
 {
 	return BasicLuaMethod(L, &CvGame::setMaxCityElimination);
-}
-//------------------------------------------------------------------------------
-//int getNumAdvancedStartPoints();
-int CvLuaGame::lGetNumAdvancedStartPoints(lua_State* L)
-{
-	return BasicLuaMethod(L, &CvGame::getNumAdvancedStartPoints);
-}
-//------------------------------------------------------------------------------
-//void setNumAdvancedStartPoints(int iNewValue);
-int CvLuaGame::lSetNumAdvancedStartPoints(lua_State* L)
-{
-	return BasicLuaMethod(L, &CvGame::setNumAdvancedStartPoints);
 }
 //------------------------------------------------------------------------------
 //int getStartTurn();
@@ -1362,6 +1341,18 @@ int CvLuaGame::lSetActivePlayer(lua_State* L)
 	return BasicLuaMethod(L, &CvGame::setActivePlayer);
 }
 //------------------------------------------------------------------------------
+//PlayerTypes getActivePlayerUI();
+int CvLuaGame::lGetObserverUIOverridePlayer(lua_State* L)
+{
+	return BasicLuaMethod(L, &CvGame::getObserverUIOverridePlayer);
+}
+//------------------------------------------------------------------------------
+//PlayerTypes setObserverUIOverridePlayer();
+int CvLuaGame::lSetObserverUIOverridePlayer(lua_State* L)
+{
+	return BasicLuaMethod(L, &CvGame::setObserverUIOverridePlayer);
+}
+//------------------------------------------------------------------------------
 //int getPausePlayer();
 int CvLuaGame::lGetPausePlayer(lua_State* L)
 {
@@ -1666,12 +1657,6 @@ int CvLuaGame::lIsNukesValid(lua_State* L)
 int CvLuaGame::lMakeNukesValid(lua_State* L)
 {
 	return BasicLuaMethod(L, &CvGame::makeNukesValid);
-}
-//------------------------------------------------------------------------------
-//bool isInAdvancedStart();
-int CvLuaGame::lIsInAdvancedStart(lua_State* L)
-{
-	return BasicLuaMethod(L, &CvGame::isInAdvancedStart);
 }
 //------------------------------------------------------------------------------
 //void setName(char* szName);
@@ -2031,7 +2016,7 @@ int CvLuaGame::lGetResourceUsageType(lua_State* L)
 
 	return 1;
 }
-#if defined(MOD_UNITS_RESOURCE_QUANTITY_TOTALS)
+
 //------------------------------------------------------------------------------
 int CvLuaGame::lGetNumResourceTotalRequiredForUnit(lua_State* L)
 {
@@ -2050,7 +2035,6 @@ int CvLuaGame::lGetNumResourceTotalRequiredForUnit(lua_State* L)
 
 	return 1;
 }
-#endif
 //------------------------------------------------------------------------------
 int CvLuaGame::lGetNumResourceRequiredForUnit(lua_State* L)
 {
@@ -2549,9 +2533,22 @@ int CvLuaGame::lGetBuildingCorporateGPChange(lua_State* L)
 	lua_pushinteger(L, iYieldChange);
 	return 1;
 }
-int CvLuaGame::lGetPromiseDuration(lua_State* L)
+int CvLuaGame::lGetMilitaryPromiseDuration(lua_State* L)
+{
+	// This promise does not scale with game speed!
+	int iTimeOutTurns = /*20*/ GD_INT_GET(MOVE_TROOPS_MEMORY_TURN_EXPIRATION);
+	lua_pushinteger(L, iTimeOutTurns);
+	return 1;
+}
+int CvLuaGame::lGetExpansionPromiseDuration(lua_State* L)
 {
 	int iTimeOutTurns = (/*50*/ GD_INT_GET(EXPANSION_PROMISE_TURNS_EFFECTIVE) * GC.getGame().getGameSpeedInfo().getOpinionDurationPercent()) / 100;
+	lua_pushinteger(L, iTimeOutTurns);
+	return 1;
+}
+int CvLuaGame::lGetBorderPromiseDuration(lua_State* L)
+{
+	int iTimeOutTurns = (/*50*/ GD_INT_GET(BORDER_PROMISE_TURNS_EFFECTIVE) * GC.getGame().getGameSpeedInfo().getOpinionDurationPercent()) / 100;
 	lua_pushinteger(L, iTimeOutTurns);
 	return 1;
 }
