@@ -46,6 +46,10 @@
 #the following files should never be changed
 (2) Vox Populi/Mapscripts/EMP
 
+#cmake config
+!*.bat
+!*.cmake
+
 #ignore output from Visual Studio, ModBuddy, and Inno
 .vs/
 BuildOutput/
