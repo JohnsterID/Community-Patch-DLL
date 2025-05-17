@@ -1,5 +1,5 @@
 /*	-------------------------------------------------------------------------------------------------------
-	© 1991-2012 Take-Two Interactive Software and its subsidiaries.  Developed by Firaxis Games.  
+	Â© 1991-2012 Take-Two Interactive Software and its subsidiaries.  Developed by Firaxis Games.  
 	Sid Meier's Civilization V, Civ, Civilization, 2K Games, Firaxis Games, Take-Two Interactive Software 
 	and their respective logos are all trademarks of Take-Two interactive Software, Inc.  
 	All other marks and trademarks are the property of their respective owners.  
@@ -16,7 +16,7 @@ CvDllUnit::CvDllUnit(CvUnit* pUnit)
 	: m_pUnit(pUnit)
 	, m_uiRefCount(1)
 {
-	FAssertMsg(pUnit != NULL, "SHOULD NOT HAPPEN");
+	ASSERT_DEBUG(pUnit != NULL, "SHOULD NOT HAPPEN");
 }
 //------------------------------------------------------------------------------
 CvDllUnit::~CvDllUnit()
@@ -185,7 +185,7 @@ ICvMissionData1* CvDllUnit::GetHeadMissionData() const
 //------------------------------------------------------------------------------
 UnitCombatTypes CvDllUnit::GetUnitCombatType()
 {
-	return (UnitCombatTypes)m_pUnit->getUnitCombatType();
+	return m_pUnit->getUnitCombatType();
 }
 //------------------------------------------------------------------------------
 int CvDllUnit::GetX() const
@@ -207,7 +207,7 @@ void CvDllUnit::GetPosition(int& iX, int& iY) const
 bool CvDllUnit::CanSwapWithUnitHere(ICvPlot1* pPlot) const
 {
 	CvPlot* pkPlot = (NULL != pPlot)? dynamic_cast<CvDllPlot*>(pPlot)->GetInstance() : NULL;
-	FAssert(pkPlot != NULL);
+	ASSERT_DEBUG(pkPlot != NULL);
 	if(pkPlot != NULL)
 		return m_pUnit->CanSwapWithUnitHere(*pkPlot);
 	else
@@ -218,8 +218,8 @@ bool CvDllUnit::CanEmbarkOnto(ICvPlot1* pOriginPlot, ICvPlot1* pTargetPlot, bool
 {
 	CvPlot* pkOriginPlot = (NULL != pOriginPlot)? dynamic_cast<CvDllPlot*>(pOriginPlot)->GetInstance() : NULL;
 	CvPlot* pkTargetPlot = (NULL != pTargetPlot)? dynamic_cast<CvDllPlot*>(pTargetPlot)->GetInstance() : NULL;
-	FAssert(pkOriginPlot != NULL);
-	FAssert(pkTargetPlot != NULL);
+	ASSERT_DEBUG(pkOriginPlot != NULL);
+	ASSERT_DEBUG(pkTargetPlot != NULL);
 
 	if(pkOriginPlot != NULL && pkTargetPlot != NULL)
 		return m_pUnit->canEmbarkOnto(*pkOriginPlot, *pkTargetPlot, bOverrideEmbarkedCheck);
@@ -231,8 +231,8 @@ bool CvDllUnit::CanDisembarkOnto(ICvPlot1* pOriginPlot, ICvPlot1* pTargetPlot, b
 {
 	CvPlot* pkOriginPlot = (NULL != pOriginPlot)? dynamic_cast<CvDllPlot*>(pOriginPlot)->GetInstance() : NULL;
 	CvPlot* pkTargetPlot = (NULL != pTargetPlot)? dynamic_cast<CvDllPlot*>(pTargetPlot)->GetInstance() : NULL;
-	FAssert(pkOriginPlot != NULL);
-	FAssert(pkTargetPlot != NULL);
+	ASSERT_DEBUG(pkOriginPlot != NULL);
+	ASSERT_DEBUG(pkTargetPlot != NULL);
 	if(pkOriginPlot != NULL && pkTargetPlot != NULL)
 		return m_pUnit->canDisembarkOnto(*pkOriginPlot, *pkTargetPlot, bOverrideEmbarkedCheck);
 	else

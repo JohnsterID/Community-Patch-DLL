@@ -1,5 +1,5 @@
 /*	-------------------------------------------------------------------------------------------------------
-	© 1991-2012 Take-Two Interactive Software and its subsidiaries.  Developed by Firaxis Games.  
+	Â© 1991-2012 Take-Two Interactive Software and its subsidiaries.  Developed by Firaxis Games.  
 	Sid Meier's Civilization V, Civ, Civilization, 2K Games, Firaxis Games, Take-Two Interactive Software 
 	and their respective logos are all trademarks of Take-Two interactive Software, Inc.  
 	All other marks and trademarks are the property of their respective owners.  
@@ -48,7 +48,7 @@ bool CvFlavorRecipient::IsCity() const
 /// Public function that other classes can call to set/reset this recipient's flavors
 void CvFlavorRecipient::SetFlavors(const CvEnumMap<FlavorTypes, int>& piUpdatedFlavorValues, const char* reason)
 {
-	CvAssertMsg(piUpdatedFlavorValues.valid(), "Invalid map of flavor deltas passed to flavor recipient");
+	ASSERT_DEBUG(piUpdatedFlavorValues.valid(), "Invalid map of flavor deltas passed to flavor recipient");
 
 	if(!piUpdatedFlavorValues.valid()) return;
 
@@ -65,7 +65,7 @@ void CvFlavorRecipient::SetFlavors(const CvEnumMap<FlavorTypes, int>& piUpdatedF
 /// Public function that other classes can call to change this recipient's flavors
 void CvFlavorRecipient::ChangeFlavors(const CvEnumMap<FlavorTypes, int>& piDeltaFlavorValues, const char* reason, bool effectstart)
 {
-	CvAssertMsg(piDeltaFlavorValues.valid(), "Invalid map of flavor deltas passed to flavor recipient");
+	ASSERT_DEBUG(piDeltaFlavorValues.valid(), "Invalid map of flavor deltas passed to flavor recipient");
 
 	if(!piDeltaFlavorValues.valid()) return;
 
@@ -86,8 +86,8 @@ void CvFlavorRecipient::ChangeFlavors(const CvEnumMap<FlavorTypes, int>& piDelta
 /// LatestFlavorValue Accessor Function
 int CvFlavorRecipient::GetLatestFlavorValue(FlavorTypes eFlavor, bool bAllowNegative)
 {
-	CvAssertMsg(eFlavor > -1, "Out of bounds.");
-	CvAssertMsg(eFlavor < GC.getNumFlavorTypes(), "Out of bounds.");
+	ASSERT_DEBUG(eFlavor > -1, "Out of bounds.");
+	ASSERT_DEBUG(eFlavor < GC.getNumFlavorTypes(), "Out of bounds.");
 
 	if(m_piLatestFlavorValues[eFlavor] < 0 && !bAllowNegative)
 	{
@@ -261,7 +261,7 @@ void CvFlavorManager::RemoveFlavorRecipient(CvFlavorRecipient* pTargetObject)
 			m_FlavorTargetList.erase(iter);
 			return;
 		}
-		iter++;
+		++iter;
 	}
 }
 
@@ -289,7 +289,7 @@ void CvFlavorManager::ChangeLeader(LeaderHeadTypes eOldLeader, LeaderHeadTypes e
 /// Update to a new set of flavors
 void CvFlavorManager::ChangeActivePersonalityFlavors(const CvEnumMap<FlavorTypes, int>& piDeltaFlavorValues, const char* reason, bool effectstart)
 {
-	CvAssertMsg(piDeltaFlavorValues.valid(), "Invalid map of flavor deltas passed to flavor manager");
+	ASSERT_DEBUG(piDeltaFlavorValues.valid(), "Invalid map of flavor deltas passed to flavor manager");
 
 	if(!piDeltaFlavorValues.valid()) return;
 
@@ -304,7 +304,7 @@ void CvFlavorManager::ChangeActivePersonalityFlavors(const CvEnumMap<FlavorTypes
 		}
 	}
 
-	for (Flavor_List::iterator it = m_FlavorTargetList.begin(); it != m_FlavorTargetList.end(); it++)
+	for (Flavor_List::iterator it = m_FlavorTargetList.begin(); it != m_FlavorTargetList.end(); ++it)
 	{
 		if ((*it)->IsCity())
 			continue;
@@ -315,7 +315,7 @@ void CvFlavorManager::ChangeActivePersonalityFlavors(const CvEnumMap<FlavorTypes
 
 void CvFlavorManager::ChangeCityFlavors(const CvEnumMap<FlavorTypes, int>& piDeltaFlavorValues, const char* reason, bool effectstart)
 {
-	for (Flavor_List::iterator it = m_FlavorTargetList.begin(); it != m_FlavorTargetList.end(); it++)
+	for (Flavor_List::iterator it = m_FlavorTargetList.begin(); it != m_FlavorTargetList.end(); ++it)
 	{
 		if ((*it)->IsCity())
 			(*it)->ChangeFlavors(piDeltaFlavorValues, reason, effectstart);
@@ -339,7 +339,7 @@ void CvFlavorManager::ResetToBasePersonality()
 void CvFlavorManager::AdjustWeightsForMap()
 {
 	int iTotalLandTiles = GC.getMap().getLandPlots();
-	int iNumPlayers = GC.getGame().countMajorCivsAlive();
+	int iNumPlayers = GC.getGame().GetNumMajorCivsAlive();
 
 	if(iNumPlayers > 0)
 	{
@@ -362,7 +362,7 @@ void CvFlavorManager::AdjustWeightsForMap()
 		int iGrowthIndex = GC.getInfoTypeForString("FLAVOR_GROWTH");
 
 		// Boost expansion
-		CvAssert(iExpansionIndex >= 0 && iExpansionIndex < iNumFlavorTypes);
+		ASSERT_DEBUG(iExpansionIndex >= 0 && iExpansionIndex < iNumFlavorTypes);
 		if (iExpansionIndex >= 0 && iExpansionIndex < iNumFlavorTypes)
 		{
 			m_piPersonalityFlavor[iExpansionIndex] += iAdjust;
@@ -373,7 +373,7 @@ void CvFlavorManager::AdjustWeightsForMap()
 		}
 
 		// Reduce growth
-		CvAssert(iGrowthIndex >= 0 && iGrowthIndex < iNumFlavorTypes);
+		ASSERT_DEBUG(iGrowthIndex >= 0 && iGrowthIndex < iNumFlavorTypes);
 		if (iGrowthIndex >= 0 && iGrowthIndex < iNumFlavorTypes)
 		{
 			m_piPersonalityFlavor[iGrowthIndex] -= iAdjust;
@@ -448,7 +448,7 @@ int CvFlavorManager::GetAdjustedValue(int iOriginalValue, int iPlusMinus, int iM
 /// Sends base personality flavor settings to all recipients
 void CvFlavorManager::BroadcastBaseFlavors()
 {
-	for(Flavor_List::iterator it = m_FlavorTargetList.begin(); it != m_FlavorTargetList.end(); it++)
+	for(Flavor_List::iterator it = m_FlavorTargetList.begin(); it != m_FlavorTargetList.end(); ++it)
 	{
 		(*it)->SetFlavors(m_piPersonalityFlavor, "BASEFLAVOR");
 	}

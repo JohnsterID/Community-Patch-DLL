@@ -1,5 +1,5 @@
 /*	-------------------------------------------------------------------------------------------------------
-	© 1991-2012 Take-Two Interactive Software and its subsidiaries.  Developed by Firaxis Games.  
+	Â© 1991-2012 Take-Two Interactive Software and its subsidiaries.  Developed by Firaxis Games.  
 	Sid Meier's Civilization V, Civ, Civilization, 2K Games, Firaxis Games, Take-Two Interactive Software 
 	and their respective logos are all trademarks of Take-Two interactive Software, Inc.  
 	All other marks and trademarks are the property of their respective owners.  
@@ -54,6 +54,8 @@ private:
 
 	//! Prefetch the game data into local arrays.
 	bool PrefetchGameData();
+
+	void DatabaseRemapper();
 
 	//! Validation routines
 	bool ValidateGameDatabase();
@@ -121,7 +123,7 @@ bool CvDllDatabaseUtility::PrefetchCollection(std::vector<T*>& kCollection, cons
 		while(kResults.Step())
 		{
 			size_t Id = kResults.GetInt("ID");
-			CvAssertMsg(index <= Id, "This should never happen!")
+			ASSERT_DEBUG(index <= Id, "This should never happen!")
 
 			while(Id > index)
 			{
@@ -139,7 +141,7 @@ bool CvDllDatabaseUtility::PrefetchCollection(std::vector<T*>& kCollection, cons
 	{
 		char szErrorMsg[512];
 		sprintf_s(szErrorMsg, "PrefetchCollection: Cannot find table '%s'.  Error - %s", tableName, DB.ErrorMessage());
-		CvAssertMsg(false, szErrorMsg);
+		ASSERT_DEBUG(false, szErrorMsg);
 
 	}
 

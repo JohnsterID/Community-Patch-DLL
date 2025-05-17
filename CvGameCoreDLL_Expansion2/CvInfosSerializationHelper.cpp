@@ -1,5 +1,5 @@
 /*	-------------------------------------------------------------------------------------------------------
-	© 1991-2012 Take-Two Interactive Software and its subsidiaries.  Developed by Firaxis Games.  
+	Â© 1991-2012 Take-Two Interactive Software and its subsidiaries.  Developed by Firaxis Games.  
 	Sid Meier's Civilization V, Civ, Civilization, 2K Games, Firaxis Games, Take-Two Interactive Software 
 	and their respective logos are all trademarks of Take-Two interactive Software, Inc.  
 	All other marks and trademarks are the property of their respective owners.  
@@ -137,7 +137,7 @@ const char* ms_V0PolicyBranchTags[10] =
 /// Helper function to read a single type ID as a string and convert it to an ID
 int Read(FDataStream& kStream, bool* bValid /*= NULL*/)
 {
-	FStringFixedBuffer(sTemp, 256);
+	CvString sTemp;
 	kStream >> sTemp;
 	if(bValid) *bValid = true;
 	if(sTemp.GetLength() > 0 && sTemp != "NO_TYPE")
@@ -153,7 +153,7 @@ int Read(FDataStream& kStream, bool* bValid /*= NULL*/)
 			CvString szError;
 			szError.Format("LOAD ERROR: Type not found: %s", sTemp.c_str());
 			GC.LogMessage(szError.GetCString());
-			CvAssertMsg(false, szError);
+			ASSERT_DEBUG(false, szError);
 		}
 	}
 
@@ -178,7 +178,7 @@ int ReadHashed(FDataStream& kStream, bool* bValid /*= NULL*/)
 			CvString szError;
 			szError.Format("LOAD ERROR: Type not found for hash: %u", uiHash);
 			GC.LogMessage(szError.GetCString());
-			CvAssertMsg(false, szError);
+			ASSERT_DEBUG(false, szError);
 			if(bValid) *bValid = false;
 		}
 	}
@@ -190,7 +190,7 @@ int ReadHashed(FDataStream& kStream, bool* bValid /*= NULL*/)
 /// Assumes the type is in the table's field "Type"
 int ReadDBLookup(FDataStream& kStream, const char* szTable, bool* bValid /*= NULL*/)
 {
-	FStringFixedBuffer(sTemp, 256);
+	CvString sTemp;
 	kStream >> sTemp;
 	if (bValid) *bValid = true;
 	if(sTemp.GetLength() > 0 && sTemp != "NO_TYPE")
@@ -273,9 +273,8 @@ bool Write(FDataStream& kStream, const CvBaseInfo* pkInfo)
 {
 	if(pkInfo)
 	{
-		FStringFixedBuffer(sTemp, 256);
-		sTemp = pkInfo->GetType();
-		kStream << sTemp;
+		CvString temp = pkInfo->GetType();
+		kStream << temp;
 		return true;
 	}
 	else
@@ -293,7 +292,7 @@ bool WriteHashed(FDataStream& kStream, const CvBaseInfo* pkInfo)
 {
 	if(pkInfo && pkInfo->GetType() && pkInfo->GetType()[0] != 0)
 	{
-		uint uiHash = FString::Hash(pkInfo->GetType());
+		uint uiHash = FStringHash(pkInfo->GetType());
 		kStream << uiHash;
 		return true;
 	}

@@ -1,5 +1,5 @@
 /*	-------------------------------------------------------------------------------------------------------
-	© 1991-2012 Take-Two Interactive Software and its subsidiaries.  Developed by Firaxis Games.  
+	Â© 1991-2012 Take-Two Interactive Software and its subsidiaries.  Developed by Firaxis Games.  
 	Sid Meier's Civilization V, Civ, Civilization, 2K Games, Firaxis Games, Take-Two Interactive Software 
 	and their respective logos are all trademarks of Take-Two interactive Software, Inc.  
 	All other marks and trademarks are the property of their respective owners.  
@@ -124,12 +124,12 @@ void CvCityManager::OnCityDestroyed(CvCity* pkCity)
 //	---------------------------------------------------------------------------
 const CvCityManager::CityList& CvCityManager::GetNearbyCities(CvCity* pkCity)
 {
-	CvAssert(pkCity);
+	ASSERT_DEBUG(pkCity);
 	if (pkCity)
 	{
 		CityMap::const_iterator itr = ms_kCityMap.find(pkCity);
 
-		CvAssert(itr != ms_kCityMap.end());
+		ASSERT_DEBUG(itr != ms_kCityMap.end());
 		if (itr != ms_kCityMap.end())
 		{
 			return (*itr).second;

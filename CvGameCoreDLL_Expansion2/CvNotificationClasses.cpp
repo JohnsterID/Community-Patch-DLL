@@ -1,5 +1,5 @@
 /*	-------------------------------------------------------------------------------------------------------
-	© 1991-2012 Take-Two Interactive Software and its subsidiaries.  Developed by Firaxis Games.  
+	Â© 1991-2012 Take-Two Interactive Software and its subsidiaries.  Developed by Firaxis Games.  
 	Sid Meier's Civilization V, Civ, Civilization, 2K Games, Firaxis Games, Take-Two Interactive Software 
 	and their respective logos are all trademarks of Take-Two interactive Software, Inc.  
 	All other marks and trademarks are the property of their respective owners.  
@@ -14,9 +14,9 @@
 #include "LintFree.h"
 
 /// Constructor
-CvNotificationEntry::CvNotificationEntry(void)
+CvNotificationEntry::CvNotificationEntry()
+    : m_strNotificationType("")
 {
-	m_strNotificationType = "";
 }
 
 /// Destructor
@@ -98,6 +98,6 @@ CvNotificationEntry* CvNotificationXMLEntries::GetByID(uint hHash)
 CvNotificationEntry* CvNotificationXMLEntries::GetByString(const char* pszName)
 {
 	if (pszName && pszName[0] != 0)
-		return GetByID(FString::Hash(pszName));
+		return GetByID(FStringHash(pszName));
 	return NULL;
 }

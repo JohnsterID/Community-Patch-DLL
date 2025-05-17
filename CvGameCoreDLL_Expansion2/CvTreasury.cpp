@@ -1,5 +1,5 @@
 /*	-------------------------------------------------------------------------------------------------------
-	© 1991-2012 Take-Two Interactive Software and its subsidiaries.  Developed by Firaxis Games.  
+	Â© 1991-2012 Take-Two Interactive Software and its subsidiaries.  Developed by Firaxis Games.  
 	Sid Meier's Civilization V, Civ, Civilization, 2K Games, Firaxis Games, Take-Two Interactive Software 
 	and their respective logos are all trademarks of Take-Two interactive Software, Inc.  
 	All other marks and trademarks are the property of their respective owners.  
@@ -154,7 +154,7 @@ void CvTreasury::SetGoldTimes100(int iNewValue)
 	{
 		if(iNewValue < 0)
 		{
-			CvAssertMsg(false, "GAMEPLAY: Player is being set to a negative Gold value. Please send Jon this with your last 5 autosaves.");
+			ASSERT_DEBUG(false, "GAMEPLAY: Player is being set to a negative Gold value.");
 		}
 
 		m_iGold = max(0,iNewValue);
@@ -183,7 +183,7 @@ void CvTreasury::SetGoldTimes100(int iNewValue)
 /// Modifies current balance in treasury (in hundredths)
 void CvTreasury::ChangeGoldTimes100(int iChange)
 {
-	SetGoldTimes100(GetGoldTimes100() + iChange);
+	SetGoldTimes100(max(GetGoldTimes100() + iChange, 0));
 
 	//track the income for each turn (instant yields and regular)
 	if (iChange > 0)
@@ -236,7 +236,7 @@ void CvTreasury::ChangeGoldPerTurnFromDiplomacy(int iChange)
 }
 
 /// Get the amount of gold granted by connecting the city
-int CvTreasury::GetCityConnectionRouteGoldTimes100(CvCity* pNonCapitalCity) const
+int CvTreasury::GetCityConnectionRouteGoldTimes100(const CvCity* pNonCapitalCity) const
 {
 	CvCity* pCapitalCity = m_pPlayer->getCapitalCity();
 	if (!pNonCapitalCity || !pCapitalCity || pNonCapitalCity == pCapitalCity)
@@ -246,6 +246,9 @@ int CvTreasury::GetCityConnectionRouteGoldTimes100(CvCity* pNonCapitalCity) cons
 	iGold += pCapitalCity->getPopulation() * /*15 in CP, 6 in VP*/ GD_INT_GET(TRADE_ROUTE_CAPITAL_POP_GOLD_MULTIPLIER);	// Capital Multiplier
 	iGold += pNonCapitalCity->getPopulation() * /*110 in CP, 50 in VP*/ GD_INT_GET(TRADE_ROUTE_CITY_POP_GOLD_MULTIPLIER);	// City Multiplier
 	iGold += GetCityConnectionTradeRouteGoldChange() * 100;
+
+	if (iGold <= 0)
+		return 0;
 
 	int iMod = GetCityConnectionTradeRouteGoldModifier() + pNonCapitalCity->GetCityConnectionTradeRouteGoldModifier();
 	if (iMod != 0)
@@ -730,7 +733,7 @@ void CvTreasury::ChangeBaseImprovementGoldMaintenance(int iChange)
 /// Average change in gold balance over N turns
 int CvTreasury::AverageIncome100(int iTurns)
 {
-	CvAssertMsg(iTurns > 0, "Invalid number of turns parameter");
+	ASSERT_DEBUG(iTurns > 0, "Invalid number of turns parameter");
 
 	if(m_GoldChangeForTurnTimes100.size() > 0)
 	{
@@ -977,35 +980,64 @@ int CvTreasury::GetContractGoldMaintenance()
 #endif
 
 // What are our gold maintenance costs because of Vassals?
-int CvTreasury::GetVassalGoldMaintenance() const
+int CvTreasury::GetVassalGoldMaintenance(TeamTypes eTeam, bool bIncludePopulationMaintenance, bool bIncludeUnitMaintenance) const
 {
-	int iRtnValue = 0;
-	// We have a vassal
-	for(int iI = 0; iI < MAX_MAJOR_CIVS; iI++)
+	int iNumTeamMembers = GET_TEAM(m_pPlayer->getTeam()).getAliveCount();
+	if (iNumTeamMembers == 0)
+		return 0;
+
+	int iTotalExpense = 0;
+	int iTotalExpenseOtherVassals = 0;
+	for (int iPlayerLoop = 0; iPlayerLoop < MAX_MAJOR_CIVS; iPlayerLoop++)
 	{
-		if(!GET_PLAYER((PlayerTypes)iI).isMinorCiv()
-			&& !GET_PLAYER((PlayerTypes)iI).isBarbarian()
-			&& GET_PLAYER((PlayerTypes)iI).isAlive())
+		PlayerTypes eLoopPlayer = (PlayerTypes)iPlayerLoop;
+		TeamTypes eLoopTeam = GET_PLAYER(eLoopPlayer).getTeam();
+		if (GET_TEAM(eLoopTeam).GetMaster() != m_pPlayer->getTeam())
+			continue;
+
+		int iExpense = 0;
+
+		// Loop through our vassal's cities
+		if (bIncludePopulationMaintenance)
 		{
 			int iLoop = 0;
-			int iCityPop = 0;
-			// This player is our vassal
-			if(GET_TEAM(GET_PLAYER((PlayerTypes)iI).getTeam()).IsVassal(m_pPlayer->getTeam()))
+			for (CvCity* pLoopCity = GET_PLAYER(eLoopPlayer).firstCity(&iLoop); pLoopCity != NULL; pLoopCity = GET_PLAYER(eLoopPlayer).nextCity(&iLoop))
 			{
-				// Loop through our vassal's cities
-				for(CvCity* pLoopCity = GET_PLAYER((PlayerTypes)iI).firstCity(&iLoop); pLoopCity != NULL; pLoopCity = GET_PLAYER((PlayerTypes)iI).nextCity(&iLoop))
-				{
-					iCityPop = pLoopCity->getPopulation();
-					iRtnValue += std::max(0, (int)(pow((double)iCityPop, (double) /*0.8f*/ GD_FLOAT_GET(VASSALAGE_VASSAL_CITY_POP_EXPONENT))));
-				}
-
-				iRtnValue += std::max(0, (GET_PLAYER((PlayerTypes)iI).GetTreasury()->GetExpensePerTurnUnitMaintenance() * /*10*/ GD_INT_GET(VASSALAGE_VASSAL_UNIT_MAINT_COST_PERCENT) / 100));
+				int iCityPop = pLoopCity->getPopulation();
+				iExpense += std::max(0, (int)(pow((double)iCityPop, (double) /*0.8f*/ GD_FLOAT_GET(VASSALAGE_VASSAL_CITY_POP_EXPONENT))));
 			}
 		}
+
+		if (bIncludeUnitMaintenance)
+		{
+			iExpense += std::max(0, GET_PLAYER(eLoopPlayer).GetTreasury()->GetExpensePerTurnUnitMaintenance() * /*10*/ GD_INT_GET(VASSALAGE_VASSAL_UNIT_MAINT_COST_PERCENT) / 100);
+		}
+
+		if (eTeam == NO_TEAM || eTeam == eLoopTeam)
+		{
+			iTotalExpense += iExpense;
+		}
+		else
+		{
+			iTotalExpenseOtherVassals += iExpense;
+		}
+
+	}
+
+	// What is my share of this maintenance?
+	int iRtnValue = iTotalExpense / iNumTeamMembers;
+
+	// Team leader gets any remainder
+	if (GET_TEAM(m_pPlayer->getTeam()).getLeaderID() == m_pPlayer->GetID())
+	{
+		if (eTeam == NO_TEAM)
+			iRtnValue += iTotalExpense % iNumTeamMembers;
+		else
+			iRtnValue += (iTotalExpense + iTotalExpenseOtherVassals) % iNumTeamMembers;
 	}
 
 	// Modifier for vassal maintenance?
-	iRtnValue *= (100 + m_pPlayer->GetVassalGoldMaintenanceMod());
+	iRtnValue *= 100 + m_pPlayer->GetVassalGoldMaintenanceMod();
 	iRtnValue /= 100;
 
 	return iRtnValue;
@@ -1015,15 +1047,40 @@ int CvTreasury::GetVassalGoldMaintenance() const
 void CvTreasury::CalculateExpensePerTurnFromVassalTaxes()
 {
 	TeamTypes eMaster = GET_TEAM(m_pPlayer->getTeam()).GetMaster();
-	if(eMaster == NO_TEAM) {
-		if(GetExpensePerTurnFromVassalTaxes() != 0)
-			SetExpensePerTurnFromVassalTaxesTimes100(0);
+	if (eMaster == NO_TEAM)
+	{
+		SetExpensePerTurnFromVassalTaxesTimes100(0);
 		return;
 	}
-	int iNet = CalculateGrossGoldTimes100();
-	int iTax = iNet * GET_TEAM(eMaster).GetVassalTax(m_pPlayer->GetID()) / 100;
 
+	int iNet = CalculateGrossGoldTimes100();
+	if (iNet <= 0)
+	{
+		// Can't tax us if we're broke or in the red!
+		SetExpensePerTurnFromVassalTaxesTimes100(0);
+		return;
+	}
+
+	int iTax = iNet * GET_TEAM(eMaster).GetVassalTax(m_pPlayer->GetID()) / 100;
 	SetExpensePerTurnFromVassalTaxesTimes100(iTax);
+}
+
+/// How much would we owe if our tax rate increased?
+int CvTreasury::CalculateProjectedExpensePerTurnFromVassalTaxes(int iProjectedTaxRate)
+{
+	TeamTypes eMaster = GET_TEAM(m_pPlayer->getTeam()).GetMaster();
+	if (eMaster == NO_TEAM)
+		return 0;
+
+	int iNet = CalculateGrossGoldTimes100();
+	if (iNet <= 0)
+	{
+		// Can't tax us if we're broke or in the red!
+		return 0;
+	}
+
+	int iTax = iNet * iProjectedTaxRate / 100;
+	return iTax;
 }
 
 // Set how much we owe this turn due to taxes
@@ -1045,42 +1102,66 @@ int CvTreasury::GetExpensePerTurnFromVassalTaxes() const
 }
 
 // What percent of vassal taxes am I owed?
-int CvTreasury::GetMyShareOfVassalTaxes() const
+int CvTreasury::GetMyShareOfVassalTaxes(TeamTypes eTeam, int iProjectedTaxRate) const
 {
 	int iNumTeamMembers = GET_TEAM(m_pPlayer->getTeam()).getAliveCount();
-	if(iNumTeamMembers == 0)
+	if (iNumTeamMembers == 0)
 		return 0;
 
 	int iTotalTaxes = 0;
-	PlayerTypes eLoopPlayer;
-	for(int iPlayerLoop = 0; iPlayerLoop < MAX_MAJOR_CIVS; iPlayerLoop++)
+	int iTotalTaxesOtherVassals = 0;
+	for (int iPlayerLoop = 0; iPlayerLoop < MAX_MAJOR_CIVS; iPlayerLoop++)
 	{
-		eLoopPlayer = (PlayerTypes) iPlayerLoop;
-		if(GET_TEAM(GET_PLAYER(eLoopPlayer).getTeam()).GetMaster() == m_pPlayer->getTeam())
+		PlayerTypes eLoopPlayer = (PlayerTypes) iPlayerLoop;
+		TeamTypes eLoopTeam = GET_PLAYER(eLoopPlayer).getTeam();
+		if (GET_TEAM(eLoopTeam).GetMaster() != m_pPlayer->getTeam())
+			continue;
+
+		if (eTeam == NO_TEAM || eTeam == eLoopTeam)
 		{
-			iTotalTaxes += GET_PLAYER(eLoopPlayer).GetTreasury()->GetExpensePerTurnFromVassalTaxesTimes100();
+			if (iProjectedTaxRate == -1)
+				iTotalTaxes += GET_PLAYER(eLoopPlayer).GetTreasury()->GetExpensePerTurnFromVassalTaxesTimes100();
+			else
+				iTotalTaxes += GET_PLAYER(eLoopPlayer).GetTreasury()->CalculateProjectedExpensePerTurnFromVassalTaxes(iProjectedTaxRate);
+		}
+		else
+		{
+			iTotalTaxesOtherVassals += GET_PLAYER(eLoopPlayer).GetTreasury()->GetExpensePerTurnFromVassalTaxesTimes100();
 		}
 	}
 
 	// What is my share of these taxes?
-	return (iTotalTaxes / iNumTeamMembers);
+	int iRtnValue = iTotalTaxes / iNumTeamMembers;
+
+	// Team leader gets any remainder
+	if (GET_TEAM(m_pPlayer->getTeam()).getLeaderID() == m_pPlayer->GetID())
+	{
+		if (eTeam == NO_TEAM)
+			iRtnValue += iTotalTaxes % iNumTeamMembers;
+		else
+			iRtnValue += (iTotalTaxes + iTotalTaxesOtherVassals) % iNumTeamMembers;
+	}
+
+	return iRtnValue;
 }
 
 // How much is ePlayer contributing to my vassal tax revenue (note: this doesn't actually set anything, for pure UI purposes)
 int CvTreasury::GetVassalTaxContributionTimes100(PlayerTypes ePlayer) const
 {
-	int iNumTeamMembers = GET_TEAM(m_pPlayer->getTeam()).getAliveCount();
-	if(iNumTeamMembers == 0)
+	TeamTypes eTeam = GET_PLAYER(ePlayer).getTeam();
+	int iNumTeamMembers = GET_TEAM(eTeam).getAliveCount();
+	if (iNumTeamMembers == 0)
 		return 0;
 
-	int iAmount = 0;
-	
-	if(GET_TEAM(GET_PLAYER(ePlayer).getTeam()).GetMaster() == m_pPlayer->getTeam())
-	{
-		iAmount += GET_PLAYER(ePlayer).GetTreasury()->GetExpensePerTurnFromVassalTaxesTimes100();
-	}
+	int iMyShare = GetMyShareOfVassalTaxes(eTeam);
+	int iRtnValue = iMyShare / iNumTeamMembers;
 
-	return iAmount  / iNumTeamMembers;
+	// If they're the team leader, attribute any remainder to them
+	// Not a perfect solution, but good enough
+	if (GET_TEAM(eTeam).getLeaderID() == ePlayer)
+		iRtnValue += iMyShare % iNumTeamMembers;
+
+	return iRtnValue;
 }
 
 int CvTreasury::GetVassalTaxContribution(PlayerTypes ePlayer) const

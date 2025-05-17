@@ -15,6 +15,8 @@
 
 #undef min
 
+void CvPreconditionDlg(const char* expr, const char* szFile, unsigned int uiLine, const char* msg);
+
 inline int sqrti(int input)
 {
 	return int(sqrt((float)abs(input)));
@@ -22,7 +24,7 @@ inline int sqrti(int input)
 
 inline int range(int iNum, int iLow, int iHigh)
 {
-	CvAssertMsg(iHigh >= iLow, "High should be higher than low");
+	ASSERT_DEBUG(iHigh >= iLow, "High should be higher than low");
 
 	if(iNum < iLow)
 	{
@@ -40,7 +42,7 @@ inline int range(int iNum, int iLow, int iHigh)
 
 inline float range(float fNum, float fLow, float fHigh)
 {
-	CvAssertMsg(fHigh >= fLow, "High should be higher than low");
+	ASSERT_DEBUG(fHigh >= fLow, "High should be higher than low");
 
 	if(fNum < fLow)
 	{
@@ -461,10 +463,46 @@ T PseudoRandomChoiceByWeight(vector<OptionWithScore<T>>& candidates, const T& de
 	return defaultChoice;
 }
 
-void AddFractionToReference(pair<int,int>& A, const pair<int,int>& B);
-pair<int,int> AddFractions(pair<int,int>& A, pair<int,int>& B);
-pair<int,int> AddFractions(vector<int>& dividendList, vector<int>& divisorList);
+//------------------------------------------------------------------------------
+class fraction
+{
+private:
+	int num, den; // numerator, denominator
 
+	fraction checkOperands(const fraction &rhs);
+	bool isIdentical(const fraction &rhs) const;
+	int gcd(int a, int b);
+public:
+
+	fraction(int num = 0, int den = 1): num(num), den(den) { PRECONDITION(den != 0, "trying to divide by zero"); }
+
+	fraction operator+(const fraction &rhs);
+	fraction operator-(const fraction &rhs);
+	fraction operator*(const fraction &rhs);
+	fraction operator/(const fraction &rhs);
+	fraction& operator+=(const fraction &rhs);
+	fraction& operator-=(const fraction &rhs);
+	fraction& operator*=(const fraction &rhs);
+	fraction& operator/=(const fraction &rhs);
+	bool operator==(const fraction &rhs) const;
+	inline bool operator!=(const fraction &rhs) const { return !operator==(rhs); };
+	bool operator<(const fraction &rhs) const;
+	inline bool operator<=(const fraction &rhs) const { return operator<(rhs) || operator==(rhs); };
+	inline bool operator>=(const fraction &rhs) const { return !operator<(rhs); };
+	inline bool operator>(const fraction &rhs) const { return !operator<(rhs) && !operator==(rhs); };
+	
+	friend fraction abs(const fraction &lhs);
+	friend bool operator==(const int lhs, const fraction &rhs);
+	friend bool operator!=(const int lhs, const fraction &rhs);
+	
+	fraction& Reduce();
+	int Truncate() const { return num / den; }
+
+	friend FDataStream& operator<<(FDataStream& saveTo, const fraction& readFrom);
+	friend FDataStream& operator>>(FDataStream& loadFrom, fraction& writeTo);
+};
+
+//------------------------------------------------------------------------------
 void PrintMemoryInfo(const char* hint);
 
 #endif

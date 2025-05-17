@@ -1,5 +1,5 @@
 /*	-------------------------------------------------------------------------------------------------------
-	© 1991-2012 Take-Two Interactive Software and its subsidiaries.  Developed by Firaxis Games.  
+	Â© 1991-2012 Take-Two Interactive Software and its subsidiaries.  Developed by Firaxis Games.  
 	Sid Meier's Civilization V, Civ, Civilization, 2K Games, Firaxis Games, Take-Two Interactive Software 
 	and their respective logos are all trademarks of Take-Two interactive Software, Inc.  
 	All other marks and trademarks are the property of their respective owners.  
@@ -44,20 +44,20 @@ CvCityAI::~CvCityAI()
 
 void CvCityAI::AI_init()
 {
-	VALIDATE_OBJECT
+	VALIDATE_OBJECT();
 	AI_reset();
 }
 
 void CvCityAI::AI_uninit()
 {
-	VALIDATE_OBJECT
+	VALIDATE_OBJECT();
 }
 
 // FUNCTION: AI_reset()
 // Initializes data members that are serialized.
 void CvCityAI::AI_reset()
 {
-	VALIDATE_OBJECT
+	VALIDATE_OBJECT();
 	AI_uninit();
 
 	m_bChooseProductionDirty = false;
@@ -73,7 +73,7 @@ void CvCityAI::AI_doTurn()
 
 void CvCityAI::AI_chooseProduction(bool bInterruptWonders, bool bInterruptBuildings)
 {
-	VALIDATE_OBJECT
+	VALIDATE_OBJECT();
 	CvPlayerAI& kOwner = GET_PLAYER(getOwner());
 	CvCitySpecializationAI* pSpecializationAI = kOwner.GetCitySpecializationAI();
 	
@@ -160,35 +160,30 @@ void CvCityAI::AI_chooseProduction(bool bInterruptWonders, bool bInterruptBuildi
 	}
 	else
 	{
-#if defined(MOD_BALANCE_CORE)
 		m_pCityStrategyAI->ChooseProduction(NO_BUILDING, NO_UNIT, bInterruptBuildings, bInterruptWonders);
-#else
-		m_pCityStrategyAI->ChooseProduction();
-#endif
 		AI_setChooseProductionDirty(false);
 	}
 
-	return;
 }
 
 bool CvCityAI::AI_isChooseProductionDirty()
 {
-	VALIDATE_OBJECT
+	VALIDATE_OBJECT();
 	return m_bChooseProductionDirty;
 }
 
 void CvCityAI::AI_setChooseProductionDirty(bool bNewValue)
 {
-	VALIDATE_OBJECT
+	VALIDATE_OBJECT();
 	m_bChooseProductionDirty = bNewValue;
 }
 
 /// How many of our City's plots have been grabbed by someone else?
 int CvCityAI::AI_GetNumPlotsAcquiredByOtherPlayer(PlayerTypes ePlayer) const
 {
-	VALIDATE_OBJECT
-	FAssert(ePlayer < MAX_PLAYERS);
-	FAssert(ePlayer > -1);
+	VALIDATE_OBJECT();
+	ASSERT_DEBUG(ePlayer < MAX_PLAYERS);
+	ASSERT_DEBUG(ePlayer > -1);
 	
 	map<PlayerTypes,int>::const_iterator it = m_mapPlotsAcquiredByOtherPlayers.find(ePlayer);
 	if (it != m_mapPlotsAcquiredByOtherPlayers.end())
@@ -200,9 +195,9 @@ int CvCityAI::AI_GetNumPlotsAcquiredByOtherPlayer(PlayerTypes ePlayer) const
 /// Changes how many of our City's plots have been grabbed by someone else
 void CvCityAI::AI_ChangeNumPlotsAcquiredByOtherPlayer(PlayerTypes ePlayer, int iChange)
 {
-	VALIDATE_OBJECT
-	FAssert(ePlayer < MAX_PLAYERS);
-	FAssert(ePlayer > -1);
+	VALIDATE_OBJECT();
+	ASSERT_DEBUG(ePlayer < MAX_PLAYERS);
+	ASSERT_DEBUG(ePlayer > -1);
 
 	m_mapPlotsAcquiredByOtherPlayers[ePlayer] += iChange;
 
@@ -370,7 +365,7 @@ void CvCityAI::Serialize(CityAI& cityAI, Visitor& visitor)
 //
 void CvCityAI::read(FDataStream& kStream)
 {
-	VALIDATE_OBJECT
+	VALIDATE_OBJECT();
 	CvCity::read(kStream);
 
 	CvStreamLoadVisitor serialVisitor(kStream);
@@ -382,7 +377,7 @@ void CvCityAI::read(FDataStream& kStream)
 //
 void CvCityAI::write(FDataStream& kStream) const
 {
-	VALIDATE_OBJECT
+	VALIDATE_OBJECT();
 	CvCity::write(kStream);
 
 	CvStreamSaveVisitor serialVisitor(kStream);

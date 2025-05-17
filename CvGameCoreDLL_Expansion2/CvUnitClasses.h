@@ -43,7 +43,6 @@ public:
 	bool CannotEmbark() const;
 #endif
 	int GetHurryCostModifier() const;
-	int GetAdvancedStartCost() const;
 	int GetMinAreaSize() const;
 	int GetMoves() const;
 	bool IsImmobile() const;
@@ -100,18 +99,12 @@ public:
 	int GetSpecialUnitCargoLoad() const;
 #endif
 	void SetCombat(int iNum);
-	int GetCombatLimit() const;
 	int GetRangedCombat() const;
-	int GetRangedCombatLimit() const;
-	bool IsCoastalFireOnly() const;
 	bool IsNoSupply() const;
 	int GetMaxHitPoints() const;
-	int GetXPValueAttack() const;
-	int GetXPValueDefense() const;
 	int GetSpecialCargo() const;
 	int GetDomainCargo() const;
 
-	int GetConscriptionValue() const;
 	int GetExtraMaintenanceCost() const;
 	bool IsNoMaintenance() const;
 	int GetUnhappiness() const;
@@ -173,7 +166,6 @@ public:
 	int GetTourismBonusTurns() const;
 	bool IsIgnoreBuildingDefense() const;
 	bool IsPrereqResources() const;
-	bool IsMechUnit() const;
 	bool IsSuicide() const;
 	bool IsCaptureWhileEmbarked() const;
 	bool IsRangeAttackOnlyInDomain() const;
@@ -228,8 +220,10 @@ public:
 	int GetResourceQuantityRequirement(int i) const;
 	int GetResourceQuantityExpended(int i) const;
 	int GetBuildingProductionModifier(BuildingTypes eBuilding) const;
+	int GetYieldOnBountyToKiller(YieldTypes eYield) const;
 	int GetYieldFromKills(YieldTypes eYield) const;
 	int GetYieldFromBarbarianKills(YieldTypes eYield) const;
+	int GetYieldOnCompletion(YieldTypes eYield) const;
 	int GetProductionTraits(int i) const;
 	int GetFlavorValue(int i) const;
 	bool GetUpgradeUnitClass(int i) const;
@@ -249,9 +243,9 @@ public:
 	int GetUnitNewEraPromotions(int i, int j) const;
 	int* GetUnitNewEraPromotionsChangesArray(int i);
 #endif
-#if defined(MOD_UNITS_RESOURCE_QUANTITY_TOTALS)
+
 	int GetResourceQuantityTotal(int i) const;
-#endif
+
 	bool GetFreePromotions(int i) const;
 
 	// Derived fields (not in XML)
@@ -278,7 +272,6 @@ private:
 	bool m_bCannotEmbark;
 #endif
 	int m_iHurryCostModifier;
-	int m_iAdvancedStartCost;
 	int m_iMinAreaSize;
 	int m_iMoves;
 	bool m_bImmobile; //may still have moves>0 for attacks?
@@ -333,18 +326,12 @@ private:
 	int m_iCargoCombat;
 	int m_iSpecialUnitCargoLoad;
 #endif
-	int m_iCombatLimit;
 	int m_iRangedCombat;
-	int m_iRangedCombatLimit;
-	bool m_bCoastalFire;
 	bool m_bNoSupply;
 	int m_iMaxHitPoints;
-	int m_iXPValueAttack;
-	int m_iXPValueDefense;
 	int m_iSpecialCargo;
 
 	int m_iDomainCargo;
-	int m_iConscriptionValue;
 	int m_iExtraMaintenanceCost;
 	bool m_bNoMaintenance;
 	int m_iUnhappiness;
@@ -422,7 +409,6 @@ private:
 	int m_iTourismBonusTurns;
 	bool m_bIgnoreBuildingDefense;
 	bool m_bPrereqResources;
-	bool m_bMechanized;
 	bool m_bSuicide;
 	bool m_bCaptureWhileEmbarked;
 	bool m_bRangeAttackOnlyInDomain;
@@ -455,8 +441,10 @@ private:
 	int* m_piProductionTraits;
 	int* m_piFlavorValue;
 	int* m_piProductionModifierBuildings;
+	int* m_piYieldOnBountyToKiller;
 	int* m_piYieldFromKills;
 	int* m_piYieldFromBarbarianKills;
+	int* m_piYieldOnCompletion;
 
 	bool* m_pbUpgradeUnitClass;
 	bool* m_pbUnitAIType;
@@ -473,9 +461,9 @@ private:
 	int** m_ppiEraUnitCombatType;
 	int** m_ppiEraUnitPromotions;
 #endif
-#if defined(MOD_UNITS_RESOURCE_QUANTITY_TOTALS)
+
 	std::map<int, int> m_piResourceQuantityTotals;
-#endif
+
 	bool* m_pbFreePromotions;
 
 	CvString* m_paszEarlyArtDefineTags;

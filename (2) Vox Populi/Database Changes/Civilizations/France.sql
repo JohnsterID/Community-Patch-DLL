@@ -4,7 +4,7 @@
 UPDATE Traits
 SET
 	CapitalThemingBonusModifier = 0,
-	ExtraSupplyPerPopulation = 25
+	ExtraSupplyPerPopulation = 15
 WHERE Type = 'TRAIT_ENHANCED_CULTURE';
 
 INSERT INTO Trait_FreePromotionUnitCombats
@@ -16,7 +16,8 @@ VALUES
 INSERT INTO Trait_YieldFromXMilitaryUnits
 	(TraitType, YieldType, Yield)
 VALUES
-	('TRAIT_ENHANCED_CULTURE', 'YIELD_CULTURE', 10);
+	('TRAIT_ENHANCED_CULTURE', 'YIELD_CULTURE', 10),
+	('TRAIT_ENHANCED_CULTURE', 'YIELD_TOURISM', 10);
 
 ----------------------------------------------------------
 -- Unique Unit: Musketeer (Tercio)

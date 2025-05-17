@@ -50,6 +50,8 @@ void CvLuaUnit::PushMethods(lua_State* L, int t)
 	Method(GetWaypointPath);
 	Method(GeneratePathToNextWaypoint);
 	Method(GetMeleeAttackFromPlot);
+	Method(GetPotentialRangeAttackTargetPlots);
+	Method(GetPotentialRangeAttackOriginPlots);
 
 	Method(CanEnterTerritory);
 	Method(GetDeclareWarRangeStrike);
@@ -163,10 +165,7 @@ void CvLuaUnit::PushMethods(lua_State* L, int t)
 	Method(CanUpgradeInTerritory);
 #endif
 	Method(GetNumResourceNeededToUpgrade);
-
-#if defined(MOD_UNITS_RESOURCE_QUANTITY_TOTALS)
 	Method(GetNumResourceTotalNeededToUpgrade);
-#endif
 
 	Method(GetHandicapType);
 	Method(GetCivilizationType);
@@ -240,6 +239,9 @@ void CvLuaUnit::PushMethods(lua_State* L, int t)
 	Method(IsSpecificContractUnit);
 	Method(GetContractUnit);
 #endif
+	Method(IsNoMaintenance);
+	Method(SetNoMaintenance);
+
 	Method(IsGreatPerson);
 
 	Method(IsFighting);
@@ -282,8 +284,6 @@ void CvLuaUnit::PushMethods(lua_State* L, int t)
 	Method(SetBaseRangedCombatStrength);
 	Method(GetDamageCombatModifier);
 	Method(GetMaxRangedCombatStrength);
-	Method(GetCombatLimit);
-	Method(GetRangedCombatLimit);
 	Method(CanAirAttack);
 	Method(CanAirDefend);
 	Method(GetAirCombatDamage);
@@ -300,17 +300,11 @@ void CvLuaUnit::PushMethods(lua_State* L, int t)
 	Method(IsEverFortifyable);
 	Method(FortifyModifier);
 	Method(ExperienceNeeded);
-	Method(AttackXPValue);
-	Method(DefenseXPValue);
 	Method(MaxXPValue);
-	Method(FirstStrikes);
-	Method(ChanceFirstStrikes);
-	Method(MaxFirstStrikes);
 	Method(IsRanged);
 	Method(IsMustSetUpToRangedAttack);
 	Method(CanSetUpForRangedAttack);
 	Method(IsSetUpForRangedAttack);
-	Method(ImmuneToFirstStrikes);
 	Method(NoDefensiveBonus);
 	Method(IgnoreBuildingDefense);
 	Method(CanMoveImpassable);
@@ -346,7 +340,6 @@ void CvLuaUnit::PushMethods(lua_State* L, int t)
 	Method(IsInvisible);
 	Method(IsNukeImmune);
 	Method(IsRangeAttackOnlyInDomain);
-	Method(IsCoastalAttackOnly);
 	Method(IsCityAttackOnly);
 
 	Method(GetAirInterceptRange);
@@ -361,6 +354,7 @@ void CvLuaUnit::PushMethods(lua_State* L, int t)
 	Method(GetDefenseModifier);
 	Method(GetRangedDefenseModifier);
 	Method(GetRangedAttackModifier);
+	Method(GetGarrisonRangedAttackModifier);
 	Method(CityAttackModifier);
 	Method(CityDefenseModifier);
 	Method(HillsAttackModifier);
@@ -479,8 +473,6 @@ void CvLuaUnit::PushMethods(lua_State* L, int t)
 	Method(GetExtraRange);
 	Method(GetExtraIntercept);
 	Method(GetExtraEvasion);
-	Method(GetExtraFirstStrikes);
-	Method(GetExtraChanceFirstStrikes);
 	Method(GetExtraWithdrawal);
 	Method(GetExtraEnemyHeal);
 	Method(GetExtraNeutralHeal);
@@ -509,8 +501,6 @@ void CvLuaUnit::PushMethods(lua_State* L, int t)
 	Method(GetPillageChange);
 	Method(GetUpgradeDiscount);
 	Method(GetExperiencePercent);
-	Method(GetKamikazePercent);
-
 
 	Method(IsOutOfAttacks);
 	Method(SetMadeAttack);
@@ -968,6 +958,121 @@ int CvLuaUnit::lGeneratePathToNextWaypoint(lua_State* L)
 	return 1;
 }
 
+//-------------- returns the plots the unit can bombard from a given plot. does not check for presence of enemies!
+// GetPotentialRangeAttackTargetPlots(plot)
+int CvLuaUnit::lGetPotentialRangeAttackTargetPlots(lua_State* L)
+{
+	CvUnit* pUnit = GetInstance(L);
+	CvPlot* pOrigin = CvLuaPlot::GetInstance(L, 2);
+	if (!pOrigin)
+		return 0;
+
+	lua_createtable(L, 0, 0);
+	int iCount = 1;
+
+	// Aircraft and special promotions make us ignore LOS
+	bool bIgnoreLOS = pUnit->IsRangeAttackIgnoreLOS() || pUnit->getDomainType() == DOMAIN_AIR;
+	// Can only bombard in domain? (used for Subs' torpedo attack)
+	bool bOnlyInDomain = pUnit->getUnitInfo().IsRangeAttackOnlyInDomain();
+
+	for (int iRange = 1; iRange <= pUnit->GetRange(); iRange++)
+	{
+		const vector<CvPlot*>& vCandidates = GC.getMap().GetPlotsAtRangeX(pOrigin, iRange, true, !bIgnoreLOS);
+		for (vector<CvPlot*>::const_iterator it = vCandidates.begin(); it != vCandidates.end(); ++it)
+		{
+			const CvPlot* pCandidate = *it;
+			if (!pCandidate)
+				continue;
+
+			if (!pCandidate->isRevealed(pUnit->getTeam()))
+				continue;
+
+			if (!pUnit->isNativeDomain(pCandidate))
+				continue;
+
+			if (bOnlyInDomain)
+			{
+				// Can only attack same landmass or adjacent city (VP only)
+				bool bForbidden = (pCandidate->getLandmass() != pOrigin->getLandmass());
+				if (MOD_BALANCE_VP && pCandidate->isCity() && pCandidate->getPlotCity()->HasAccessToLandmassOrOcean(pOrigin->getLandmass()))
+					bForbidden = false;
+
+				if (bForbidden)
+					continue;
+			}
+
+			lua_createtable(L, 0, 0);
+			const int t = lua_gettop(L);
+			lua_pushinteger(L, pCandidate->getX());
+			lua_setfield(L, t, "X");
+			lua_pushinteger(L, pCandidate->getY());
+			lua_setfield(L, t, "Y");
+			lua_rawseti(L, -2, iCount++);
+		}
+	}
+
+	return 1;
+}
+
+//-------------- returns the plots the unit would need to be in to bombard a given plot. does not check for stacking.
+// GetPotentialRangeAttackOriginPlots(plot)
+int CvLuaUnit::lGetPotentialRangeAttackOriginPlots(lua_State* L)
+{
+	CvUnit* pUnit = GetInstance(L);
+	CvPlot* pTarget = CvLuaPlot::GetInstance(L, 2);
+	if (!pTarget)
+		return 0;
+
+	lua_createtable(L, 0, 0);
+	int iCount = 1;
+
+	// Aircraft and special promotions make us ignore LOS
+	bool bIgnoreLOS = pUnit->IsRangeAttackIgnoreLOS() || pUnit->getDomainType() == DOMAIN_AIR;
+	// Can only bombard in domain? (used for Subs' torpedo attack)
+	bool bOnlyInDomain = pUnit->getUnitInfo().IsRangeAttackOnlyInDomain();
+
+	for (int iRange = 1; iRange <= pUnit->GetRange(); iRange++)
+	{
+		const vector<CvPlot*>& vCandidates = GC.getMap().GetPlotsAtRangeX(pTarget, iRange, false, !bIgnoreLOS);
+		for (vector<CvPlot*>::const_iterator it = vCandidates.begin(); it != vCandidates.end(); ++it)
+		{
+			const CvPlot* pCandidate = *it;
+			if (!pCandidate)
+				continue;
+
+			if (!pCandidate->isRevealed(pUnit->getTeam()))
+				continue;
+
+			if (!pUnit->isNativeDomain(pCandidate))
+				continue;
+
+			if (!pUnit->canEndTurnAtPlot(pCandidate))
+				continue;
+
+			if (bOnlyInDomain)
+			{
+				// Can only attack same landmass or adjacent city (VP only)
+				bool bForbidden = (pCandidate->getLandmass() != pTarget->getLandmass());
+				if (MOD_BALANCE_VP && pTarget->isCity() && pTarget->getPlotCity()->HasAccessToLandmassOrOcean(pCandidate->getLandmass()))
+					bForbidden = false;
+
+				if (bForbidden)
+					continue;
+			}
+
+			lua_createtable(L, 0, 0);
+			const int t = lua_gettop(L);
+			lua_pushinteger(L, pCandidate->getX());
+			lua_setfield(L, t, "X");
+			lua_pushinteger(L, pCandidate->getY());
+			lua_setfield(L, t, "Y");
+			lua_rawseti(L, -2, iCount++);
+		}
+	}
+
+	return 1;
+}
+
 //-------------------------------------------------------------------------------------------
 // Returns the estimated "from" plot when this unit melee attacks a unit on the given plot
 int CvLuaUnit::lGetMeleeAttackFromPlot(lua_State* L)
@@ -1157,9 +1262,10 @@ int CvLuaUnit::lRebaseAt(lua_State* L)
 	CvUnit* pkUnit = GetInstance(L);
 	const int iX = lua_tointeger(L, 2);
 	const int iY = lua_tointeger(L, 3);
-	const bool bResult = pkUnit->rebase(iX,iY);
+	const bool bResult = pkUnit->rebase(iX, iY);
 
-	return 0;
+	lua_pushboolean(L, bResult);
+	return 1;
 }
 //------------------------------------------------------------------------------
 //bool canScrap();
@@ -1340,7 +1446,7 @@ int CvLuaUnit::lCanHeal(lua_State* L)
 {
 	CvUnit* pkUnit = GetInstance(L);
 	CvPlot* pkPlot = CvLuaPlot::GetInstance(L, 2);
-	const bool bResult = pkUnit->canHeal(pkPlot);
+	const bool bResult = pkUnit->IsHurt() && pkUnit->canHeal(pkPlot);
 
 	lua_pushboolean(L, bResult);
 	return 1;
@@ -1811,34 +1917,8 @@ int CvLuaUnit::lCanConstruct(lua_State* L)
 //------------------------------------------------------------------------------
 int CvLuaUnit::lIsRangeAttackOnlyInDomain(lua_State* L)
 {
-	CvUnit* pkUnit = GetInstance(L);
-	CvUnitEntry* pkUnitInfo = GC.getUnitInfo(pkUnit->getUnitType());
-
-	if(pkUnitInfo == NULL)
-	{
-		luaL_error(L, "Could not find unit info (%d) for unit.", pkUnit->getUnitType());
-		return 0;
-	}
-
-	const bool bResult = pkUnitInfo->IsRangeAttackOnlyInDomain();
-	lua_pushboolean(L, bResult);
-	return 1;
-}
-
-//------------------------------------------------------------------------------
-int CvLuaUnit::lIsCoastalAttackOnly(lua_State* L)
-{
-	CvUnit* pkUnit = GetInstance(L);
-	CvUnitEntry* pkUnitInfo = GC.getUnitInfo(pkUnit->getUnitType());
-
-	if (pkUnitInfo == NULL)
-	{
-		luaL_error(L, "Could not find unit info (%d) for unit.", pkUnit->getUnitType());
-		return 0;
-	}
-
-	const bool bResult = pkUnitInfo->IsCoastalFireOnly();
-	lua_pushboolean(L, bResult);
+	CvUnit* pUnit = GetInstance(L);
+	lua_pushboolean(L, pUnit->getUnitInfo().IsRangeAttackOnlyInDomain());
 	return 1;
 }
 
@@ -1905,35 +1985,25 @@ int CvLuaUnit::lCanDiscover(lua_State* L)
 int CvLuaUnit::lGetDiscoverAmount(lua_State* L)
 {
 	CvUnit* pkUnit = GetInstance(L);
-#if defined(MOD_BALANCE_CORE)
 	const int iResult = pkUnit->GetScienceBlastStrength();
-#else
-	const int iResult = pkUnit->getDiscoverAmount();
-#endif
 	lua_pushinteger(L, iResult);
 	return 1;
 }
 //------------------------------------------------------------------------------
-//int GetHurryProduction(CvPlot* pPlot);
+//int GetHurryProduction();
 int CvLuaUnit::lGetHurryProduction(lua_State* L)
 {
 	CvUnit* pkUnit = GetInstance(L);
-	CvPlot* pkPlot = CvLuaPlot::GetInstance(L, 2);
 
 	const int iResult = pkUnit->GetHurryStrength();
 	lua_pushinteger(L, iResult);
 	return 1;
 }
 //------------------------------------------------------------------------------
-//int GetTradeGold(CyPlot* pPlot);
+//int GetTradeGold();
 int CvLuaUnit::lGetTradeGold(lua_State* L)
 {
-	CvUnit* pkUnit = GetInstance(L);
-	CvPlot* pkPlot = CvLuaPlot::GetInstance(L, 2); // not used anymore
-
-	const int iResult = pkUnit->getTradeGold();
-	lua_pushinteger(L, iResult);
-	return 1;
+	return BasicLuaMethod(L, &CvUnit::GetGoldBlastStrength);
 }
 //------------------------------------------------------------------------------
 //int GetTradeInfluence(CyPlot* pPlot);
@@ -1997,7 +2067,7 @@ int CvLuaUnit::lCanRepairFleet(lua_State* L)
 	lua_pushboolean(L, bResult);
 	return 1;
 }
-#if defined(MOD_GLOBAL_SEPARATE_GREAT_ADMIRAL)
+
 //------------------------------------------------------------------------------
 //bool canChangePort(CvPlot* pPlot);
 int CvLuaUnit::lCanChangePort(lua_State* L)
@@ -2009,7 +2079,7 @@ int CvLuaUnit::lCanChangePort(lua_State* L)
 	lua_pushboolean(L, bResult);
 	return 1;
 }
-#endif
+
 //------------------------------------------------------------------------------
 //bool CanBuildSpaceship(CyPlot* pPlot, bool bVisible);
 int CvLuaUnit::lCanBuildSpaceship(lua_State* L)
@@ -2076,49 +2146,24 @@ int CvLuaUnit::lGetGivePoliciesCulture(lua_State* L)
 //int GetBlastTourism()
 int CvLuaUnit::lGetBlastTourism(lua_State* L)
 {
-	CvUnit* pkUnit = GetInstance(L);
-	int iResult = 0;
-	if (pkUnit)
+	CvUnit* pUnit = GetInstance(L);
+	int iResult = pUnit->GetTourismBlastStrength();
+
+	if (MOD_BALANCE_CORE_NEW_GP_ATTRIBUTES && iResult > 0)
 	{
-		iResult = pkUnit->getBlastTourism();
-
-#if defined(MOD_BALANCE_CORE)
-		if (MOD_BALANCE_CORE_NEW_GP_ATTRIBUTES && pkUnit && pkUnit->getBlastTourism() > 0)
+		CvPlot* pPlot = pUnit->plot();
+		if (pPlot && pUnit->canBlastTourism(pPlot))
 		{
-			CvPlot* pPlot = pkUnit->plot();
-			if (pPlot && pkUnit->canBlastTourism(pPlot))
+			CvCity* pCapital = GET_PLAYER(pUnit->getOwner()).getCapitalCity();
+			PlayerTypes eOtherPlayer = pPlot->getOwner();
+
+			// Player to player modifier
+			if (pCapital)
 			{
-				CvPlayer& kUnitOwner = GET_PLAYER(pkUnit->getOwner());
-				PlayerTypes eOtherPlayer = pPlot->getOwner();
-				
-
-				// below logic based on CvPlayerCulture::ChangeInfluenceOn()
-				if (eOtherPlayer != NO_PLAYER)
-				{
-					// gamespeed modifier
-					iResult = iResult * GC.getGame().getGameSpeedInfo().getCulturePercent() / 100;
-
-					// player to player modifier (eg religion, open borders, ideology)
-					if (kUnitOwner.getCapitalCity())
-					{
-						int iModifier = kUnitOwner.getCapitalCity()->GetCityCulture()->GetTourismMultiplier(eOtherPlayer, false, false, false, false, false);
-						if (iModifier != 0)
-						{
-							iResult = iResult * (100 + iModifier) / 100;
-						}
-					}
-
-					// IsNoOpenTrade trait modifier (half tourism if trait owner does not send a trade route to the unit owner)
-					CvPlayer& kOtherPlayer = GET_PLAYER(eOtherPlayer);
-					if (eOtherPlayer != pkUnit->getOwner() && kOtherPlayer.isMajorCiv() && kOtherPlayer.GetPlayerTraits()->IsNoOpenTrade())
-					{
-						if (!GC.getGame().GetGameTrade()->IsPlayerConnectedToPlayer(eOtherPlayer, pkUnit->getOwner(), true))
-							iResult /= 2;
-					}
-				}
+				int iModifier = pCapital->GetCityCulture()->GetTourismMultiplier(eOtherPlayer, false, false, false, false, false);
+				iResult = iResult * (100 + iModifier) / 100;
 			}
 		}
-#endif
 	}
 	
 	lua_pushinteger(L, iResult);
@@ -2279,7 +2324,6 @@ int CvLuaUnit::lGetNumResourceNeededToUpgrade(lua_State* L)
 	lua_pushinteger(L, iResult);
 	return 1;
 }
-#if defined(MOD_UNITS_RESOURCE_QUANTITY_TOTALS)
 //------------------------------------------------------------------------------
 int CvLuaUnit::lGetNumResourceTotalNeededToUpgrade(lua_State* L)
 {
@@ -2299,7 +2343,6 @@ int CvLuaUnit::lGetNumResourceTotalNeededToUpgrade(lua_State* L)
 	lua_pushinteger(L, iResult);
 	return 1;
 }
-#endif
 //------------------------------------------------------------------------------
 //int /*HandicapTypes*/ getHandicapType();
 int CvLuaUnit::lGetHandicapType(lua_State* L)
@@ -2336,8 +2379,19 @@ int CvLuaUnit::lGetCaptureUnitType(lua_State* L)
 {
 	CvUnit* pkUnit = GetInstance(L);
 	const CivilizationTypes eCivilization = (CivilizationTypes)lua_tointeger(L, 2);
+	
+	// for modmod compatibility, the lua function takes an argument of type CivilizationTypes. The c++ function needs an argument of type PlayerTypes
+	PlayerTypes ePlayer = NO_PLAYER;
+	for (int i = 0; i < MAX_PLAYERS; i++)
+	{
+		if (GET_PLAYER((PlayerTypes)i).getCivilizationType() == eCivilization)
+		{
+			ePlayer = (PlayerTypes)i;
+			break;
+		}
+	}
 
-	const UnitTypes eResult = pkUnit->getCaptureUnitType(eCivilization);
+	const UnitTypes eResult = pkUnit->getCaptureUnitType(ePlayer);
 	lua_pushinteger(L, eResult);
 	return 1;
 }
@@ -2347,7 +2401,7 @@ int CvLuaUnit::lGetUnitCombatType(lua_State* L)
 {
 	CvUnit* pkUnit = GetInstance(L);
 
-	const UnitCombatTypes eResult = (UnitCombatTypes)pkUnit->getUnitCombatType();
+	const UnitCombatTypes eResult = pkUnit->getUnitCombatType();
 	lua_pushinteger(L, eResult);
 	return 1;
 }
@@ -2857,6 +2911,25 @@ int CvLuaUnit::lGetContractUnit(lua_State* L)
 	return 1;
 }
 #endif
+// bool IsNoMaintenance()
+int CvLuaUnit::lIsNoMaintenance(lua_State* L)
+{
+	CvUnit* pkUnit = GetInstance(L);
+
+	const bool bResult = pkUnit->IsNoMaintenance();
+	lua_pushboolean(L, bResult);
+	return 1;
+}
+//------------------------------------------------------------------------------
+// SetNoMaintenance(bool bValue)
+int CvLuaUnit::lSetNoMaintenance(lua_State* L)
+{
+	CvUnit* pkUnit = GetInstance(L);
+	const bool bNewValue = lua_toboolean(L, 2);
+
+	pkUnit->SetNoMaintenance(bNewValue);
+	return 0;
+}
 //------------------------------------------------------------------------------
 //bool IsGreatPerson();
 int CvLuaUnit::lIsGreatPerson(lua_State* L)
@@ -3245,26 +3318,6 @@ int CvLuaUnit::lGetMaxRangedCombatStrength(lua_State* L)
 	return 1;
 }
 //------------------------------------------------------------------------------
-//int combatLimit();
-int CvLuaUnit::lGetCombatLimit(lua_State* L)
-{
-	CvUnit* pkUnit = GetInstance(L);
-
-	const int iResult = pkUnit->GetCombatLimit();
-	lua_pushinteger(L, iResult);
-	return 1;
-}
-//------------------------------------------------------------------------------
-//int GetRangedCombatLimit();
-int CvLuaUnit::lGetRangedCombatLimit(lua_State* L)
-{
-	CvUnit* pkUnit = GetInstance(L);
-
-	const int iResult = pkUnit->GetRangedCombatLimit();
-	lua_pushinteger(L, iResult);
-	return 1;
-}
-//------------------------------------------------------------------------------
 //bool canAirAttack();
 int CvLuaUnit::lCanAirAttack(lua_State* L)
 {
@@ -3460,62 +3513,12 @@ int CvLuaUnit::lExperienceNeeded(lua_State* L)
 	return 1;
 }
 //------------------------------------------------------------------------------
-//int attackXPValue();
-int CvLuaUnit::lAttackXPValue(lua_State* L)
-{
-	CvUnit* pkUnit = GetInstance(L);
-
-	const int iResult = pkUnit->attackXPValue();
-	lua_pushinteger(L, iResult);
-	return 1;
-}
-//------------------------------------------------------------------------------
-//int defenseXPValue();
-int CvLuaUnit::lDefenseXPValue(lua_State* L)
-{
-	CvUnit* pkUnit = GetInstance(L);
-
-	const int iResult = pkUnit->defenseXPValue();
-	lua_pushinteger(L, iResult);
-	return 1;
-}
-//------------------------------------------------------------------------------
 //int maxXPValue();
 int CvLuaUnit::lMaxXPValue(lua_State* L)
 {
 	CvUnit* pkUnit = GetInstance(L);
 
 	const int iResult = pkUnit->maxXPValue();
-	lua_pushinteger(L, iResult);
-	return 1;
-}
-//------------------------------------------------------------------------------
-//int firstStrikes();
-int CvLuaUnit::lFirstStrikes(lua_State* L)
-{
-	CvUnit* pkUnit = GetInstance(L);
-
-	const int iResult = pkUnit->firstStrikes();
-	lua_pushinteger(L, iResult);
-	return 1;
-}
-//------------------------------------------------------------------------------
-//int chanceFirstStrikes();
-int CvLuaUnit::lChanceFirstStrikes(lua_State* L)
-{
-	CvUnit* pkUnit = GetInstance(L);
-
-	const int iResult = pkUnit->chanceFirstStrikes();
-	lua_pushinteger(L, iResult);
-	return 1;
-}
-//------------------------------------------------------------------------------
-//int maxFirstStrikes();
-int CvLuaUnit::lMaxFirstStrikes(lua_State* L)
-{
-	CvUnit* pkUnit = GetInstance(L);
-
-	const int iResult = pkUnit->maxFirstStrikes();
 	lua_pushinteger(L, iResult);
 	return 1;
 }
@@ -3543,16 +3546,6 @@ int CvLuaUnit::lCanSetUpForRangedAttack(lua_State* L)
 int CvLuaUnit::lIsSetUpForRangedAttack(lua_State* L)
 {
 	return BasicLuaMethod(L, &CvUnit::isSetUpForRangedAttack);
-}
-//------------------------------------------------------------------------------
-//bool immuneToFirstStrikes();
-int CvLuaUnit::lImmuneToFirstStrikes(lua_State* L)
-{
-	CvUnit* pkUnit = GetInstance(L);
-	const bool bResult = pkUnit->immuneToFirstStrikes();
-
-	lua_pushboolean(L, bResult);
-	return 1;
 }
 //------------------------------------------------------------------------------
 //bool noDefensiveBonus();
@@ -3976,6 +3969,22 @@ int CvLuaUnit::lGetRangedAttackModifier(lua_State* L)
 	CvUnit* pkUnit = GetInstance(L);
 
 	const int iResult = pkUnit->GetRangedAttackModifier();
+	lua_pushinteger(L, iResult);
+	return 1;
+}
+//------------------------------------------------------------------------------
+//int GarrisonRangedAttackModifier();
+int CvLuaUnit::lGetGarrisonRangedAttackModifier(lua_State* L)
+{
+	CvUnit* pkUnit = GetInstance(L);
+
+	int iResult = 0;
+	CvPlot* pPlot = pkUnit->plot();
+	if (pPlot && pPlot->isCity())
+	{
+		CvCity* pCity = pPlot->getPlotCity();
+		iResult = pCity->getGarrisonRangedAttackModifier();
+	}
 	lua_pushinteger(L, iResult);
 	return 1;
 }
@@ -4673,7 +4682,6 @@ int CvLuaUnit::lGetPlot(lua_State* L)
 	CvUnit* pkUnit = GetInstance(L);
 	if(!GC.getMap().isPlot(pkUnit->getX(), pkUnit->getY()))
 	{
-		CvAssertMsg(false, "pUnit plot is not valid. Pushing nil!")
 		lua_pushnil(L);
 		return 1;
 	}
@@ -5156,26 +5164,6 @@ int CvLuaUnit::lGetExtraEvasion(lua_State* L)
 	return 1;
 }
 //------------------------------------------------------------------------------
-//int getExtraFirstStrikes();
-int CvLuaUnit::lGetExtraFirstStrikes(lua_State* L)
-{
-	CvUnit* pkUnit = GetInstance(L);
-
-	const int iResult = pkUnit->getExtraFirstStrikes();
-	lua_pushinteger(L, iResult);
-	return 1;
-}
-//------------------------------------------------------------------------------
-//int getExtraChanceFirstStrikes();
-int CvLuaUnit::lGetExtraChanceFirstStrikes(lua_State* L)
-{
-	CvUnit* pkUnit = GetInstance(L);
-
-	const int iResult = pkUnit->getExtraChanceFirstStrikes();
-	lua_pushinteger(L, iResult);
-	return 1;
-}
-//------------------------------------------------------------------------------
 //int getExtraWithdrawal();
 int CvLuaUnit::lGetExtraWithdrawal(lua_State* L)
 {
@@ -5411,16 +5399,6 @@ int CvLuaUnit::lGetExperiencePercent(lua_State* L)
 {
 	CvUnit* pkUnit = GetInstance(L);
 	const int iResult = pkUnit->getExperiencePercent();
-
-	lua_pushinteger(L, iResult);
-	return 1;
-}
-//------------------------------------------------------------------------------
-//int getKamikazePercent() const;
-int CvLuaUnit::lGetKamikazePercent(lua_State* L)
-{
-	CvUnit* pkUnit = GetInstance(L);
-	const int iResult = pkUnit->getKamikazePercent();
 
 	lua_pushinteger(L, iResult);
 	return 1;
@@ -6119,12 +6097,8 @@ int CvLuaUnit::lGetReligion(lua_State* L)
 int CvLuaUnit::lGetConversionStrength(lua_State* L)
 {
 	CvUnit* pkUnit = GetInstance(L);
-#if defined(MOD_RELIGION_CONVERSION_MODIFIERS)
 	CvCity* pkCity = CvLuaCity::GetInstance(L, 2, false);
 	int iReligiousStrength = pkUnit->GetConversionStrength(pkCity);
-#else
-	int iReligiousStrength = pkUnit->GetConversionStrength();
-#endif
 
 	lua_pushinteger(L, iReligiousStrength);
 
@@ -6387,7 +6361,6 @@ int CvLuaUnit::lCanStartMission(lua_State* L)
 	const int iData2 = lua_tointeger(L, 4);
 	CvPlot* pkPlot = CvLuaPlot::GetInstance(L, 5, false);
 	const bool bTestVisible = luaL_optint(L, 6, 0);
-	const bool bUseCache = luaL_optint(L, 7, 0);
 
 	const bool bResult = pkUnit->CanStartMission(iMission, iData1, iData2, pkPlot, bTestVisible);
 	lua_pushboolean(L, bResult);

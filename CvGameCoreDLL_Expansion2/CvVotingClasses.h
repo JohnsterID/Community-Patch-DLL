@@ -1,5 +1,5 @@
 /*	-------------------------------------------------------------------------------------------------------
-	© 1991-2012 Take-Two Interactive Software and its subsidiaries.  Developed by Firaxis Games.  
+	Â© 1991-2012 Take-Two Interactive Software and its subsidiaries.  Developed by Firaxis Games.  
 	Sid Meier's Civilization V, Civ, Civilization, 2K Games, Firaxis Games, Take-Two Interactive Software 
 	and their respective logos are all trademarks of Take-Two interactive Software, Inc.  
 	All other marks and trademarks are the property of their respective owners.  
@@ -249,7 +249,7 @@ public:
 	bool IsTie();
 	std::vector<int> GetTopVotedChoices(int iNumTopChoices);
 	int GetVotesCast();
-	int GetVotesCastForChoice(int iChoice);
+	int GetVotesCastForChoice(int iChoice, PlayerTypes eVoter = NO_PLAYER);
 	int GetVotesMarginOfTopChoice();
 	int GetVotesCastByPlayer(PlayerTypes ePlayer);
 	int GetPercentContributionToOutcome(PlayerTypes eVoter, int iChoice, bool bChangeHost, int& iPercentOfPlayerVotes);
@@ -613,6 +613,10 @@ public:
 	void DoEnactProposalDiplomacy(ResolutionTypes eResolution, PlayerTypes eProposer, int iProposerChoice);
 	void DoRepealProposalDiplomacy(int iTargetResolutionID, PlayerTypes eProposer);
 
+	// Update Diplo AI for other players when sanctions are enacted or repealed (also called for the proposer when the proposal is made)
+	void DoEnactSanctionsDiplomacy(PlayerTypes eTarget, PlayerTypes eObserver, PlayerTypes eVoter, bool bPassed, bool bVotedToPass, bool bAIWantedToPass, bool bAIWantedToFail);
+	void DoRepealSanctionsDiplomacy(PlayerTypes eTarget, PlayerTypes eObserver, PlayerTypes eVoter, bool bPassed, bool bVotedToPass, bool bAIWantedToPass, bool bAIWantedToFail);
+
 	// Host
 	bool HasHostMember() const;
 	bool IsHostMember(PlayerTypes ePlayer) const;
@@ -658,6 +662,7 @@ public:
 	int GetWorldWar();
 	int GetUnitMaintenanceMod();
 	bool IsCityStateEmbargo();
+	bool IsIdeologyEmbargoed();
 	bool IsIdeologyEmbargoed(PlayerTypes eTrader, PlayerTypes eRecipient);
 	int GetTourismMod();
 	bool IsSphereOfInfluenceActive(PlayerTypes eTargetMinor, PlayerTypes eNotThisMajor);
@@ -829,6 +834,7 @@ public:
 	int IsWorldWar(PlayerTypes ePlayer);
 	int GetUnitMaintenanceMod(PlayerTypes ePlayer);
 	bool IsCityStateEmbargo(PlayerTypes ePlayer);
+	bool IsIdeologyEmbargoed(PlayerTypes ePlayer);
 	bool IsIdeologyEmbargoed(PlayerTypes eTrader, PlayerTypes eRecipient);
 
 	// General Logging
@@ -1028,9 +1034,9 @@ private:
 	void AllocateVotes(CvLeague* pLeague);
 	void FindBestVoteChoices(CvEnactProposal* pProposal, VoteConsiderationList& considerations);
 	void FindBestVoteChoices(CvRepealProposal* pProposal, VoteConsiderationList& considerations);
-	int ScoreVoteChoice(CvEnactProposal* pProposal, int iChoice, bool bConsiderGlobal = false);
+	int ScoreVoteChoice(CvEnactProposal* pProposal, int iChoice, bool bConsiderGlobal = false, bool bProposingToEnact = false);
 	int ScoreVoteChoice(CvRepealProposal* pProposal, int iChoice, bool bConsiderGlobal = false);
-	int ScoreVoteChoiceYesNo(CvProposal* pProposal, int iChoice, bool bEnact, bool bConsiderGlobal, bool bForSelf = true);
+	int ScoreVoteChoiceYesNo(CvProposal* pProposal, int iChoice, bool bEnact, bool bConsiderGlobal, bool bForSelf = true, bool bProposingToEnact = false);
 	int ScoreVoteChoicePlayer(CvProposal* pProposal, int iChoice, bool bEnact);
 
 	// Proposing

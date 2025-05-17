@@ -1,5 +1,5 @@
 /*	-------------------------------------------------------------------------------------------------------
-	© 1991-2012 Take-Two Interactive Software and its subsidiaries.  Developed by Firaxis Games.  
+	Â© 1991-2012 Take-Two Interactive Software and its subsidiaries.  Developed by Firaxis Games.  
 	Sid Meier's Civilization V, Civ, Civilization, 2K Games, Firaxis Games, Take-Two Interactive Software 
 	and their respective logos are all trademarks of Take-Two interactive Software, Inc.  
 	All other marks and trademarks are the property of their respective owners.  
@@ -26,7 +26,6 @@ void CvPlayerManager::Refresh(bool bWarStateChanged)
 
 		//this is called after a declaration of war and after loading a savegame
 		kPlayer.invalidatePlotFoundValues();
-		kPlayer.SetDangerPlotsDirty();
 		kPlayer.UpdateAreaEffectUnits();
 		kPlayer.UpdateAreaEffectPlots();
 		kPlayer.UpdateMilitaryStats();
@@ -35,12 +34,9 @@ void CvPlayerManager::Refresh(bool bWarStateChanged)
 		kPlayer.UpdateMonopolyCache();
 #endif
 
-		//only after loading, force danger update (only known enemy units are serialized)
-		if(!bWarStateChanged && kPlayer.m_pDangerPlots)
-			kPlayer.UpdateDangerPlots(true);
-
 		if (bWarStateChanged)
 		{
+			kPlayer.SetDangerPlotsDirty();
 			kPlayer.UpdatePlotBlockades();
 			kPlayer.GetTacticalAI()->GetTacticalAnalysisMap()->Invalidate();
 			GC.getGame().GetGameTrade()->InvalidateTradePathCache(ePlayer);

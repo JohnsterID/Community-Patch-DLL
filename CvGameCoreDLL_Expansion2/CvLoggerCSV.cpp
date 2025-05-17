@@ -1,7 +1,6 @@
 #include "CvGameCoreDLLPCH.h"
 #include "ICvDLLUserInterface.h"
 #include "CvGameCoreUtils.h"
-#include "FireWorks/FVariableSystem.h"
 #include "CvLoggerCSV.h"
 
 // Include this after all other headers.
@@ -15,7 +14,7 @@ void  CvLoggerCSV::WriteCSVLog(const char* strLogName, const char* strHeader)
 
 		pLog = LOGFILEMGR.GetLog(strLogName, FILogFile::kDontTimeStamp);
 
-		CvAssert(pLog != NULL);
+		ASSERT_DEBUG(pLog != NULL);
 
 		pLog->Msg(strHeader);
 
@@ -23,13 +22,13 @@ void  CvLoggerCSV::WriteCSVLog(const char* strLogName, const char* strHeader)
 
 	void  CvLoggerCSV::DeleteCSV(const char* strLogName)
 	{
-		CvAssert(strLogName != NULL);
+		ASSERT_DEBUG(strLogName != NULL);
 
 		FILogFile *pLog = NULL;
 
 		pLog = LOGFILEMGR.GetLog(strLogName, FILogFile::kDontTimeStamp);
 
-		CvAssert(pLog != NULL);
+		ASSERT_DEBUG(pLog != NULL);
 
 		LOGFILEMGR.DeleteLog(pLog);
 

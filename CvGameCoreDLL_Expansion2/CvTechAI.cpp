@@ -1,5 +1,5 @@
 /*	-------------------------------------------------------------------------------------------------------
-	© 1991-2012 Take-Two Interactive Software and its subsidiaries.  Developed by Firaxis Games.  
+	Â© 1991-2012 Take-Two Interactive Software and its subsidiaries.  Developed by Firaxis Games.  
 	Sid Meier's Civilization V, Civ, Civilization, 2K Games, Firaxis Games, Take-Two Interactive Software 
 	and their respective logos are all trademarks of Take-Two interactive Software, Inc.  
 	All other marks and trademarks are the property of their respective owners.  
@@ -30,10 +30,10 @@ CvTechAI::~CvTechAI(void)
 /// Clear out AI local variables
 void CvTechAI::Reset()
 {
-	CvAssertMsg(m_pCurrentTechs != NULL, "Tech AI init failure: player tech data is NULL");
+	ASSERT_DEBUG(m_pCurrentTechs != NULL, "Tech AI init failure: player tech data is NULL");
 	if(m_pCurrentTechs != NULL)
 	{
-		CvAssertMsg(m_pCurrentTechs->GetTechs() != NULL, "Tech AI init failure: no tech data");
+		ASSERT_DEBUG(m_pCurrentTechs->GetTechs() != NULL, "Tech AI init failure: no tech data");
 
 		m_TechAIWeights.clear();
 
@@ -255,8 +255,8 @@ float CvTechAI::GetTechRatio()
 		}
 	}
 
-	CvAssertMsg(iPlayerIndexInList != -1, "Could not find player in list");
-	CvAssertMsg(aLeaderWithNumTechs.size() >= 2, "Only one player in the game? Huh?");
+	ASSERT_DEBUG(iPlayerIndexInList != -1, "Could not find player in list");
+	ASSERT_DEBUG(aLeaderWithNumTechs.size() >= 2, "Only one player in the game? Huh?");
 	float fTechPositionRatio = 0.0f;
 	if(aLeaderWithNumTechs.size() >= 2)
 	{

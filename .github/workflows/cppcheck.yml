@@ -1,0 +1,181 @@
+name: cppcheck
+on:
+  push:
+    branches: [ master ]
+  workflow_dispatch:
+
+env:
+  CPPCHECK_VERSION: "2.17.1"
+
+jobs:
+  build_cppcheck:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Restore cached cppcheck
+        id: cache-cppcheck
+        uses: actions/cache@v4
+        with:
+          path: /tmp/cppcheck-build
+          key: cppcheck-${{ env.CPPCHECK_VERSION }}
+
+      - name: Build cppcheck
+        if: steps.cache-cppcheck.outputs.cache-hit != 'true'
+        run: |
+          cd /tmp
+          git clone https://github.com/danmar/cppcheck.git
+          cd cppcheck 
+          git checkout ${{ env.CPPCHECK_VERSION }}
+          make MATCHCOMPILER=yes FILESDIR=/usr/share/cppcheck HAVE_RULES=yes CXXFLAGS="-O2 -DNDEBUG -Wall -Wno-sign-compare -Wno-unused-function"
+          mkdir -p ../cppcheck-build
+          cp cppcheck ../cppcheck-build/
+          cp -r cfg ../cppcheck-build/
+          chmod +x ../cppcheck-build/cppcheck
+          ../cppcheck-build/cppcheck --version
+
+      - name: Upload cppcheck build
+        uses: actions/upload-artifact@v4
+        with:
+          name: cppcheck-build
+          path: /tmp/cppcheck-build/
+          retention-days: 1
+
+  analysis:
+    needs: build_cppcheck
+    runs-on: ubuntu-22.04
+    continue-on-error: true
+    outputs:
+      timed_out: ${{ steps.check-timeout.outputs.timed_out }}
+    env:
+      TIMEOUT_EXIT_CODE: 124
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download cppcheck build
+        uses: actions/download-artifact@v4
+        with:
+          name: cppcheck-build
+          path: ./cppcheck-build
+
+      - name: Setup cppcheck
+        run: |
+          chmod +x ./cppcheck-build/cppcheck
+          echo "$PWD/cppcheck-build" >> $GITHUB_PATH
+
+      - name: Verify cppcheck
+        run: cppcheck --version
+
+      - name: Make build-dir
+        run: mkdir build-dir
+
+      - uses: actions/cache@v4
+        id: cache-build-dir
+        with:
+          path: ./build-dir/
+          key: build-dir-${{ hashFiles('**/*.*') }}
+          restore-keys: |
+            build-dir-
+
+      - name: Determine number of CPU threads
+        id: cpu-info
+        run: echo "cpu_count=$(nproc)" >> $GITHUB_OUTPUT
+
+      - name: Run cppcheck analysis
+        id: cppcheck
+        run: |
+          timeout --signal=SIGTERM 350m cppcheck -j ${{ steps.cpu-info.outputs.cpu_count }} \
+            --project=VoxPopuli_vs2013.sln \
+            --check-level=exhaustive \
+            --max-ctu-depth=10 \
+            --cppcheck-build-dir=build-dir \
+            --enable=all \
+            --std=c++03 \
+            --verbose \
+            --check-library \
+            --inline-suppr \
+            --platform=win32W \
+            --xml 2> cppcheck.xml || exit_code=$?
+          echo "exit_code=${exit_code:-0}" >> $GITHUB_ENV
+
+      - name: Check timeout status
+        id: check-timeout
+        if: always()
+        run: |
+          if [ "${exit_code:-0}" = "$TIMEOUT_EXIT_CODE" ]; then
+            echo "timed_out=true" >> $GITHUB_OUTPUT
+          else
+            echo "timed_out=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Upload analysis artifacts
+        if: success() && steps.check-timeout.outputs.timed_out != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: cppcheck-xml
+          path: |
+            cppcheck.xml
+          retention-days: 90
+
+  retry_analysis:
+    needs: [build_cppcheck, analysis]
+    runs-on: ubuntu-22.04
+    if: needs.analysis.outputs.timed_out == 'true'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download cppcheck build
+        uses: actions/download-artifact@v4
+        with:
+          name: cppcheck-build
+          path: ./cppcheck-build
+
+      - name: Setup cppcheck
+        run: |
+          chmod +x ./cppcheck-build/cppcheck
+          echo "$PWD/cppcheck-build" >> $GITHUB_PATH
+
+      - name: Verify cppcheck
+        run: cppcheck --version
+
+      - name: Make build-dir
+        run: mkdir build-dir
+
+      - uses: actions/cache@v4
+        id: cache-build-dir
+        with:
+          path: ./build-dir/
+          key: build-dir-${{ hashFiles('**/*.*') }}
+          restore-keys: |
+            build-dir-
+
+      - name: Determine number of CPU threads
+        id: cpu-info
+        run: echo "cpu_count=$(nproc)" >> $GITHUB_OUTPUT
+
+      - name: Run cppcheck analysis
+        id: cppcheck
+        continue-on-error: true
+        run: |
+          timeout --signal=SIGTERM 350m cppcheck -j ${{ steps.cpu-info.outputs.cpu_count }} \
+            --project=VoxPopuli_vs2013.sln \
+            --check-level=exhaustive \
+            --max-ctu-depth=10 \
+            --cppcheck-build-dir=build-dir \
+            --enable=all \
+            --std=c++03 \
+            --verbose \
+            --check-library \
+            --inline-suppr \
+            --platform=win32W \
+            --xml 2> cppcheck.xml || echo "cppcheck exit code: $?"
+
+      - name: Upload analysis artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cppcheck-xml
+          path: |
+            cppcheck.xml
+          retention-days: 90

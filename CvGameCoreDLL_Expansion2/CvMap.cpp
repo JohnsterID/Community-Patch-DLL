@@ -90,7 +90,7 @@ void CvLandmass::changeNumTiles(int iChange)
 		bool bOldLake = isLake();
 
 		m_iNumTiles = (m_iNumTiles + iChange);
-		CvAssert(m_iNumTiles >= 0);
+		ASSERT_DEBUG(m_iNumTiles >= 0);
 
 		if(bOldLake != isLake())
 		{
@@ -297,6 +297,92 @@ FDataStream& operator>>(FDataStream& loadFrom, CvLandmass& writeTo)
 	return loadFrom;
 }
 
+//////////////////////////////////////////////////////////////////////////////
+// CvRiver
+//////////////////////////////////////////////////////////////////////////
+
+//	--------------------------------------------------------------------------------
+CvRiver::CvRiver()
+{
+	m_iID = -1;
+}
+
+//	--------------------------------------------------------------------------------
+CvRiver::~CvRiver()
+{
+
+}
+
+//	--------------------------------------------------------------------------------
+void CvRiver::init(int iID)
+{
+	m_iID = iID;
+}
+
+//	--------------------------------------------------------------------------------
+int CvRiver::GetID() const
+{
+	return m_iID;
+}
+
+//	--------------------------------------------------------------------------------
+void CvRiver::SetID(int iID)
+{
+	m_iID = iID;
+}
+
+//	--------------------------------------------------------------------------------
+void CvRiver::AddPlot(CvPlot* pPlot)
+{
+	if (std::find(m_vPlots.begin(), m_vPlots.end(), pPlot) != m_vPlots.end())
+		return;
+
+	m_vPlots.push_back(pPlot);
+}
+
+//	--------------------------------------------------------------------------------
+vector<CvPlot*> CvRiver::GetPlots() const
+{
+	return m_vPlots;
+}
+
+//	--------------------------------------------------------------------------------
+template<typename River, typename Visitor>
+void CvRiver::Serialize(River& river, Visitor& visitor)
+{
+	visitor(river.m_iID);
+
+	visitor(river.m_vPlots);
+}
+
+//	--------------------------------------------------------------------------------
+void CvRiver::read(FDataStream& kStream)
+{
+	CvStreamLoadVisitor serialVisitor(kStream);
+	Serialize(*this, serialVisitor);
+}
+
+//	--------------------------------------------------------------------------------
+void CvRiver::write(FDataStream& kStream) const
+{
+	CvStreamSaveVisitor serialVisitor(kStream);
+	Serialize(*this, serialVisitor);
+}
+
+//	--------------------------------------------------------------------------------
+FDataStream& operator<<(FDataStream& saveTo, const CvRiver& readFrom)
+{
+	readFrom.write(saveTo);
+	return saveTo;
+}
+
+//	--------------------------------------------------------------------------------
+FDataStream& operator>>(FDataStream& loadFrom, CvRiver& writeTo)
+{
+	writeTo.read(loadFrom);
+	return loadFrom;
+}
+
 static uint sgCvMapInstanceCount = 0;
 //////////////////////////////////////////////////////////////////////////////
 
@@ -347,7 +433,7 @@ CvMap::CvMap()
 	, m_vPlotsShared()
 	, m_plotPopupCount()
 {
-	CvAssert(sgCvMapInstanceCount == 0);
+	ASSERT_DEBUG(sgCvMapInstanceCount == 0);
 	++sgCvMapInstanceCount;
 
 	memset(m_apShuffledNeighbors,0,sizeof(CvPlot*)*6);
@@ -492,6 +578,7 @@ void CvMap::init(CvMapInitData* pInitInfo/*=NULL*/)
 	// Init containers
 	m_areas.RemoveAll();
 	m_landmasses.RemoveAll();
+	m_rivers.RemoveAll();
 
 	//--------------------------------
 	// Init non-saved data
@@ -660,12 +747,13 @@ void CvMap::reset(CvMapInitData* pInitInfo)
 		m_bWrapY = pInitInfo->m_bWrapY;
 	}
 
-	CvAssertMsg((0 < GC.getNumResourceInfos()), "GC.getNumResourceInfos() is not greater than zero but an array is being allocated in CvMap::reset");
+	ASSERT_DEBUG((0 < GC.getNumResourceInfos()), "GC.getNumResourceInfos() is not greater than zero but an array is being allocated in CvMap::reset");
 	m_paiNumResource.init(0);
 	m_paiNumResourceOnLand.init(0);
 
 	m_areas.RemoveAll();
 	m_landmasses.RemoveAll();
+	m_rivers.RemoveAll();
 
 	m_vDeferredFogPlots.clear();
 
@@ -887,7 +975,7 @@ CvPlot* CvMap::syncRandPlot(int iFlags, int iArea, int iMinUnitDistance, int iTi
 		iCount++;
 		pTestPlot = plotCheckInvalid(GC.getGame().getJonRandNum(getGridWidth(), "Rand Plot Width"), GC.getGame().getJonRandNum(getGridHeight(), "Rand Plot Height"));
 
-		CvAssertMsg(pTestPlot != NULL, "TestPlot is not assigned a valid value");
+		ASSERT_DEBUG(pTestPlot != NULL, "TestPlot is not assigned a valid value");
 
 		if(!pTestPlot) continue;
 
@@ -965,11 +1053,7 @@ CvPlot* CvMap::syncRandPlot(int iFlags, int iArea, int iMinUnitDistance, int iTi
 			{
 				if(iFlags & RANDPLOT_PASSIBLE)
 				{
-#if defined(MOD_BALANCE_CORE)
 					if(pTestPlot->isImpassable(BARBARIAN_TEAM))
-#else
-					if(pTestPlot->isImpassable())
-#endif
 					{
 						bValid = false;
 					}
@@ -1014,7 +1098,7 @@ CvCity* CvMap::findCity(int iX, int iY, PlayerTypes eOwner, TeamTypes eTeam, boo
 {
 	CvPlot* pCheckPlot = plot(iX, iY);
 
-	CvAssertMsg(pCheckPlot != NULL, "Passed in an invalid plot to findCity");
+	ASSERT_DEBUG(pCheckPlot != NULL, "Passed in an invalid plot to findCity");
 	if (pCheckPlot == NULL)
 		return NULL;
 
@@ -1271,7 +1355,7 @@ int CvMap::getLandPlots()
 void CvMap::changeLandPlots(int iChange)
 {
 	m_iLandPlots = (m_iLandPlots + iChange);
-	CvAssert(getLandPlots() >= 0);
+	ASSERT_DEBUG(getLandPlots() >= 0);
 }
 
 
@@ -1286,7 +1370,7 @@ int CvMap::getOwnedPlots()
 void CvMap::changeOwnedPlots(int iChange)
 {
 	m_iOwnedPlots = (m_iOwnedPlots + iChange);
-	CvAssert(getOwnedPlots() >= 0);
+	ASSERT_DEBUG(getOwnedPlots() >= 0);
 }
 
 
@@ -1359,7 +1443,7 @@ int CvMap::getRandomResourceQuantity(ResourceTypes eIndex)
 		iNumRands++;
 	}
 
-	CvAssertMsg(iNumRands > 0, "Resource should have at least 1 Quantity type to choose from")
+	ASSERT_DEBUG(iNumRands > 0, "Resource should have at least 1 Quantity type to choose from")
 
 	int iRand = GC.getGame().getJonRandNum(iNumRands, "Picking from random Resource Quantity types");
 
@@ -1369,24 +1453,24 @@ int CvMap::getRandomResourceQuantity(ResourceTypes eIndex)
 //	--------------------------------------------------------------------------------
 int CvMap::getNumResources(ResourceTypes eIndex)
 {
-	CvAssertMsg(eIndex >= 0, "eIndex is expected to be non-negative (invalid Index)");
-	CvAssertMsg(eIndex < GC.getNumResourceInfos(), "eIndex is expected to be within maximum bounds (invalid Index)");
+	ASSERT_DEBUG(eIndex >= 0, "eIndex is expected to be non-negative (invalid Index)");
+	ASSERT_DEBUG(eIndex < GC.getNumResourceInfos(), "eIndex is expected to be within maximum bounds (invalid Index)");
 	return m_paiNumResource[eIndex];
 }
 //	--------------------------------------------------------------------------------
 void CvMap::changeNumResources(ResourceTypes eIndex, int iChange)
 {
-	CvAssertMsg(eIndex >= 0, "eIndex is expected to be non-negative (invalid Index)");
-	CvAssertMsg(eIndex < GC.getNumResourceInfos(), "eIndex is expected to be within maximum bounds (invalid Index)");
+	ASSERT_DEBUG(eIndex >= 0, "eIndex is expected to be non-negative (invalid Index)");
+	ASSERT_DEBUG(eIndex < GC.getNumResourceInfos(), "eIndex is expected to be within maximum bounds (invalid Index)");
 	m_paiNumResource[eIndex] = (m_paiNumResource[eIndex] + iChange);
-	CvAssert(getNumResources(eIndex) >= 0);
+	ASSERT_DEBUG(getNumResources(eIndex) >= 0);
 }
 #if defined(MOD_BALANCE_CORE_RESOURCE_MONOPOLIES)
 //	--------------------------------------------------------------------------------
 void CvMap::setNumResources(ResourceTypes eIndex)
 {
-	CvAssertMsg(eIndex >= 0, "eIndex is expected to be non-negative (invalid Index)");
-	CvAssertMsg(eIndex < GC.getNumResourceInfos(), "eIndex is expected to be within maximum bounds (invalid Index)");
+	ASSERT_DEBUG(eIndex >= 0, "eIndex is expected to be non-negative (invalid Index)");
+	ASSERT_DEBUG(eIndex < GC.getNumResourceInfos(), "eIndex is expected to be within maximum bounds (invalid Index)");
 	const CvResourceInfo* pkResourceInfo = GC.getResourceInfo(eIndex);
 	int iResourceQuantity = 0;
 	if(pkResourceInfo != NULL && pkResourceInfo->getResourceUsage() == RESOURCEUSAGE_STRATEGIC)
@@ -1411,8 +1495,8 @@ void CvMap::setNumResources(ResourceTypes eIndex)
 //	--------------------------------------------------------------------------------
 int CvMap::getNumResourcesOnLand(ResourceTypes eIndex)
 {
-	CvAssertMsg(eIndex >= 0, "eIndex is expected to be non-negative (invalid Index)");
-	CvAssertMsg(eIndex < GC.getNumResourceInfos(), "eIndex is expected to be within maximum bounds (invalid Index)");
+	ASSERT_DEBUG(eIndex >= 0, "eIndex is expected to be non-negative (invalid Index)");
+	ASSERT_DEBUG(eIndex < GC.getNumResourceInfos(), "eIndex is expected to be within maximum bounds (invalid Index)");
 	return m_paiNumResourceOnLand[eIndex];
 }
 
@@ -1420,10 +1504,10 @@ int CvMap::getNumResourcesOnLand(ResourceTypes eIndex)
 //	--------------------------------------------------------------------------------
 void CvMap::changeNumResourcesOnLand(ResourceTypes eIndex, int iChange)
 {
-	CvAssertMsg(eIndex >= 0, "eIndex is expected to be non-negative (invalid Index)");
-	CvAssertMsg(eIndex < GC.getNumResourceInfos(), "eIndex is expected to be within maximum bounds (invalid Index)");
+	ASSERT_DEBUG(eIndex >= 0, "eIndex is expected to be non-negative (invalid Index)");
+	ASSERT_DEBUG(eIndex < GC.getNumResourceInfos(), "eIndex is expected to be within maximum bounds (invalid Index)");
 	m_paiNumResourceOnLand[eIndex] = (m_paiNumResourceOnLand[eIndex] + iChange);
-	CvAssert(getNumResourcesOnLand(eIndex) >= 0);
+	ASSERT_DEBUG(getNumResourcesOnLand(eIndex) >= 0);
 }
 
 //	--------------------------------------------------------------------------------
@@ -1517,6 +1601,7 @@ void CvMap::recalculateAreas()
 {
 	calculateAreas();
 	recalculateLandmasses();
+	RecalculateRivers();
 }
 
 //	--------------------------------------------------------------------------------
@@ -1543,7 +1628,7 @@ void CvMap::Serialize(Map& map, Visitor& visitor)
 	visitor(map.m_bWrapY);
 	visitor(map.m_guid);
 
-	CvAssertMsg((0 < GC.getNumResourceInfos()), "GC.getNumResourceInfos() is not greater than zero but an array is being allocated");
+	ASSERT_DEBUG((0 < GC.getNumResourceInfos()), "GC.getNumResourceInfos() is not greater than zero but an array is being allocated");
 	visitor(map.m_paiNumResource);
 	visitor(map.m_paiNumResourceOnLand);
 
@@ -1570,6 +1655,8 @@ void CvMap::Serialize(Map& map, Visitor& visitor)
 	visitor(map.m_areas);
 
 	visitor(map.m_landmasses);
+
+	visitor(map.m_rivers);
 
 	visitor(map.m_iAIMapHints);
 }
@@ -1819,11 +1906,7 @@ void CvMap::DoPlaceNaturalWonders()
 	{
 		eFeature = (FeatureTypes) iFeatureLoop;
 		CvFeatureInfo* feature = GC.getFeatureInfo(eFeature);
-#if defined(MOD_PSEUDO_NATURAL_WONDER)
-		if(feature && feature->IsNaturalWonder(true))
-#else
-		if(feature && feature->IsNaturalWonder())
-#endif
+		if (feature && feature->IsNaturalWonder(true))
 		{
 			eNWFeature = eFeature;
 
@@ -2410,6 +2493,174 @@ void CvMap::calculateLandmasses()
 	updateYield();
 }
 
+//	--------------------------------------------------------------------------------
+int CvMap::GetNumRivers()
+{
+	return m_rivers.GetCount();
+}
+
+//	--------------------------------------------------------------------------------
+CvRiver* CvMap::GetRiverById(int iID)
+{
+	return m_rivers.Get(iID);
+}
+
+//	--------------------------------------------------------------------------------
+CvRiver* CvMap::GetRiverByIndex(int iIndex)
+{
+	return m_rivers.GetAt(iIndex);
+}
+
+//	--------------------------------------------------------------------------------
+CvRiver* CvMap::AddRiver()
+{
+	//do not use TContainer::Add here, it uses the global ID counter which we don't need here
+	CvRiver* pNew = new CvRiver();
+	pNew->SetID(m_rivers.GetCount() + 1);
+	m_rivers.Load(pNew);
+	return pNew;
+}
+
+
+//	--------------------------------------------------------------------------------
+void CvMap::DeleteRiver(int iID)
+{
+	m_rivers.Remove(iID);
+}
+
+
+//	--------------------------------------------------------------------------------
+CvRiver* CvMap::FirstRiver(int* pIterIdx, bool bRev)
+{
+	if (bRev)
+		*pIterIdx = m_rivers.GetCount() - 1;
+	else
+		*pIterIdx = 0;
+	return m_rivers.GetAt(*pIterIdx);
+}
+
+
+//	--------------------------------------------------------------------------------
+CvRiver* CvMap::NextRiver(int* pIterIdx, bool bRev)
+{
+	if (bRev)
+		(*pIterIdx)--;
+	else
+		(*pIterIdx)++;
+	return m_rivers.GetAt(*pIterIdx);
+}
+
+//	--------------------------------------------------------------------------------
+void CvMap::RecalculateRivers()
+{
+	int iNumPlots = numPlots();
+	for (int iI = 0; iI < iNumPlots; iI++)
+		for (int iJ = 0; iJ < NUM_DIRECTION_TYPES; iJ++)
+			plotByIndexUnchecked(iI)->SetRiverID((DirectionTypes)iJ, -1);
+
+	m_rivers.RemoveAll();
+
+	CalculateRivers();
+}
+
+//	--------------------------------------------------------------------------------
+void CvMap::CalculateRivers()
+{
+	if (!MOD_RIVER_CITY_CONNECTIONS)
+		return;
+
+	CvPlot* pLoopPlot = NULL;
+	CvRiver* pRiver = NULL;
+
+	for (int iI = 0; iI < numPlots(); iI++)
+	{
+		pLoopPlot = plotByIndexUnchecked(iI);
+
+		if (pLoopPlot->isLake())
+		{
+			if (pLoopPlot->GetRiverID(DIRECTION_NORTHEAST) == -1)
+			{
+				pRiver = AddRiver();
+				CreateRiverFrom(pLoopPlot, DIRECTION_NORTHEAST, pRiver);
+			}
+		}
+		else if (pLoopPlot->isFreshWater())
+		{
+			for (int iJ = 0; iJ < NUM_DIRECTION_TYPES; iJ++)
+			{
+				DirectionTypes eDirection = (DirectionTypes)iJ;
+				if (pLoopPlot->GetRiverID(eDirection) == -1 && (pLoopPlot->IsRiverSide(eDirection) || pLoopPlot->IsLakeSide(eDirection)))
+				{
+					pRiver = AddRiver();
+					CreateRiverFrom(pLoopPlot, eDirection, pRiver);
+				}
+			}
+		}
+	}
+}
+
+//	--------------------------------------------------------------------------------
+// Recursive function that creates a river starting at a given plot side
+void CvMap::CreateRiverFrom(CvPlot* pPlot, DirectionTypes eDirection, CvRiver* pRiver)
+{
+	int iRiverID = pRiver->GetID();
+
+	if (pPlot->GetRiverID(eDirection) != -1)
+	{
+		if (pPlot->GetRiverID(eDirection) != iRiverID)
+		{
+			UNREACHABLE();
+		}
+		else
+			return;
+	}
+
+	// Skip lake tiles that are not connected to any land tile
+	if (pPlot->isWater())
+	{
+		bool bIsLandAdjacent = false;
+
+		for (int iI = 0; iI < NUM_DIRECTION_TYPES; iI++)
+		{
+			CvPlot* pAdjacentPlot = plotDirection(pPlot->getX(), pPlot->getY(), (DirectionTypes)iI);
+			if (!pAdjacentPlot)
+				continue;
+
+			if (!pAdjacentPlot->isWater())
+			{
+				bIsLandAdjacent = true;
+				break;
+			}
+		}
+
+		if (!bIsLandAdjacent)
+			return;
+	}
+
+	pPlot->SetRiverID(eDirection, iRiverID);
+	pRiver->AddPlot(pPlot);
+
+	bool bIsLake = pPlot->isLake();
+
+	// Propagate river within same plot clockwise
+	DirectionTypes eRightDirection = static_cast<DirectionTypes>((eDirection + 1) % 6);
+	if (bIsLake || pPlot->IsRiverSide(eRightDirection) || pPlot->IsLakeSide(eRightDirection))
+		CreateRiverFrom(pPlot, eRightDirection, pRiver);
+
+	// Propagate river within same plot counter-clockwise
+	DirectionTypes eLeftDirection = static_cast<DirectionTypes>((eDirection + 5) % 6);
+	if (bIsLake || pPlot->IsRiverSide(eLeftDirection) || pPlot->IsLakeSide(eLeftDirection))
+		CreateRiverFrom(pPlot, eLeftDirection, pRiver);
+
+	// Propagate river to tile across the river
+	CvPlot* pOppositePlot = plotDirection(pPlot->getX(), pPlot->getY(), eDirection);
+	if (pOppositePlot)
+	{
+		DirectionTypes eOppositeDirection = static_cast<DirectionTypes>((eDirection + 3) % 6);
+		CreateRiverFrom(pOppositePlot, eOppositeDirection, pRiver);
+	}
+}
+
 //	---------------------------------------------------------------------------
 int CvMap::Validate()
 {
@@ -2473,7 +2724,6 @@ int CvMap::GetAIMapHint()
 	return m_iAIMapHints;
 }
 
-#if defined(MOD_UNIT_KILL_STATS)
 int CvMap::GetUnitKillCount(PlayerTypes ePlayer, int iPlotIndex)
 {
 	if (killCount.find(ePlayer) != killCount.end())
@@ -2529,7 +2779,6 @@ void CvMap::DoKillCountDecay(float fDecayFactor)
 		for (UnitKillCount::value_type::second_type::iterator itPlot = itPlayer->second.begin(); itPlot != itPlayer->second.end(); ++itPlot)
 			itPlot->second = int(itPlot->second*fDecayFactor);
 }
-#endif
 
 void CvMap::LineOfSightChanged(const CvPlot* pPlot)
 {

@@ -56,7 +56,7 @@ CvCitySiteEvaluator::CvCitySiteEvaluator()
 /// Is it valid for this player to found a city here?
 bool CvCitySiteEvaluator::CanFoundCity(const CvPlot* pPlot, const CvPlayer* pPlayer, bool bIgnoreDistanceToExistingCities) const
 {
-	CvAssert(pPlot);
+	ASSERT_DEBUG(pPlot);
 	if(!pPlot)
 		return false;
 
@@ -277,7 +277,7 @@ void CvSiteEvaluatorForSettler::ComputeFlavorMultipliers(const CvPlayer* pPlayer
 /// Retrieve the relative value of this plot (including plots that would be in city radius)
 int CvSiteEvaluatorForSettler::PlotFoundValue(CvPlot* pPlot, const CvPlayer* pPlayer, const std::vector<int>& ignorePlots, bool bCoastOnly, CvString* pDebug)
 {
-	CvAssert(pPlot);
+	ASSERT_DEBUG(pPlot);
 	if(!pPlot)
 		return -1;
 
@@ -305,8 +305,8 @@ int CvSiteEvaluatorForSettler::PlotFoundValue(CvPlot* pPlot, const CvPlayer* pPl
 
 	TeamTypes eTeam = pPlayer ? pPlayer->getTeam() : NO_TEAM;
 
-	// AI does not settle on Antiquity Sites
-	ResourceTypes ePlotResource = pPlot->getResourceType(eTeam);
+	// To avoid a bug, AI does not settle on Antiquity Sites
+	ResourceTypes ePlotResource = pPlot->getResourceType(pPlayer->isHuman() ? eTeam : NO_TEAM);
 	if (ePlotResource == (ResourceTypes)GD_INT_GET(ARTIFACT_RESOURCE) ||
 		ePlotResource == (ResourceTypes)GD_INT_GET(HIDDEN_ARTIFACT_RESOURCE))
 	{
@@ -769,7 +769,7 @@ int CvSiteEvaluatorForSettler::PlotFoundValue(CvPlot* pPlot, const CvPlayer* pPl
 		}
 		
 		//todo: do we want the check the map area as well?
-		if (eNeighbor != NO_PLAYER && pPlayer->GetDiplomacyAI()->GetMilitaryStrengthComparedToUs(eNeighbor)!=NO_STRENGTH_VALUE)
+		if (eNeighbor != NO_PLAYER)
 		{
 			int strengthModifiers[NUM_STRENGTH_VALUES] = { 100, 100, 50, 0, -50, -100, -100 };
 			int iModifierPercent = strengthModifiers[pPlayer->GetDiplomacyAI()->GetMilitaryStrengthComparedToUs(eNeighbor)];

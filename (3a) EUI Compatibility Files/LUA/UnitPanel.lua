@@ -393,7 +393,8 @@ local function UpdateCity( instance )
 		instance.CityQuests:SetText( city:GetWeLoveTheKingDayCounter() > 0 and "[ICON_HAPPINESS_1]" or (GameInfo.Resources[city:GetResourceDemanded()] or {}).IconString )
 		instance.CityIsRazing:SetHide( isNotRazing )
 		instance.CityIsResistance:SetHide( isNotResistance )
-		instance.CityIsConnected:SetHide( not g_activePlayer:IsCapitalConnectedToCity( city ) or isCapital )
+		instance.CityIsConnected:SetHide( not g_activePlayer:IsCapitalConnectedToCity( city ) or isCapital or g_activePlayer:IsCapitalIndustrialConnectedToCity( city ) )
+		instance.CityIsIndustrialConnected:SetHide( not g_activePlayer:IsCapitalIndustrialConnectedToCity( city ) or isCapital )
 		instance.CityIsBlockaded:SetHide( not city:IsBlockaded() )
 		instance.CityIsOccupied:SetHide( not city:IsOccupied() or city:IsNoOccupiedUnhappiness() )
 		instance.CityIsAutomated:SetHide( not isAutomated )
@@ -905,6 +906,10 @@ g_cities = g_RibbonManager( "CityInstance", Controls.CityStack, Controls.Scrap,
 		local city = FindCity( control )
 		ShowSimpleCityTip( control, city, L("TXT_KEY_CITY_CONNECTED") .. (" (%+g[ICON_GOLD])"):format( ( bnw_mode and g_activePlayer:GetCityConnectionRouteGoldTimes100( city ) or g_activePlayer:GetRouteGoldTimes100( city ) ) / 100 ) ) -- stupid function renaming
 	end,
+	CityIsIndustrialConnected = function( control )
+		local city = FindCity( control )
+		ShowSimpleCityTip( control, city, L("TXT_KEY_CITY_INDUSTRIAL_CONNECTED") .. (" (%+g[ICON_GOLD]/[ICON_PRODUCTION])"):format( ( bnw_mode and g_activePlayer:GetCityConnectionRouteGoldTimes100( city ) or g_activePlayer:GetRouteGoldTimes100( city ) ) / 100 ) ) -- stupid function renaming
+	end,
 	CityIsBlockaded = function( control )
 		local city = FindCity( control )
 		ShowSimpleCityTip( control, city, L"TXT_KEY_CITY_BLOCKADED" )
@@ -1307,7 +1312,7 @@ local UpdateUnitPromotions = EUI.UpdateUnitPromotions or function(unit)
 	local promos			= {}	
 	for promo in GameInfo.UnitPromotions() do
 		local promoID = promo.ID
-		if unit:IsHasPromotion(promoID) and promo.ShowInUnitPanel ~= false then
+		if unit:IsHasPromotion(promoID) and promo.ShowInUnitPanel then
 			local showPromo = true
 
 			if promo.RankList then
@@ -2156,14 +2161,16 @@ function()-- control )
 			tipControlTable.UnitActionHotKey:SetText()
 			-- Yield from this improvement
 			local toolTip = table()
-			for yieldID = 0, YieldTypes.NUM_YIELD_TYPES-1 do
-				local yieldChange = plot:CalculateImprovementYieldChange( improvementID, yieldID, plot:GetOwner(), false )
-				--plot:CalculateYield( yieldID ) - plot:CalculateNatureYield( yieldID, g_activeTeamID )
+			if plot:GetOwner() >= 0 then
+				for yieldID = 0, YieldTypes.NUM_YIELD_TYPES-1 do
+					local yieldChange = plot:CalculateImprovementYieldChange( improvementID, yieldID, plot:GetOwner(), false )
+					--plot:CalculateYield( yieldID ) - plot:CalculateNatureYield( yieldID, g_activeTeamID )
 
-				if yieldChange > 0 then
-					toolTip:insert( "[COLOR_POSITIVE_TEXT]+" .. L( g_yieldString[yieldID], yieldChange) )
-				elseif  yieldChange < 0 then
-					toolTip:insert( "[COLOR_NEGATIVE_TEXT]" .. L( g_yieldString[yieldID], yieldChange) )
+					if yieldChange > 0 then
+						toolTip:insert( "[COLOR_POSITIVE_TEXT]+" .. L( g_yieldString[yieldID], yieldChange) )
+					elseif  yieldChange < 0 then
+						toolTip:insert( "[COLOR_NEGATIVE_TEXT]" .. L( g_yieldString[yieldID], yieldChange) )
+					end
 				end
 			end
 			tipControlTable.UnitActionHelp:SetText( toolTip:concat("[NEWLINE]") )

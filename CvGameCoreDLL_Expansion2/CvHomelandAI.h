@@ -10,13 +10,11 @@
 #ifndef CIV5_HOMELAND_AI_H
 #define CIV5_HOMELAND_AI_H
 
-#if defined(MOD_BALANCE_CORE_MILITARY)
 #define UPGRADE_THIS_TURN_PRIORITY_BOOST 5000
 #define UPGRADE_IN_TERRITORY_PRIORITY_BOOST 2000
-#else
-#define UPGRADE_THIS_TURN_PRIORITY_BOOST 1000
-#define UPGRADE_IN_TERRITORY_PRIORITY_BOOST 500
-#endif
+
+struct BuilderDirective;
+
 enum AIHomelandTargetType
 {
     AI_HOMELAND_TARGET_NONE,
@@ -263,8 +261,7 @@ private:
 //-------------------------------------
 
 	void PlanImprovements();
-	void PlotWorkerMoves(bool bSecondary = false);
-	void PlotWorkerSeaMoves(bool bSecondary = false);
+	void PlotWorkerMoves();
 	void PlotWriterMoves();
 	void PlotArtistMoves();
 	void PlotMusicianMoves();
@@ -290,6 +287,7 @@ private:
 
 	void ExecuteWorkerMoves();
 	void ExecuteMovesToSafestPlot(CvUnit* pUnit);
+	bool ExecuteMoveUnitAwayFromBorder(CvUnit* pUnit);
 	bool ExecuteMoveToTarget(CvUnit* pUnit, CvPlot* pTarget, int iFlags, bool bEndTurn = false);
 
 	void ExecuteHeals();
@@ -316,6 +314,16 @@ private:
 	bool MoveToTargetButDontEndTurn(CvUnit* pUnit, CvPlot* pTargetPlot, int iFlags);
 
 	CvPlot* FindArchaeologistTarget(CvUnit *pUnit);
+	vector<OptionWithScore<pair<CvUnit*, BuilderDirective>>> GetWeightedDirectives(
+		const vector<BuilderDirective> aDirectives, 
+		const set<BuilderDirective> ignoredDirectives, 
+		const list<int> allWorkers, 
+		const set<int> ignoredWorkers, 
+		const std::map<CvUnit*, ReachablePlots>& allWorkersReachablePlots);
+	int GetBuilderNumTurnsAway(
+		CvUnit* pUnit, 
+		BuilderDirective eDirective, 
+		const std::map<CvUnit*, ReachablePlots>& allWorkersReachablePlots);
 
 	void UnitProcessed(int iID);
 	bool ExecuteCultureBlast(CvUnit* pUnit);
@@ -338,7 +346,6 @@ private:
 
 	// Lists of targets for the turn
 	std::vector<CvHomelandTarget> m_TargetedCities;
-	std::vector<CvHomelandTarget> m_TargetedNavalResources;
 	std::vector<CvHomelandTarget> m_TargetedAntiquitySites;
 };
 
@@ -364,11 +371,13 @@ struct SPatrolTarget {
 struct SBuilderState {
 	map<ResourceTypes, int> mExtraResources;
 	map<int, FeatureTypes> mChangedPlotFeatures;
-	map<int, ImprovementTypes> mChangedPlotImprovements;
-	map<int, int> mExtraDefense;
-	map<int, int> mExtraDamageToAdjacent;
+	map<int, pair<BuildTypes, ImprovementTypes>> mChangedPlotImprovements;
 
 	SBuilderState(){};
+	static const SBuilderState& DefaultInstance() {
+		static SBuilderState defaultInstance;
+		return defaultInstance;
+	}
 };
 
 namespace HomelandAIHelpers

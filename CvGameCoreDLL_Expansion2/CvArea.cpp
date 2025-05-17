@@ -1,5 +1,5 @@
 /*	-------------------------------------------------------------------------------------------------------
-	© 1991-2012 Take-Two Interactive Software and its subsidiaries.  Developed by Firaxis Games.  
+	Â© 1991-2012 Take-Two Interactive Software and its subsidiaries.  Developed by Firaxis Games.  
 	Sid Meier's Civilization V, Civ, Civilization, 2K Games, Firaxis Games, Take-Two Interactive Software 
 	and their respective logos are all trademarks of Take-Two interactive Software, Inc.  
 	All other marks and trademarks are the property of their respective owners.  
@@ -184,7 +184,7 @@ int CvArea::getNumTiles() const
 void CvArea::changeNumTiles(int iChange)
 {
 	m_iNumTiles = (m_iNumTiles + iChange);
-	CvAssert(m_iNumTiles >= 0);
+	ASSERT_DEBUG(m_iNumTiles >= 0);
 }
 
 
@@ -206,8 +206,8 @@ int CvArea::getNumUnownedTiles() const
 void CvArea::changeNumOwnedTiles(int iChange)
 {
 	m_iNumOwnedTiles = (m_iNumOwnedTiles + iChange);
-	CvAssert(getNumOwnedTiles() >= 0);
-	CvAssert(getNumUnownedTiles() >= 0);
+	ASSERT_DEBUG(getNumOwnedTiles() >= 0);
+	ASSERT_DEBUG(getNumUnownedTiles() >= 0);
 }
 
 
@@ -222,7 +222,7 @@ int CvArea::getNumRiverEdges() const
 void CvArea::changeNumRiverEdges(int iChange)
 {
 	m_iNumRiverEdges = (m_iNumRiverEdges + iChange);
-	CvAssert(getNumRiverEdges() >= 0);
+	ASSERT_DEBUG(getNumRiverEdges() >= 0);
 }
 
 
@@ -257,7 +257,7 @@ int CvArea::getNumStartingPlots() const
 void CvArea::changeNumStartingPlots(int iChange)
 {
 	m_iNumStartingPlots = m_iNumStartingPlots + iChange;
-	CvAssert(getNumStartingPlots() >= 0);
+	ASSERT_DEBUG(getNumStartingPlots() >= 0);
 }
 
 #if defined(MOD_BALANCE_CORE)
@@ -385,13 +385,13 @@ void CvArea::FindBoundaries(const vector<bool>& occupiedCols, const vector<bool>
 	//but we want the rise before the fall always. so fix it.
 	if (colFall < colRise)
 	{
-		assert(GC.getMap().isWrapX());
+		ASSERT_DEBUG(GC.getMap().isWrapX());
 		colFall += occupiedCols.size();
 	}
 
 	if (rowFall < rowRise)
 	{
-		assert(GC.getMap().isWrapY());
+		ASSERT_DEBUG(GC.getMap().isWrapY());
 		rowFall += occupiedRows.size();
 	}
 
@@ -584,7 +584,7 @@ void CvArea::setTotalFoundValue(int iNewValue)
 {
 	//avoid overflow
 	m_iTotalFoundValue = min(INT_MAX/2,max(0,iNewValue));
-	CvAssert(m_iTotalFoundValue >= 0);
+	ASSERT_DEBUG(m_iTotalFoundValue >= 0);
 }
 
 //	--------------------------------------------------------------------------------

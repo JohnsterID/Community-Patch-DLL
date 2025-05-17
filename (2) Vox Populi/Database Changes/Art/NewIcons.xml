@@ -1,5 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Created by ModBuddy on 10/9/2010 9:25:22 PM -->
 <GameData>
 	<IconTextureAtlases>
 		<Row>
@@ -1325,6 +1324,11 @@
 			<IconName>ICON_VP_FRANCHISE</IconName>
 			<IconFontTexture>ICON_FONT_TEXTURE_VP</IconFontTexture>
 			<IconMapping>31</IconMapping>
+		</Row>
+		<Row>
+			<IconName>ICON_INDUSTRIAL_CONNECTED</IconName>
+			<IconFontTexture>ICON_FONT_TEXTURE_VP</IconFontTexture>
+			<IconMapping>33</IconMapping>
 		</Row>
 		<Row>
 			<IconName>ICON_RES_COFFEE</IconName>

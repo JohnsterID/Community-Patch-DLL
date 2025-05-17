@@ -34,7 +34,9 @@ WHERE Type = 'UNIT_MONGOLIAN_KHAN';
 INSERT INTO Unit_FreePromotions
 	(UnitType, PromotionType)
 VALUES
-	('UNIT_MONGOLIAN_KHAN', 'PROMOTION_MEDIC_GENERAL');
+	('UNIT_MONGOLIAN_KHAN', 'PROMOTION_MEDIC_GENERAL'),
+	('UNIT_MONGOLIAN_KHAN', 'PROMOTION_MEDIC'),
+	('UNIT_MONGOLIAN_KHAN', 'PROMOTION_MEDIC_II');
 
 ----------------------------------------------------------
 -- Unique Improvement: Ordo
@@ -57,11 +59,12 @@ UPDATE Improvements
 SET
 	InAdjacentFriendly = 1,
 	BuildableOnResources = 1,
+	ConnectsAllResources = 1,
 	NoTwoAdjacent = 1,
 	CreatedByGreatPerson = 1,
 	CultureBombRadius = 1,
 	MakesPassable = 1,
-	MovesChange = 1,
+	RestoreMoves = 1,
 	DefenseModifier = 50,
 	NoFollowUp = 1
 WHERE Type = 'IMPROVEMENT_MONGOLIA_ORDO';

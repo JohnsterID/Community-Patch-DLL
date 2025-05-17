@@ -1,5 +1,5 @@
 /*	-------------------------------------------------------------------------------------------------------
-	© 1991-2012 Take-Two Interactive Software and its subsidiaries.  Developed by Firaxis Games.  
+	Â© 1991-2012 Take-Two Interactive Software and its subsidiaries.  Developed by Firaxis Games.  
 	Sid Meier's Civilization V, Civ, Civilization, 2K Games, Firaxis Games, Take-Two Interactive Software 
 	and their respective logos are all trademarks of Take-Two interactive Software, Inc.  
 	All other marks and trademarks are the property of their respective owners.  
@@ -38,7 +38,6 @@ public:
 	// Accessor Functions
 	int GetFlavorValue(int i) const;
 	YieldTypes GetYieldType() const;
-	int GetYieldTargetTimes100(YieldTypes eYield) const;
 	int GetSubtype() const;
 	bool IsWonder() const;
 	bool IsDefault() const;
@@ -53,7 +52,6 @@ private:
 	bool m_bDefault;
 	bool m_bMustBeCoastal;
 	bool m_bOperationUnitProvider;
-	int* m_piYieldTargetTimes100;
 };
 
 //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++

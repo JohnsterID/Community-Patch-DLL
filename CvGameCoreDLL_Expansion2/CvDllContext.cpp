@@ -1,5 +1,5 @@
 /*	-------------------------------------------------------------------------------------------------------
-	© 1991-2012 Take-Two Interactive Software and its subsidiaries.  Developed by Firaxis Games.  
+	Â© 1991-2012 Take-Two Interactive Software and its subsidiaries.  Developed by Firaxis Games.  
 	Sid Meier's Civilization V, Civ, Civilization, 2K Games, Firaxis Games, Take-Two Interactive Software 
 	and their respective logos are all trademarks of Take-Two interactive Software, Inc.  
 	All other marks and trademarks are the property of their respective owners.  
@@ -54,16 +54,109 @@ CvDllGameContext* CvDllGameContext::s_pSingleton = NULL;
 HANDLE CvDllGameContext::s_hHeap = INVALID_HANDLE_VALUE;
 
 //------------------------------------------------------------------------------
-//------------------------------------------------------------------------------
-CvDllGameContext::CvDllGameContext()
-	: m_uiRngCounter(0)
-	, m_uiNetInitInfoCounter(0)
-	, m_uiNetLoadGameInfoCounter(0)
+// Constructor
+CvDllGameContext::CvDllGameContext() :
+	m_uiRngCounter(0),
+	m_uiNetInitInfoCounter(0),
+	m_uiNetLoadGameInfoCounter(0)
 {
 	m_pNetworkSyncronizer = new CvDllNetworkSyncronization();
 	m_pNetMessageHandler = new CvDllNetMessageHandler();
 	m_pScriptSystemUtility = new CvDllScriptSystemUtility();
 	m_pWorldBuilderMapLoader = new CvDllWorldBuilderMapLoader();
+}
+//------------------------------------------------------------------------------
+// Copy constructor
+CvDllGameContext::CvDllGameContext(const CvDllGameContext& other) :
+	m_uiRngCounter(other.m_uiRngCounter),
+	m_uiNetInitInfoCounter(other.m_uiNetInitInfoCounter),
+	m_uiNetLoadGameInfoCounter(other.m_uiNetLoadGameInfoCounter)
+{
+	m_pNetworkSyncronizer = new CvDllNetworkSyncronization(*other.m_pNetworkSyncronizer);
+	m_pNetMessageHandler = new CvDllNetMessageHandler(*other.m_pNetMessageHandler);
+	m_pScriptSystemUtility = new CvDllScriptSystemUtility(*other.m_pScriptSystemUtility);
+	m_pWorldBuilderMapLoader = new CvDllWorldBuilderMapLoader(*other.m_pWorldBuilderMapLoader);
+
+	for (std::vector<std::pair<uint, CvRandom*> >::const_iterator it = other.m_RandomNumberGenerators.begin();
+		it != other.m_RandomNumberGenerators.end(); ++it)
+	{
+		m_RandomNumberGenerators.push_back(std::make_pair(it->first, it->second->Clone()));
+	}
+
+	for (std::vector<std::pair<uint, CvDllNetInitInfo*> >::const_iterator it = other.m_NetInitInfos.begin();
+		it != other.m_NetInitInfos.end(); ++it)
+	{
+		m_NetInitInfos.push_back(std::make_pair(it->first, new CvDllNetInitInfo(*it->second)));
+	}
+
+	for (std::vector<std::pair<uint, CvDllNetLoadGameInfo*> >::const_iterator it = other.m_NetLoadGameInfos.begin();
+		it != other.m_NetLoadGameInfos.end(); ++it)
+	{
+		m_NetLoadGameInfos.push_back(std::make_pair(it->first, new CvDllNetLoadGameInfo(*it->second)));
+	}
+}
+//------------------------------------------------------------------------------
+// Assignment operator
+CvDllGameContext& CvDllGameContext::operator=(const CvDllGameContext& other)
+{
+	if (this != &other)
+	{
+		// Free existing resources
+		delete m_pNetworkSyncronizer;
+		delete m_pNetMessageHandler;
+		delete m_pScriptSystemUtility;
+		delete m_pWorldBuilderMapLoader;
+
+		for (std::vector<std::pair<uint, CvRandom*> >::iterator it = m_RandomNumberGenerators.begin();
+			it != m_RandomNumberGenerators.end(); ++it)
+		{
+			delete it->second;
+		}
+		m_RandomNumberGenerators.clear();
+
+		for (std::vector<std::pair<uint, CvDllNetInitInfo*> >::iterator it = m_NetInitInfos.begin();
+			it != m_NetInitInfos.end(); ++it)
+		{
+			delete it->second;
+		}
+		m_NetInitInfos.clear();
+
+		for (std::vector<std::pair<uint, CvDllNetLoadGameInfo*> >::iterator it = m_NetLoadGameInfos.begin();
+			it != m_NetLoadGameInfos.end(); ++it)
+		{
+			delete it->second;
+		}
+		m_NetLoadGameInfos.clear();
+
+		// Copy new resources
+		m_uiRngCounter = other.m_uiRngCounter;
+		m_uiNetInitInfoCounter = other.m_uiNetInitInfoCounter;
+		m_uiNetLoadGameInfoCounter = other.m_uiNetLoadGameInfoCounter;
+
+		m_pNetworkSyncronizer = new CvDllNetworkSyncronization(*other.m_pNetworkSyncronizer);
+		m_pNetMessageHandler = new CvDllNetMessageHandler(*other.m_pNetMessageHandler);
+		m_pScriptSystemUtility = new CvDllScriptSystemUtility(*other.m_pScriptSystemUtility);
+		m_pWorldBuilderMapLoader = new CvDllWorldBuilderMapLoader(*other.m_pWorldBuilderMapLoader);
+
+		for (std::vector<std::pair<uint, CvRandom*> >::const_iterator it = other.m_RandomNumberGenerators.begin();
+			it != other.m_RandomNumberGenerators.end(); ++it)
+		{
+			m_RandomNumberGenerators.push_back(std::make_pair(it->first, it->second->Clone()));
+		}
+
+		for (std::vector<std::pair<uint, CvDllNetInitInfo*> >::const_iterator it = other.m_NetInitInfos.begin();
+			it != other.m_NetInitInfos.end(); ++it)
+		{
+			m_NetInitInfos.push_back(std::make_pair(it->first, new CvDllNetInitInfo(*it->second)));
+		}
+
+		for (std::vector<std::pair<uint, CvDllNetLoadGameInfo*> >::const_iterator it = other.m_NetLoadGameInfos.begin();
+			it != other.m_NetLoadGameInfos.end(); ++it)
+		{
+			m_NetLoadGameInfos.push_back(std::make_pair(it->first, new CvDllNetLoadGameInfo(*it->second)));
+		}
+	}
+	return *this;
 }
 //------------------------------------------------------------------------------
 CvDllGameContext::~CvDllGameContext()
@@ -566,7 +659,7 @@ int CvDllGameContext::GetMOVE_DENOMINATOR() const
 //------------------------------------------------------------------------------
 int CvDllGameContext::GetMAX_CITY_HIT_POINTS() const
 {
-	return /*200 in CP, 300 in VP*/ GD_INT_GET(MAX_CITY_HIT_POINTS);
+	return /*200 in CP, 250 in VP*/ GD_INT_GET(MAX_CITY_HIT_POINTS);
 }
 //------------------------------------------------------------------------------
 float CvDllGameContext::GetCITY_ZOOM_OFFSET() const
@@ -1106,13 +1199,31 @@ ICvEnumerator* CvDllGameContext::TEMPCalculatePathFinderUpdates(ICvUnit1* pHeadS
 			update.iX = path.vPlots[i].x;
 			update.iY = path.vPlots[i].y;
 
-			update.iTurnNumber = path.vPlots[i].turns * 10; //fixed point float
-			if (path.vPlots[i].moves>0)
-				update.iTurnNumber += 5; //indicate that there are movement points left
-
-			//in debug mode just use the raw number, it's actually the known cost
 			if (eMode==TC_DEBUG)
+				//in debug mode just use the raw number, it's actually the known cost (in debug mode)
 				update.iTurnNumber = path.vPlots[i].turns;
+			else if (MOD_UI_DISPLAY_PRECISE_MOVEMENT_POINTS)
+			{
+				// We can only pass a single integer to the UI - but we want to fit in turn count and remaining moves
+				// Also for some reason it cannot be larger than 36000
+				// So use 600 as the scaler, this means we can handle up to 60 turns and 599 movement points
+				// Also it's a multiple of 60 so there will be no rounding
+				int iMultiplier = GD_INT_GET(MOVE_DENOMINATOR) * 10;
+				int iRemaining = (int)path.vPlots[i].moves;
+				update.iTurnNumber = path.vPlots[i].turns * iMultiplier + iRemaining;
+			}
+			else
+			{
+				// Structure of iTurnNumber:
+				// ones digit: the remaining movement points of the unit (rounded up if not an integer)
+				// tens digit: the total movement points of the unit
+				// all higher digits: the number of turns to reach the plot
+				CvPlot* pPlot = GC.getMap().plotUnchecked(path.vPlots[i].x, path.vPlots[i].y);
+				update.iTurnNumber = path.vPlots[i].turns * 100;
+				update.iTurnNumber += 10 * (min(pkUnit->baseMoves(pPlot->needsEmbarkation(pkUnit)), 9));
+				if (path.vPlots[i].moves>0)
+					update.iTurnNumber += min(((int)path.vPlots[i].moves-1)/GD_INT_GET(MOVE_DENOMINATOR)+1, 9); //movement points left
+			}
 
 			pUpdateData.push_back(update);
 		}

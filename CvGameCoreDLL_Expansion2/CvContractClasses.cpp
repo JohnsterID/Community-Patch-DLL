@@ -116,14 +116,14 @@ int CvContractEntry::GetTurns() const
 }
 int CvContractEntry::GetYieldCost(YieldTypes eYield) const
 {
-	CvAssertMsg(eYield < NUM_YIELD_TYPES, "Index out of bounds");
-	CvAssertMsg(eYield > -1, "Index out of bounds");
+	ASSERT_DEBUG(eYield < NUM_YIELD_TYPES, "Index out of bounds");
+	ASSERT_DEBUG(eYield > -1, "Index out of bounds");
 	return m_piYieldCost ? m_piYieldCost[eYield] : -1;
 }
 int CvContractEntry::GetFlavorValue(FlavorTypes eFlavor) const
 {
-	CvAssertMsg(eFlavor < GC.getNumFlavorTypes(), "Index out of bounds");
-	CvAssertMsg(eFlavor > -1, "Index out of bounds");
+	ASSERT_DEBUG(eFlavor < GC.getNumFlavorTypes(), "Index out of bounds");
+	ASSERT_DEBUG(eFlavor > -1, "Index out of bounds");
 	return m_piFlavor ? m_piFlavor[eFlavor] : -1;
 }
 
@@ -525,7 +525,7 @@ void CvPlayerContracts::InitContractUnits(ContractTypes eContract)
 
 							// Init unit
 							pUnit = m_pPlayer->initUnit(eUnit, pBestCity->getX(), pBestCity->getY(), pkUnitInfo->GetDefaultUnitAIType(), REASON_DEFAULT, false, true, 0, 0, eContract);
-							CvAssert(pUnit);
+							ASSERT_DEBUG(pUnit);
 							if (pUnit)
 							{
 								if (!pUnit->jumpToNearestValidPlotWithinRange(5))
@@ -680,7 +680,7 @@ void CvGameContracts::DoUpdateContracts()
 	
 	//This is expensive, so do it sparingly!
 	ContractList::iterator it;
-	for(it = m_InactiveContracts.begin(); it != m_InactiveContracts.end(); it++)
+	for(it = m_InactiveContracts.begin(); it != m_InactiveContracts.end(); ++it)
 	{
 		CvContract kContract = (*it);
 		for(int iI = 0; iI < GC.getNumUnitInfos(); iI++)
@@ -722,7 +722,7 @@ CvContract* CvGameContracts::GetActiveContract(ContractTypes eContract)
 		return NULL;
 
 	ContractList::iterator it;
-	for(it = m_ActiveContracts.begin(); it != m_ActiveContracts.end(); it++)
+	for(it = m_ActiveContracts.begin(); it != m_ActiveContracts.end(); ++it)
 	{
 		if(it->m_eContract == eContract)
 		{
@@ -738,7 +738,7 @@ CvContract* CvGameContracts::GetInactiveContract(ContractTypes eContract)
 		return NULL;
 
 	ContractList::iterator it;
-	for(it = m_InactiveContracts.begin(); it != m_InactiveContracts.end(); it++)
+	for(it = m_InactiveContracts.begin(); it != m_InactiveContracts.end(); ++it)
 	{
 		if(it->m_eContract == eContract)
 		{
@@ -772,7 +772,7 @@ bool CvGameContracts::IsContractActive(ContractTypes eContract)
 		return false;
 
 	ContractList::iterator it;
-	for(it = m_ActiveContracts.begin(); it != m_ActiveContracts.end(); it++)
+	for(it = m_ActiveContracts.begin(); it != m_ActiveContracts.end(); ++it)
 	{
 		CvContract kContract = (*it);
 		if(kContract.m_eContract == eContract)
@@ -788,7 +788,7 @@ bool CvGameContracts::IsContractAvailable(ContractTypes eContract)
 		return false;
 
 	ContractList::iterator it;
-	for(it = m_InactiveContracts.begin(); it != m_InactiveContracts.end(); it++)
+	for(it = m_InactiveContracts.begin(); it != m_InactiveContracts.end(); ++it)
 	{
 		CvContract kContract = (*it);
 		if(kContract.m_eContract == eContract)
@@ -807,7 +807,7 @@ void CvGameContracts::StartContract(CvContract kContract)
 
 	//And remove it from the inactive list.
 	ContractList::iterator it;
-	for(it = m_InactiveContracts.begin(); it != m_InactiveContracts.end(); it++)
+	for(it = m_InactiveContracts.begin(); it != m_InactiveContracts.end(); ++it)
 	{
 		CvContract kInactiveContract = (*it);
 		if(kContract.m_eContract == kInactiveContract.m_eContract)
@@ -821,7 +821,7 @@ void CvGameContracts::StartContract(CvContract kContract)
 void CvGameContracts::EndContract(ContractTypes eContract, PlayerTypes ePlayer)
 {
 	ContractList::iterator it;
-	for(it = m_ActiveContracts.begin(); it != m_ActiveContracts.end(); it++)
+	for(it = m_ActiveContracts.begin(); it != m_ActiveContracts.end(); ++it)
 	{
 		CvContract kContract = (*it);
 		if(kContract.m_eContract == eContract && kContract.m_eContractHolder == ePlayer)

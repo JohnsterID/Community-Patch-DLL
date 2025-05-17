@@ -31,7 +31,7 @@
 	lua_setfield(L, t, #Name);
 
 //safety measure against illegal pointers passed from lua
-#define CHECK_PLOT_VALID(p) if(!p||!GC.getMap().isPlot(p->getX(),p->getY())|(p<GC.getMap().plotByIndexUnchecked(0))|(p>GC.getMap().plotByIndexUnchecked(GC.getMap().numPlots()-1))) return 0;
+#define CHECK_PLOT_VALID(p) if (!p || !GC.getMap().isPlot(p->getX(), p->getY()) || (p < GC.getMap().plotByIndexUnchecked(0)) || (p > GC.getMap().plotByIndexUnchecked(GC.getMap().numPlots() - 1))) return 0;
 
 //------------------------------------------------------------------------------
 void CvLuaPlot::PushMethods(lua_State* L, int t)
@@ -74,6 +74,7 @@ void CvLuaPlot::PushMethods(lua_State* L, int t)
 	Method(IsRiverSide);
 	Method(IsRiverConnection);
 	Method(IsRiverCrossingFlowClockwise);
+	Method(GetRiverID);
 
 	Method(GetNearestLandArea);
 	Method(SeeFromLevel);
@@ -148,6 +149,7 @@ void CvLuaPlot::PushMethods(lua_State* L, int t)
 
 	Method(IsRoute);
 	Method(IsTradeRoute);
+	Method(IsCityConnection)
 	Method(IsImpassable);
 
 	Method(GetX);
@@ -631,6 +633,13 @@ int CvLuaPlot::lIsRiverCrossingFlowClockwise(lua_State* L)
 	return 1;
 }
 //------------------------------------------------------------------------------
+//int GetRiverID();
+int CvLuaPlot::lGetRiverID(lua_State* L)
+{
+	return BasicLuaMethod(L, &CvPlot::GetRiverID);
+}
+
+//------------------------------------------------------------------------------
 //int getNearestLandArea();
 int CvLuaPlot::lGetNearestLandArea(lua_State* L)
 {
@@ -1113,9 +1122,21 @@ int CvLuaPlot::lIsRoute(lua_State* L)
 //------------------------------------------------------------------------------
 int CvLuaPlot::lIsTradeRoute(lua_State* L)
 {
+	// Duplicate of IsCityConnection() kept for backwards compatibility
 	CvPlot* pkPlot = GetInstance(L); CHECK_PLOT_VALID(pkPlot);
 	PlayerTypes ePlayer = (PlayerTypes)luaL_optint(L, 2, -1);
-	bool bResult = pkPlot->IsCityConnection(ePlayer);
+	const bool bIndustrial = luaL_optbool(L, 3, false);
+	const bool bResult = pkPlot->IsCityConnection(ePlayer, bIndustrial);
+	lua_pushboolean(L, bResult);
+	return 1;
+}
+//------------------------------------------------------------------------------
+int CvLuaPlot::lIsCityConnection(lua_State* L)
+{
+	CvPlot* pkPlot = GetInstance(L); CHECK_PLOT_VALID(pkPlot);
+	PlayerTypes ePlayer = (PlayerTypes)luaL_optint(L, 2, -1);
+	const bool bIndustrial = luaL_optbool(L, 3, false);
+	const bool bResult = pkPlot->IsCityConnection(ePlayer, bIndustrial);
 	lua_pushboolean(L, bResult);
 	return 1;
 }
@@ -1401,7 +1422,13 @@ int CvLuaPlot::lGetOwner(lua_State* L)
 //void setOwner(PlayerTypes eNewValue, int iAcquiringCityID, bool bCheckUnits = true, bool bUpdateResources = true);
 int CvLuaPlot::lSetOwner(lua_State* L)
 {
-	return BasicLuaMethod(L, &CvPlot::setOwner);
+	CvPlot* pkPlot = GetInstance(L); CHECK_PLOT_VALID(pkPlot);
+	const PlayerTypes eNewValue = (PlayerTypes)lua_tointeger(L, 2);
+	const int iAcquiringCityID = lua_tointeger(L, 3);
+	const bool bCheckUnits = luaL_optbool(L, 4, true);
+
+	pkPlot->setOwner(eNewValue, iAcquiringCityID, bCheckUnits);
+	return 1;
 }
 //------------------------------------------------------------------------------
 //PlotTypes getPlotType();
@@ -1687,7 +1714,7 @@ int CvLuaPlot::lCalculateImprovementYieldChange(lua_State* L)
 	if (pkPlot->IsRoutePillaged())
 		eRoute = NO_ROUTE;
 
-	const int iResult = pkPlot->calculateImprovementYield(eYield, ePlayer, eImprovement, eRoute, pkPlot->getFeatureType(), pkPlot->getResourceType(GET_PLAYER(ePlayer).getTeam()), false, pkPlot->getEffectiveOwningCity(), bOptimal);
+	const int iResult = pkPlot->calculateImprovementYield(eYield, ePlayer, eImprovement, eRoute, pkPlot->getFeatureType(), pkPlot->getResourceType(GET_PLAYER(ePlayer).getTeam()), NUM_ROUTE_TYPES, pkPlot->getEffectiveOwningCity(), bOptimal);
 	lua_pushinteger(L, iResult);
 	return 1;
 }
@@ -1726,7 +1753,7 @@ int CvLuaPlot::lGetYieldWithBuild(lua_State* L)
 
 		const CvReligion* pReligion = (eMajority != NO_RELIGION) ? GC.getGame().GetGameReligions()->GetReligion(eMajority, pOwningCity->getOwner()) : 0;
 		const CvBeliefEntry* pBelief = (eSecondaryPantheon != NO_BELIEF) ? GC.GetGameBeliefs()->GetEntry(eSecondaryPantheon) : 0;
-		int iResult = pkPlot->getYieldWithBuild(eBuild, eYield, bUpgrade, false, ePlayer, pOwningCity, pReligion, pBelief);
+		int iResult = pkPlot->getYieldWithBuild(eBuild, eYield, bUpgrade, NUM_ROUTE_TYPES, ePlayer, pOwningCity, pReligion, pBelief);
 #if defined(MOD_RELIGION_PERMANENT_PANTHEON)
 		// Mod for civs keeping their pantheon belief forever
 		if (MOD_RELIGION_PERMANENT_PANTHEON)
@@ -1739,7 +1766,7 @@ int CvLuaPlot::lGetYieldWithBuild(lua_State* L)
 				{
 					if (pReligion == NULL || (pReligion != NULL && !pReligion->m_Beliefs.IsPantheonBeliefInReligion(ePantheonBelief, eMajority, pOwningCity->getOwner()))) // check that the our religion does not have our belief, to prevent double counting
 					{
-						iResult += pkPlot->getYieldWithBuild(eBuild, eYield, bUpgrade, false, ePlayer, pOwningCity, pPantheon, NULL);
+						iResult += pkPlot->getYieldWithBuild(eBuild, eYield, bUpgrade, NUM_ROUTE_TYPES, ePlayer, pOwningCity, pPantheon, NULL);
 					}
 				}
 			}
@@ -1750,7 +1777,7 @@ int CvLuaPlot::lGetYieldWithBuild(lua_State* L)
 	}
 	else
 	{
-		const int iResult = pkPlot->getYieldWithBuild(eBuild, eYield, bUpgrade, false, ePlayer, NULL, NULL, NULL);
+		const int iResult = pkPlot->getYieldWithBuild(eBuild, eYield, bUpgrade, NUM_ROUTE_TYPES, ePlayer, NULL, NULL, NULL);
 		lua_pushinteger(L, iResult);
 		return 1;
 	}
@@ -2113,7 +2140,11 @@ int CvLuaPlot::lIsResourceConnectedByImprovement(lua_State* L)
 	CvImprovementEntry* pkImprovementInfo = GC.getImprovementInfo(eImprovement);
 	if(pkImprovementInfo)
 	{
-		bResult = pkImprovementInfo->IsConnectsResource(kPlot->getResourceType(GC.getGame().getActiveTeam()));
+		ResourceTypes eResource = kPlot->getResourceType(GC.getGame().getActiveTeam());
+		if (eResource != NO_RESOURCE)
+		{
+			bResult = pkImprovementInfo->IsConnectsResource(kPlot->getResourceType(GC.getGame().getActiveTeam()));
+		}
 	}
 
 	lua_pushboolean(L, bResult);
@@ -2130,7 +2161,7 @@ int CvLuaPlot::lIsBuildRemovesFeature(lua_State* L)
 	CvBuildInfo* pkBuildInfo = GC.getBuildInfo(eBuild);
 	if(NULL != pkBuildInfo && kPlot->getFeatureType() != NO_FEATURE)
 		bFeatureRemoved = pkBuildInfo->isFeatureRemove(kPlot->getFeatureType());
-
+	
 	lua_pushboolean(L, bFeatureRemoved);
 	return 1;
 }
@@ -2340,7 +2371,6 @@ int CvLuaPlot::lAddPopupMessage(lua_State* L)
 {
 	CvPlot* pPlot = GetInstance(L);
 	const char* szMessage = lua_tostring(L, 2);
-	const float fDelay = (float) luaL_optnumber(L, 3, 0.0);
 	const PlayerTypes ePlayer = (PlayerTypes) luaL_optinteger(L, 4, GC.getGame().getActivePlayer());
 
 	SHOW_PLOT_POPUP(pPlot, ePlayer, szMessage);

@@ -30,7 +30,7 @@ WHERE Tag = 'TXT_KEY_UNIT_GREAT_MERCHANT_STRATEGY';
 
 -- Great Engineer
 UPDATE Language_en_US
-SET Text = 'Great Engineers can construct the special Manufactory improvement. When worked, it provides a lot of [ICON_PRODUCTION] Production for a city. The Great Engineer can also hurry the production of a unit, building or Wonder in a city, increased by 10% per Manufactory created and owned. The Great Engineer is expended when used in either of these ways.'
+SET Text = 'Great Engineers can construct the special Manufactory improvement. It counts as every type of improvement for adjacency bonuses, and when worked, it provides a lot of [ICON_PRODUCTION] Production for a city. The Great Engineer can also hurry the production of a unit, building or Wonder in a city, increased by 10% per Manufactory created and owned. The Great Engineer is expended when used in either of these ways.'
 WHERE Tag = 'TXT_KEY_UNIT_GREAT_ENGINEER_STRATEGY';
 
 -- Great General
@@ -190,7 +190,7 @@ WHERE Tag = 'TXT_KEY_UNIT_INFANTRY_STRATEGY';
 
 -- Pathfinder
 UPDATE Language_en_US
-SET Text = '{TXT_KEY_UNITCOMBAT_RECON} such as this one are usually the only units allowed to uncover the hidden secrets of [COLOR_POSITIVE_TEXT]{TXT_KEY_ANTIQUITY_LEGEND_GOODY_HUT}[ENDCOLOR]. Be wary of using them to fend off barbarians, however, as they are meant for exploring!'
+SET Text = '{TXT_KEY_UNITCOMBAT_RECON} such as this one are usually the only units allowed to uncover the hidden secrets of [COLOR_POSITIVE_TEXT]{TXT_KEY_IMPROVEMENT_GOODY_HUT}[ENDCOLOR]. Be wary of using them to fend off barbarians, however, as they are meant for exploring!'
 WHERE Tag = 'TXT_KEY_UNIT_HELP_SHOSHONE_PATHFINDER';
 
 UPDATE Language_en_US

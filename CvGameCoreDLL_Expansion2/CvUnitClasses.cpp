@@ -28,7 +28,6 @@ CvUnitEntry::CvUnitEntry(void) :
 	m_bCannotEmbark(false),
 #endif
 	m_iHurryCostModifier(0),
-	m_iAdvancedStartCost(0),
 	m_iMinAreaSize(0),
 	m_iMoves(0),
 	m_bImmobile(false),
@@ -92,17 +91,11 @@ CvUnitEntry::CvUnitEntry(void) :
 	m_iCargoCombat(0),
 	m_iSpecialUnitCargoLoad(NO_SPECIALUNIT),
 #endif
-	m_iCombatLimit(0),
 	m_iRangedCombat(0),
-	m_iRangedCombatLimit(0),
-	m_bCoastalFire(false),
 	m_bNoSupply(false),
 	m_iMaxHitPoints(100),
-	m_iXPValueAttack(0),
-	m_iXPValueDefense(0),
 	m_iSpecialCargo(0),
 	m_iDomainCargo(0),
-	m_iConscriptionValue(0),
 	m_iExtraMaintenanceCost(0),
 	m_bNoMaintenance(false),
 	m_iUnhappiness(0),
@@ -156,7 +149,6 @@ CvUnitEntry::CvUnitEntry(void) :
 	m_iTourismBonusTurns(0),
 	m_bIgnoreBuildingDefense(false),
 	m_bPrereqResources(false),
-	m_bMechanized(false),
 	m_bSuicide(false),
 	m_bCaptureWhileEmbarked(false),
 	m_bRangeAttackOnlyInDomain(false),
@@ -201,9 +193,9 @@ CvUnitEntry::CvUnitEntry(void) :
 	m_ppiEraUnitCombatType(NULL),
 	m_ppiEraUnitPromotions(NULL),
 #endif
-#if defined(MOD_UNITS_RESOURCE_QUANTITY_TOTALS)
+
 	m_piResourceQuantityTotals(),
-#endif
+
 #if defined(MOD_GLOBAL_STACKING_RULES)
 	m_iNumberStackingUnits(0),
 #endif
@@ -240,9 +232,9 @@ CvUnitEntry::~CvUnitEntry(void)
 	SAFE_DELETE_ARRAY(m_paszMiddleArtDefineTags);
 	SAFE_DELETE_ARRAY(m_paszUnitNames);
 	SAFE_DELETE_ARRAY(m_paeGreatWorks);
-#if defined(MOD_UNITS_RESOURCE_QUANTITY_TOTALS)
+
 	m_piResourceQuantityTotals.clear();
-#endif
+
 #if defined(MOD_BALANCE_CORE)
 	SAFE_DELETE_ARRAY(m_paeGreatPersonEra);
 	SAFE_DELETE_ARRAY(m_piEraCombatStrength);
@@ -279,7 +271,6 @@ bool CvUnitEntry::CacheResults(Database::Results& kResults, CvDatabaseUtility& k
 	m_bCannotEmbark = kResults.GetBool("CannotEmbark");
 #endif
 	m_iHurryCostModifier = kResults.GetInt("HurryCostModifier");
-	m_iAdvancedStartCost = kResults.GetInt("AdvancedStartCost");
 	m_iMinAreaSize = kResults.GetInt("MinAreaSize");
 	m_iMoves = kResults.GetInt("Moves");
 	m_bImmobile = kResults.GetInt("Immobile")>0;
@@ -327,15 +318,9 @@ bool CvUnitEntry::CacheResults(Database::Results& kResults, CvDatabaseUtility& k
 	m_bCanChangePort = kResults.GetBool("CanChangePort");
 #endif
 	m_iCombat = kResults.GetInt("Combat");
-	m_iCombatLimit = kResults.GetInt("CombatLimit");
 	m_iRangedCombat = kResults.GetInt("RangedCombat");
-	m_iRangedCombatLimit = kResults.GetInt("RangedCombatLimit");
-	m_bCoastalFire = kResults.GetBool("CoastalFireOnly");
-	m_bNoSupply = (kResults.GetInt("NoSupply") != 0);
+	m_bNoSupply = kResults.GetBool("NoSupply");
 	m_iMaxHitPoints = kResults.GetInt("MaxHitPoints");
-	m_iXPValueAttack = kResults.GetInt("XPValueAttack");
-	m_iXPValueDefense = kResults.GetInt("XPValueDefense");
-	m_iConscriptionValue = kResults.GetInt("Conscription");
 	m_iExtraMaintenanceCost = kResults.GetInt("ExtraMaintenanceCost");
 	m_bNoMaintenance = kResults.GetBool("NoMaintenance");
 	m_iUnhappiness = kResults.GetInt("Unhappiness");
@@ -368,7 +353,6 @@ bool CvUnitEntry::CacheResults(Database::Results& kResults, CvDatabaseUtility& k
 	m_iTourismBonusTurns = kResults.GetInt("TourismBonusTurns");
 	m_bIgnoreBuildingDefense = kResults.GetBool("IgnoreBuildingDefense");
 	m_bPrereqResources = kResults.GetBool("PrereqResources");
-	m_bMechanized = kResults.GetBool("Mechanized");
 	m_bSuicide = kResults.GetBool("Suicide");
 	m_bCaptureWhileEmbarked = kResults.GetBool("CaptureWhileEmbarked");
 	m_bRangeAttackOnlyInDomain = kResults.GetBool("RangeAttackOnlyInDomain");
@@ -500,8 +484,10 @@ bool CvUnitEntry::CacheResults(Database::Results& kResults, CvDatabaseUtility& k
 	kUtility.PopulateArrayByValue(m_piResourceQuantityRequirements, "Resources", "Unit_ResourceQuantityRequirements", "ResourceType", "UnitType", szUnitType, "Cost");
 	kUtility.PopulateArrayByValue(m_piResourceQuantityExpended, "Resources", "Unit_ResourceQuantityExpended", "ResourceType", "UnitType", szUnitType, "Amount");
 	kUtility.PopulateArrayByValue(m_piProductionModifierBuildings, "Buildings", "Unit_ProductionModifierBuildings", "BuildingType", "UnitType", szUnitType, "ProductionModifier");
+	kUtility.PopulateArrayByValue(m_piYieldOnBountyToKiller, "Yields", "Unit_Bounties", "YieldType", "UnitType", szUnitType, "Yield");
 	kUtility.PopulateArrayByValue(m_piYieldFromKills, "Yields", "Unit_YieldFromKills", "YieldType", "UnitType", szUnitType, "Yield");
 	kUtility.PopulateArrayByValue(m_piYieldFromBarbarianKills, "Yields", "Unit_YieldFromBarbarianKills", "YieldType", "UnitType", szUnitType, "Yield");
+	kUtility.PopulateArrayByValue(m_piYieldOnCompletion, "Yields", "Unit_YieldOnCompletion", "YieldType", "UnitType", szUnitType, "Yield");
 	kUtility.PopulateArrayByExistence(m_pbFreePromotions, "UnitPromotions", "Unit_FreePromotions", "PromotionType", "UnitType", szUnitType);
 
 	kUtility.PopulateArrayByExistence(m_pbUpgradeUnitClass, "UnitClasses", "Unit_ClassUpgrades", "UnitClassType", "UnitType", szUnitType);
@@ -573,11 +559,7 @@ bool CvUnitEntry::CacheResults(Database::Results& kResults, CvDatabaseUtility& k
 			Database::Results* pResults = kUtility.GetResults(strKey);
 			if(pResults == NULL)
 			{
-#if defined(MOD_BALANCE_CORE)
 				pResults = kUtility.PrepareResults(strKey, "select UniqueName, GreatWorkType, EraType from Unit_UniqueNames where UnitType = ? ORDER BY rowid");
-#else
-				pResults = kUtility.PrepareResults(strKey, "select UniqueName, GreatWorkType from Unit_UniqueNames where UnitType = ? ORDER BY rowid");
-#endif
 			}
 
 			pResults->Bind(1, szUnitType, -1, false);
@@ -793,12 +775,6 @@ bool CvUnitEntry::CannotEmbark() const
 int CvUnitEntry::GetHurryCostModifier() const
 {
 	return m_iHurryCostModifier;
-}
-
-/// Cost if starting midway through game
-int CvUnitEntry::GetAdvancedStartCost() const
-{
-	return m_iAdvancedStartCost;
 }
 
 /// Required Plot count of the CvArea this City belongs to (Usually used for Water Units to prevent building them on tiny lakes and such)
@@ -1056,27 +1032,10 @@ void CvUnitEntry::SetCombat(int iNum)
 	m_iCombat = iNum;
 }
 
-/// Maximum damage to enemy
-int CvUnitEntry::GetCombatLimit() const
-{
-	return m_iCombatLimit;
-}
-
 /// Bombard combat value
 int CvUnitEntry::GetRangedCombat() const
 {
 	return m_iRangedCombat;
-}
-
-/// Maximum damage to enemy in bombard
-int CvUnitEntry::GetRangedCombatLimit() const
-{
-	return m_iRangedCombatLimit;
-}
-
-bool CvUnitEntry::IsCoastalFireOnly() const
-{
-	return m_bCoastalFire;
 }
 
 /// Unit has no supply cost
@@ -1089,18 +1048,6 @@ bool CvUnitEntry::IsNoSupply() const
 int CvUnitEntry::GetMaxHitPoints() const
 {
 	return m_iMaxHitPoints;
-}
-
-/// Experience point value when attacking
-int CvUnitEntry::GetXPValueAttack() const
-{
-	return m_iXPValueAttack;
-}
-
-/// Experience point value when defending
-int CvUnitEntry::GetXPValueDefense() const
-{
-	return m_iXPValueDefense;
 }
 
 /// Is there a special unit this unit carries (e.g. Nuclear Sub carries Nuclear missile)
@@ -1121,12 +1068,6 @@ int CvUnitEntry::GetSpecialUnitCargoLoad() const
 int CvUnitEntry::GetDomainCargo() const
 {
 	return m_iDomainCargo;
-}
-
-/// Cost to conscript this unit
-int CvUnitEntry::GetConscriptionValue() const
-{
-	return m_iConscriptionValue;
 }
 
 /// Extra cost for unit maintenance in Gold (deducted every turn)
@@ -1417,12 +1358,6 @@ bool CvUnitEntry::IsPrereqResources() const
 	return m_bPrereqResources;
 }
 
-/// Mechanized unit?
-bool CvUnitEntry::IsMechUnit() const
-{
-	return m_bMechanized;
-}
-
 /// Suicide attack unit?
 bool CvUnitEntry::IsSuicide() const
 {
@@ -1521,128 +1456,144 @@ int CvUnitEntry::CargoCombat() const
 /// Prerequisite techs with AND
 int CvUnitEntry::GetPrereqAndTechs(int i) const
 {
-	CvAssertMsg(i < /*3*/ GD_INT_GET(NUM_UNIT_AND_TECH_PREREQS), "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < /*3*/ GD_INT_GET(NUM_UNIT_AND_TECH_PREREQS), "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
 	return m_piPrereqAndTechs ? m_piPrereqAndTechs[i] : -1;
 }
 
 /// Resources consumed to construct
 int CvUnitEntry::GetResourceQuantityRequirement(int i) const
 {
-	CvAssertMsg(i < GC.getNumResourceInfos(), "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < GC.getNumResourceInfos(), "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
 	return m_piResourceQuantityRequirements ? m_piResourceQuantityRequirements[i] : -1;
 }
 
 /// Resources consumed to construct
 int CvUnitEntry::GetResourceQuantityExpended(int i) const
 {
-	CvAssertMsg(i < GC.getNumResourceInfos(), "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < GC.getNumResourceInfos(), "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
 	return m_piResourceQuantityExpended ? m_piResourceQuantityExpended[i] : -1;
 }
 
 /// Production boost for having a specific building in city
 int CvUnitEntry::GetBuildingProductionModifier(BuildingTypes eBuilding) const
 {
-	CvAssertMsg((int)eBuilding < GC.getNumBuildingInfos(), "Building type out of bounds");
-	CvAssertMsg((int)eBuilding > -1, "Index out of bounds");
+	ASSERT_DEBUG((int)eBuilding < GC.getNumBuildingInfos(), "Building type out of bounds");
+	ASSERT_DEBUG((int)eBuilding > -1, "Index out of bounds");
 	return m_piProductionModifierBuildings[(int)eBuilding];
+}
+
+// How many yields of type eYield does this units killer get as a county?
+int CvUnitEntry::GetYieldOnBountyToKiller(YieldTypes eYield) const
+{
+	ASSERT_DEBUG((int)eYield < NUM_YIELD_TYPES, "Yield type out of bounds");
+	ASSERT_DEBUG((int)eYield > -1, "Index out of bounds");
+	return m_piYieldOnBountyToKiller[(int)eYield];
 }
 
 /// Do we get one of our yields from defeating an enemy?
 int CvUnitEntry::GetYieldFromKills(YieldTypes eYield) const
 {
-	CvAssertMsg((int)eYield < NUM_YIELD_TYPES, "Yield type out of bounds");
-	CvAssertMsg((int)eYield > -1, "Index out of bounds");
+	ASSERT_DEBUG((int)eYield < NUM_YIELD_TYPES, "Yield type out of bounds");
+	ASSERT_DEBUG((int)eYield > -1, "Index out of bounds");
 	return m_piYieldFromKills[(int)eYield];
 }
 
 /// Do we get one of our yields from defeating a barbarian?
 int CvUnitEntry::GetYieldFromBarbarianKills(YieldTypes eYield) const
 {
-	CvAssertMsg((int)eYield < NUM_YIELD_TYPES, "Yield type out of bounds");
-	CvAssertMsg((int)eYield > -1, "Index out of bounds");
+	ASSERT_DEBUG((int)eYield < NUM_YIELD_TYPES, "Yield type out of bounds");
+	ASSERT_DEBUG((int)eYield > -1, "Index out of bounds");
 	return m_piYieldFromBarbarianKills[(int)eYield];
+}
+
+/// How many yields of type eYield does a city get for completing this unit?
+int CvUnitEntry::GetYieldOnCompletion(YieldTypes eYield) const
+{
+	ASSERT_DEBUG((int)eYield < NUM_YIELD_TYPES, "Yield type out of bounds");
+	ASSERT_DEBUG((int)eYield > -1, "Index out of bounds");
+	return m_piYieldOnCompletion[(int)eYield];
 }
 
 /// Boost in production for leader with this trait
 int CvUnitEntry::GetProductionTraits(int i) const
 {
-	CvAssertMsg(i < GC.getNumTraitInfos(), "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < GC.getNumTraitInfos(), "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
 	return m_piProductionTraits ? m_piProductionTraits[i] : -1;
 }
 
 /// Find value of flavors associated with this building
 int CvUnitEntry::GetFlavorValue(int i) const
 {
-	CvAssertMsg(i < GC.getNumFlavorTypes(), "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < GC.getNumFlavorTypes(), "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
 	return m_piFlavorValue ? m_piFlavorValue[i] : 0;
 }
 
 /// What can this unit upgrade into?
 bool CvUnitEntry::GetUpgradeUnitClass(int i) const
 {
-	CvAssertMsg(i < GC.getNumUnitClassInfos(), "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < GC.getNumUnitClassInfos(), "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
 	return m_pbUpgradeUnitClass ? m_pbUpgradeUnitClass[i] : false;
 }
 
 /// What AIs strategies can this unit adopt
 bool CvUnitEntry::GetUnitAIType(int i) const
 {
-	CvAssertMsg(i < NUM_UNITAI_TYPES, "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < NUM_UNITAI_TYPES, "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
 	return m_pbUnitAIType ? m_pbUnitAIType[i] : false;
 }
 
 /// AI strategies this unit can NOT adopt
 bool CvUnitEntry::GetNotUnitAIType(int i) const
 {
-	CvAssertMsg(i < NUM_UNITAI_TYPES, "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < NUM_UNITAI_TYPES, "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
 	return m_pbNotUnitAIType ? m_pbNotUnitAIType[i] : false;
 }
 
 /// What improvements can this unit build?
 bool CvUnitEntry::GetBuilds(int i) const
 {
-	CvAssertMsg(i < GC.getNumBuildInfos(), "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < GC.getNumBuildInfos(), "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
 	return m_pbBuilds ? m_pbBuilds[i] : false;
 }
 
 /// Type(s) of great people represented by this unit
 bool CvUnitEntry::GetGreatPeoples(int i) const
 {
-	CvAssertMsg(i < GC.getNumSpecialistInfos(), "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < GC.getNumSpecialistInfos(), "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
 	return m_pbGreatPeoples ? m_pbGreatPeoples[i] : false;
 }
 
 /// Is this unit required to construct a certain building?
 bool CvUnitEntry::GetBuildings(int i) const
 {
-	CvAssertMsg(i < GC.getNumBuildingInfos(), "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < GC.getNumBuildingInfos(), "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
 	return m_pbBuildings ? m_pbBuildings[i] : false;
 }
 
 /// Does this Unit need a certain BuildingClass in this City to train?
 bool CvUnitEntry::GetBuildingClassRequireds(int i) const
 {
-	CvAssertMsg(i < GC.getNumBuildingClassInfos(), "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < GC.getNumBuildingClassInfos(), "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
 	return m_pbBuildingClassRequireds ? m_pbBuildingClassRequireds[i] : false;
 }
 
 
 int CvUnitEntry::GetScalingFromOwnedImprovements(int i) const
 {
-	CvAssertMsg(i < GC.getNumImprovementInfos(), "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < GC.getNumImprovementInfos(), "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
 	return m_piScalingFromOwnedImprovements ? m_piScalingFromOwnedImprovements[i] : -1;
 }
 
@@ -1650,32 +1601,32 @@ int CvUnitEntry::GetScalingFromOwnedImprovements(int i) const
 /// Does this Unit create something when it founds a city?
 bool CvUnitEntry::GetBuildOnFound(int i) const
 {
-	CvAssertMsg(i < GC.getNumBuildingClassInfos(), "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < GC.getNumBuildingClassInfos(), "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
 	return m_pbBuildOnFound? m_pbBuildOnFound[i] : false;
 }
 /// Does this Unit need a certain BuildingClass in this City to purchase?
 bool CvUnitEntry::GetBuildingClassPurchaseRequireds(int i) const
 {
-	CvAssertMsg(i < GC.getNumBuildingClassInfos(), "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < GC.getNumBuildingClassInfos(), "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
 	return m_pbBuildingClassPurchaseRequireds ? m_pbBuildingClassPurchaseRequireds[i] : false;
 }
 /// Does this Unit get a new combat strength when reaching a new Era?
 int CvUnitEntry::GetEraCombatStrength(int i) const
 {
-	CvAssertMsg(i < GC.getNumEraInfos(), "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < GC.getNumEraInfos(), "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
 	return m_piEraCombatStrength ? m_piEraCombatStrength[i] : -1;
 }
 
 /// Accessor:: Does this Unit have a different CombatType in a new Era?
 int CvUnitEntry::GetUnitNewEraCombatType(int i, int j) const
 {
-	CvAssertMsg(i < GC.getNumUnitCombatClassInfos(), "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
-	CvAssertMsg(j < GC.getNumEraInfos(), "Index out of bounds");
-	CvAssertMsg(j > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < GC.getNumUnitCombatClassInfos(), "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(j < GC.getNumEraInfos(), "Index out of bounds");
+	ASSERT_DEBUG(j > -1, "Index out of bounds");
 	return m_ppiEraUnitCombatType ? m_ppiEraUnitCombatType[i][j] : 0;
 }
 int* CvUnitEntry::GetUnitNewEraCombatTypeChangesArray(int i)
@@ -1685,10 +1636,10 @@ int* CvUnitEntry::GetUnitNewEraCombatTypeChangesArray(int i)
 /// Accessor:: Does this Unit get promotions in a new Era?
 int CvUnitEntry::GetUnitNewEraPromotions(int i, int j) const
 {
-	CvAssertMsg(i < GC.getNumPromotionInfos(), "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
-	CvAssertMsg(j < GC.getNumEraInfos(), "Index out of bounds");
-	CvAssertMsg(j > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < GC.getNumPromotionInfos(), "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(j < GC.getNumEraInfos(), "Index out of bounds");
+	ASSERT_DEBUG(j > -1, "Index out of bounds");
 	return m_ppiEraUnitPromotions ? m_ppiEraUnitPromotions[i][j] : 0;
 }
 
@@ -1698,12 +1649,11 @@ int* CvUnitEntry::GetUnitNewEraPromotionsChangesArray(int i)
 }
 #endif
 
-#if defined(MOD_UNITS_RESOURCE_QUANTITY_TOTALS)
 /// Player must have gross number of resources to build (does not consume)
 int CvUnitEntry::GetResourceQuantityTotal(int i) const
 {
-	CvAssertMsg(i < GC.getNumResourceInfos(), "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < GC.getNumResourceInfos(), "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
 
 	std::map<int, int>::const_iterator itResource = m_piResourceQuantityTotals.find(i);
 	if (itResource != m_piResourceQuantityTotals.end()) // find returns the iterator to map::end if the key iResource is not present in the map
@@ -1713,13 +1663,12 @@ int CvUnitEntry::GetResourceQuantityTotal(int i) const
 
 	return 0;
 }
-#endif
 
 /// Initial set of promotions for this unit
 bool CvUnitEntry::GetFreePromotions(int i) const
 {
-	CvAssertMsg(i < GC.getNumPromotionInfos(), "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < GC.getNumPromotionInfos(), "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
 	return m_pbFreePromotions ? m_pbFreePromotions[i] : false;
 }
 
@@ -1770,16 +1719,16 @@ const bool CvUnitEntry::GetUnitArtInfoEraVariation() const
 /// Unique names for individual units (for great people)
 const char* CvUnitEntry::GetUnitNames(int i) const
 {
-	CvAssertMsg(i < GetNumUnitNames(), "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < GetNumUnitNames(), "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
 	return (m_paszUnitNames) ? m_paszUnitNames[i] : NULL;
 }
 
 /// Unique great works created by individual units.
 GreatWorkType CvUnitEntry::GetGreatWorks(int i) const
 {
-	CvAssertMsg(i < GetNumUnitNames(), "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < GetNumUnitNames(), "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
 	return (m_paeGreatWorks) ? m_paeGreatWorks[i] : NO_GREAT_WORK;
 }
 
@@ -1796,8 +1745,8 @@ bool CvUnitEntry::IsGreatWorkUnit() const
 /// Unique era for individual units.
 EraTypes CvUnitEntry::GetGreatPersonEra(int i) const
 {
-	CvAssertMsg(i < GetNumUnitNames(), "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < GetNumUnitNames(), "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
 	return (m_paeGreatPersonEra) ? m_paeGreatPersonEra[i] : NO_ERA;
 }
 /// Resource required for this unit
@@ -2169,11 +2118,7 @@ void CvUnitXMLEntries::DeleteArray()
 /// Get a specific entry
 CvUnitEntry* CvUnitXMLEntries::GetEntry(int index)
 {
-#if defined(MOD_BALANCE_CORE)
-	return (index!=NO_UNIT) ? m_paUnitEntries[index] : NULL;
-#else
-	return m_paUnitEntries[index];
-#endif
+	return (index != NO_UNIT) ? m_paUnitEntries[index] : NULL;
 }
 
 /// Helper function to read in an integer array of data sized according to number of unit types

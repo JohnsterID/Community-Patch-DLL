@@ -1,5 +1,5 @@
 /*	-------------------------------------------------------------------------------------------------------
-	© 1991-2012 Take-Two Interactive Software and its subsidiaries.  Developed by Firaxis Games.  
+	Â© 1991-2012 Take-Two Interactive Software and its subsidiaries.  Developed by Firaxis Games.  
 	Sid Meier's Civilization V, Civ, Civilization, 2K Games, Firaxis Games, Take-Two Interactive Software 
 	and their respective logos are all trademarks of Take-Two interactive Software, Inc.  
 	All other marks and trademarks are the property of their respective owners.  
@@ -12,6 +12,7 @@
 #include "CvDllDeal.h"
 #include "CvDllPlayer.h"
 #include "CvDealAI.h"
+#include "CvDiplomacyAI.h"
 
 CvDllDealAI::CvDllDealAI(CvDealAI* pDealAI)
 	: m_pDealAI(pDealAI)
@@ -82,7 +83,7 @@ CvDealAI* CvDllDealAI::GetInstance()
 //------------------------------------------------------------------------------
 ICvPlayer1* CvDllDealAI::GetPlayer()
 {
-	CvPlayerAI* pkPlayer = (CvPlayerAI*)m_pDealAI->GetPlayer();
+	CvPlayerAI* pkPlayer = static_cast<CvPlayerAI*>(m_pDealAI->GetPlayer());
 	return (NULL != pkPlayer)? new CvDllPlayer(pkPlayer) : NULL;
 }
 //------------------------------------------------------------------------------
@@ -95,8 +96,21 @@ int CvDllDealAI::DoHumanOfferDealToThisAI(ICvDeal1* pDeal)
 void CvDllDealAI::DoAcceptedDeal(PlayerTypes eFromPlayer, ICvDeal1* pDeal, int iDealValueToMe, int iValueImOffering, int iValueTheyreOffering)
 {
 	CvDeal* pkDeal = (NULL != pDeal)? static_cast<CvDllDeal*>(pDeal)->GetInstance() : NULL;
-	if(pkDeal != NULL)
-		m_pDealAI->DoAcceptedDeal(eFromPlayer, *pkDeal, iDealValueToMe, iValueImOffering, iValueTheyreOffering);
+	if (pkDeal != NULL)
+	{
+		// hack for multiplayer: we use DoAcceptedDeal with the following values to convey the information that a renew deal has been canceled
+		if (iDealValueToMe == INT_MAX && iValueImOffering == INT_MAX && iValueTheyreOffering == INT_MAX)
+		{
+			PlayerTypes eCancelingPlayer = eFromPlayer;
+			PlayerTypes eOtherPlayer = m_pDealAI->GetPlayer()->GetID();
+			// we don't want to run into an infinite loop of network messages being sent back and forth
+			GET_PLAYER(eFromPlayer).GetDiplomacyAI()->CancelRenewDeal(eOtherPlayer, NO_REASON, false, pkDeal, false, /*bSendNetworkMessage*/ false);
+		}
+		else
+		{
+			m_pDealAI->DoAcceptedDeal(eFromPlayer, *pkDeal, iDealValueToMe, iValueImOffering, iValueTheyreOffering);
+		}
+	}
 }
 //------------------------------------------------------------------------------
 int CvDllDealAI::DoHumanDemand(ICvDeal1* pDeal)

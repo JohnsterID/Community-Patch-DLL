@@ -1,5 +1,5 @@
 /*	-------------------------------------------------------------------------------------------------------
-	© 1991-2012 Take-Two Interactive Software and its subsidiaries.  Developed by Firaxis Games.  
+	Â© 1991-2012 Take-Two Interactive Software and its subsidiaries.  Developed by Firaxis Games.  
 	Sid Meier's Civilization V, Civ, Civilization, 2K Games, Firaxis Games, Take-Two Interactive Software 
 	and their respective logos are all trademarks of Take-Two interactive Software, Inc.  
 	All other marks and trademarks are the property of their respective owners.  
@@ -121,7 +121,7 @@ void CvFractal::fracInitInternal(int iNewXs, int iNewYs, int iGrain, CvRandom& r
 	int iHintsHeight = (1 << (m_iFracYExp - iSmooth)) + ((m_iFlags & FRAC_WRAP_Y) ? 0 : 1);
 	if(pbyHints != NULL)
 	{
-		CvAssertMsg(iHintsLength == iHintsWidth*iHintsHeight, "pbyHints is the wrong size!")
+		ASSERT_DEBUG(iHintsLength == iHintsWidth*iHintsHeight, "pbyHints is the wrong size!")
 	}
 
 	for(iPass = iSmooth; iPass >= 0; iPass--)
@@ -209,7 +209,7 @@ void CvFractal::fracInitInternal(int iNewXs, int iNewYs, int iGrain, CvRandom& r
 						int iHintsI = iYY*iHintsWidth + iXX;
 
 						DEBUG_VARIABLE(iHintsLength);
-						CvAssertMsg(iHintsI < iHintsLength, "iHintsI out of range");
+						ASSERT_DEBUG(iHintsI < iHintsLength, "iHintsI out of range");
 						m_aaiFrac[iX << iPass][iY << iPass] = pbyHints[iHintsI];
 					}
 				}
@@ -290,10 +290,10 @@ int CvFractal::getHeight(int iX, int iY)
 	int iLowX = 0;
 	int iLowY = 0;
 
-	CvAssertMsg(0 <= iX && iX < m_iXs, "iX out of range");
+	ASSERT_DEBUG(0 <= iX && iX < m_iXs, "iX out of range");
 	if(0 > iX || iX >= m_iXs) return 0;
 
-	CvAssertMsg(0 <= iY && iY < m_iYs, "iY out of range");
+	ASSERT_DEBUG(0 <= iY && iY < m_iYs, "iY out of range");
 	if(0 > iY || iY >= m_iYs) return 0;
 
 	iLowX = ((m_iXInc * iX) / FLOAT_PRECISION);
@@ -521,10 +521,12 @@ void CvFractal::ridgeBuilder(CvRandom& random, int iNumVoronoiSeeds, int iRidgeF
 			}
 
 			// use the modified distance between the two closest seeds to determine the ridge height
-			// ??? are there any other fudge factors I want to add in here???
-			//std::stable_sort(vDistances.begin(),vDistances.end());
-
-			int iRidgeHeight = (255 * iClosestSeed) / iNextClosestSeed;
+			// TODO: are there any other fudge factors I want to add in here? - LoneGazebo
+			//std::stable_sort(vDistances.begin(),vDistances.end())
+			int iRidgeHeight = 0;
+			if (iNextClosestSeed != 0) {
+				iRidgeHeight = static_cast<int>((255.0 * iClosestSeed) / iNextClosestSeed);
+			}
 
 			// blend the new ridge height with the previous fractal height
 			m_aaiFrac[iX][iY] = (iRidgeHeight * iBlendRidge + m_aaiFrac[iX][iY] * iBlendFract) / std::max(iBlendRidge + iBlendFract, 1);

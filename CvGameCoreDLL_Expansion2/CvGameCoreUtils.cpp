@@ -21,11 +21,291 @@
 #include "CvImprovementClasses.h"
 #include "CvGlobals.h"
 #include "psapi.h"
+#include <time.h> // CvAssertDlg
 
 #include "ICvDLLUserInterface.h"
 
 // must be included after all other headers
 #include "LintFree.h"
+
+// CvAssertDlg and CvPreconditionDlg implementation
+#ifdef CVASSERT_DEBUG_ENABLE
+#ifdef WIN32
+
+// MessageBox constants
+#define MB_OK               0x00000000L
+#define MB_OKCANCEL         0x00000001L
+#define MB_ABORTRETRYIGNORE 0x00000002L	
+#define MB_YESNOCANCEL      0x00000003L
+#define MB_ICONERROR        0x00000010L
+#define MB_SYSTEMMODAL      0x00001000L
+#define MB_TASKMODAL        0x00002000L
+#define MB_SETFOREGROUND    0x00010000L
+
+// MessageBox default buttons
+#define MB_DEFBUTTON1		0x00000000L
+#define MB_DEFBUTTON2		0x00000100L
+#define MB_DEFBUTTON3		0x00000200L
+
+// MessageBox return values
+#define IDOK     1
+#define IDCANCEL 2
+#define IDABORT  3
+#define IDRETRY  4
+#define IDIGNORE 5
+#define IDYES    6
+#define IDNO     7
+
+// Windows functions
+extern "C" {
+	__declspec(dllimport) int __stdcall MessageBoxA(void* hWnd, const char* lpText, const char* lpCaption, unsigned int uType);
+	__declspec(dllimport) unsigned long __stdcall GetTickCount(void);
+}
+
+// Assert tracking
+struct AssertInfo {
+	unsigned int count;
+	unsigned int firstTime;
+	unsigned int lastTime;
+	unsigned int totalMemUsage;
+	bool isPermanentlyIgnored;
+
+	AssertInfo() : count(0), firstTime(0), lastTime(0), totalMemUsage(0), isPermanentlyIgnored(false) {}
+};
+
+static struct AssertTracker {
+	std::map<std::string, AssertInfo> asserts;
+	unsigned int sessionStart;
+	unsigned int totalAsserts;
+	FILE* logFile;
+
+	AssertTracker() {
+		sessionStart = GetTickCount();
+		totalAsserts = 0;
+		logFile = NULL;
+		fopen_s(&logFile, "CvAssert.log", "a");
+	}
+
+	~AssertTracker() {
+		if (logFile) {
+			fclose(logFile);
+		}
+	}
+
+	void LogAssert(const char* expr, const char* file, unsigned int line, const char* msg) {
+		if (!logFile) return;
+
+		time_t rawtime;
+		time(&rawtime);
+		char timeBuffer[26];
+		ctime_s(timeBuffer, sizeof(timeBuffer), &rawtime);
+		timeBuffer[24] = '\0'; // Remove newline
+
+		fprintf(logFile, "\n[%s] Assert in %s:%u\n", timeBuffer, file, line);
+		fprintf(logFile, "Expression: %s\n", expr);
+		if (msg && *msg) {
+			fprintf(logFile, "Message: %s\n", msg);
+		}
+		fflush(logFile);
+	}
+
+	std::string GetAssertKey(const char* file, unsigned int line, const char* expr) {
+		char key[512];
+		_snprintf_s(key, _countof(key), _TRUNCATE, "%s:%u:%s", file, line, expr);
+		return std::string(key);
+	}
+
+	void UpdateStats(const std::string& key) {
+		AssertInfo& info = asserts[key];
+		unsigned int currentTime = GetTickCount();
+
+		if (info.count == 0) {
+			info.firstTime = currentTime;
+		}
+
+		info.count++;
+		info.lastTime = currentTime;
+		totalAsserts++;
+	}
+
+} g_AssertTracker;
+
+bool CvAssertDlg(const char* expr, const char* szFile, unsigned int uiLine, bool& bIgnoreAlways, const char* msg)
+{
+	if (!expr) return false;
+
+	bool bMsg = msg && msg[0] != '\0';
+
+	// Get unique key for this assert
+	std::string assertKey = g_AssertTracker.GetAssertKey(szFile, uiLine, expr);
+
+	// Check if permanently ignored
+	if (g_AssertTracker.asserts[assertKey].isPermanentlyIgnored) {
+		return false;
+	}
+
+	// Check if ignored for this session
+	if (bIgnoreAlways) {
+		return false;
+	}
+
+	// Log the assert
+	g_AssertTracker.LogAssert(expr, szFile, uiLine, msg);
+
+	// Update statistics
+	g_AssertTracker.UpdateStats(assertKey);
+
+#if defined(VPRELEASE_ERRORMSG)
+	if (GC.getGame().isReallyNetworkMultiPlayer())
+	{
+		char szBuffer[4096];
+		_snprintf_s(szBuffer, _countof(szBuffer), _TRUNCATE,
+			"A code error has occurred, please report it on github. "
+			"%s%s%s"
+			"Expression: %s, "
+			"File: %s, "
+			"Line: %u",
+			bMsg ? "Message: " : "", bMsg ? msg : "", bMsg ? ", " : "",
+			expr, szFile, uiLine
+		);
+		GC.getDLLIFace()->sendChat(CvString(szBuffer), CHATTARGET_ALL, NO_PLAYER);
+		return false;
+	}
+	else
+	{
+		char szBuffer[4096];
+		_snprintf_s(szBuffer, _countof(szBuffer), _TRUNCATE,
+			"An error in the code has occurred. Please report the issue at https://github.com/LoneGazebo/Community-Patch-DLL/issues so it can be fixed.\n\n"
+			"Please provide the VP version number, the list of other mods in use, and a screenshot of this message. If possible, attach a savegame from immediately before the bug occurs.\n\n"
+			"You may continue playing, but unexpected behavior might occur. It is recommended to wait until a hotfix has been released that resolves the issue.\n\n"
+			"==================\n"
+			"Detailed information:\n"
+			"%s%s%s"
+			"Expression: %s\n"
+			"File: %s\n"
+			"Line: %u\n\n"
+
+			"==================\n"
+			"Cancel - Exit the game. \n"
+			"OK - Continue playing. This warning will not be shown again in the current session.",
+			bMsg ? "Message: " : "", bMsg ? msg : "", bMsg ? "\n" : "",
+			expr, szFile, uiLine
+		);
+
+		// Show dialog
+		int nResult = MessageBoxA(NULL, szBuffer, "Assertion Failed",
+			MB_OKCANCEL | MB_ICONERROR | MB_SYSTEMMODAL | MB_SETFOREGROUND | MB_DEFBUTTON2);
+
+		// Handle result
+		switch (nResult)
+		{
+		case IDOK:      // Continue execution and ignore this error
+			g_AssertTracker.asserts[assertKey].isPermanentlyIgnored = true;
+			bIgnoreAlways = true;
+			return false;
+
+		default:
+			BUILTIN_TRAP();
+		}
+	}
+
+#else // VPRELEASE_ERRORMSG
+
+	// Get assert info
+	const AssertInfo& info = g_AssertTracker.asserts[assertKey];
+
+	// Calculate timing information
+	unsigned int timeSinceFirst = GetTickCount() - info.firstTime;
+	unsigned int timeSinceLast = GetTickCount() - info.lastTime;
+	unsigned int sessionTime = GetTickCount() - g_AssertTracker.sessionStart;
+
+	// Format the message
+	char szBuffer[4096];
+	_snprintf_s(szBuffer, _countof(szBuffer), _TRUNCATE,
+		"Assert Failed!\n"
+		"==================\n"
+		"Expression: %s\n"
+		"File: %s\n"
+		"Line: %u\n"
+		"%s%s%s\n"
+		"\nStatistics:\n"
+		"==================\n"
+		"This assert has fired %u time(s)\n"
+		"First occurrence: %.2f seconds ago\n"
+		"Last occurrence: %.2f seconds ago\n"
+		"Total asserts this session: %u\n"
+		"Session duration: %.2f seconds\n"
+		"\nOptions:\n"
+		"==================\n"
+		"Yes - Break into debugger\n"
+		"No - Continue execution\n"
+		"Cancel - Ignore this assert",
+		expr, szFile, uiLine,
+		bMsg ? "Message: " : "", bMsg ? msg : "", bMsg ? "\n" : "",
+		info.count,
+		timeSinceFirst / 1000.0f,
+		timeSinceLast / 1000.0f,
+		g_AssertTracker.totalAsserts,
+		sessionTime / 1000.0f);
+
+	// Show dialog
+	int nResult = MessageBoxA(NULL, szBuffer, "Assertion Failed",
+		MB_YESNOCANCEL | MB_ICONERROR | MB_TASKMODAL);
+
+	// Handle result
+	switch (nResult)
+	{
+	case IDYES:      // Break into debugger
+		return true;
+
+	case IDNO:       // Continue execution
+		return false;
+
+	default:         // Ignore always
+		g_AssertTracker.asserts[assertKey].isPermanentlyIgnored = true;
+		bIgnoreAlways = true;
+		return false;
+	}
+#endif // VPRELEASE_ERRORMSG
+}
+
+#endif // WIN32
+#endif // CVASSERT_DEBUG_ENABLE
+
+void CvPreconditionDlg(const char* expr, const char* szFile, unsigned int uiLine, const char* msg)
+{
+	if (!expr) return;
+#ifdef CVASSERT_DEBUG_ENABLE
+#ifdef WIN32
+#if defined(VPRELEASE_ERRORMSG)
+	bool bMsg = msg && msg[0] != '\0';
+	char szBuffer[4096];
+	_snprintf_s(szBuffer, _countof(szBuffer), _TRUNCATE,
+		"An error in the code has occurred. Please report the issue at https://github.com/LoneGazebo/Community-Patch-DLL/issues so it can be fixed.\n\n"
+		"Please provide the VP version number, the list of other mods in use, and a screenshot of this message. If possible, attach a savegame from immediately before the bug occurs.\n\n"
+		"To prevent undefined or gamebreaking behavior, the game will now crash.\n\n"
+		"==================\n"
+		"Detailed information:\n"
+		"Expression: %s\n"
+		"File: %s\n"
+		"Line: %u\n"
+		"%s%s%s\n",
+		expr, szFile, uiLine,
+		bMsg ? "Message: " : "", bMsg ? msg : "", bMsg ? "\n" : ""
+	);
+
+	// Show dialog
+	MessageBoxA(NULL, szBuffer, "Error",
+		MB_OK | MB_ICONERROR | MB_SYSTEMMODAL | MB_SETFOREGROUND);
+
+#else // VPRELEASE_ERRORMSG
+	bool bIgnoreAlways = false;
+	CvAssertDlg(expr, szFile, uiLine, bIgnoreAlways, msg);
+#endif
+#endif // WIN32
+#endif // CVASSERT_DEBUG_ENABLE
+}
+
 
 int RING_PLOTS[6] = {RING0_PLOTS,RING1_PLOTS,RING2_PLOTS,RING3_PLOTS,RING4_PLOTS,RING5_PLOTS};
 
@@ -116,42 +396,11 @@ int plotDistance(int iIndexA, int iIndexB)
 
 CvPlot* plotDirection(int iX, int iY, DirectionTypes eDirection)
 {
-#if defined(MOD_BALANCE_CORE)
 	return GC.getMap().getNeighborUnchecked(iX,iY,eDirection);
-#else
-	if(eDirection == NO_DIRECTION)
-	{
-		return GC.getMap().plot(iX, iY);
-	}
-	else
-	{
-		// convert to hex-space coordinates - the coordinate system axes are E and NE (not orthogonal)
-		iX = xToHexspaceX(iX , iY);
-		iX += GC.getPlotDirectionX()[eDirection];
-		iY += GC.getPlotDirectionY()[eDirection];
-
-		// convert from hex-space coordinates to the storage array
-		iX = hexspaceXToX(iX, iY);
-
-		return GC.getMap().plot(iX, iY);
-	}
-#endif
 }
 
 DirectionTypes directionXY(const CvPlot* pFromPlot, const CvPlot* pToPlot)
 {
-#if 0
-	CvPlot** aPlotsToCheck = GC.getMap().getNeighborsUnchecked(pFromPlot);
-	for(int iI=0; iI<NUM_DIRECTION_TYPES; iI++)
-	{
-		if (aPlotsToCheck[iI]==pToPlot)
-		{
-			return (DirectionTypes)iI;
-		}
-	}
-	//if the direct neighbor lookup fails, use the real method
-	return estimateDirection(pFromPlot->getX(),pFromPlot->getY(),pToPlot->getX(),pToPlot->getY());
-#else
 	int iSourceX = pFromPlot->getX();
 	int iSourceY = pFromPlot->getY();
 	int iDestX = pToPlot->getX();
@@ -200,7 +449,6 @@ DirectionTypes directionXY(const CvPlot* pFromPlot, const CvPlot* pToPlot)
 			return DIRECTION_SOUTHWEST;
 		}
 	}
-#endif
 }
 
 /// This function will return the CvPlot associated with the Index (0 to 36) of a City at iX,iY.  The lower the Index the closer the Plot is to the City (roughly)
@@ -266,7 +514,7 @@ CvPlot* iterateRingPlots(int iX, int iY, int iIndex)
 			iDeltaHexY = iThisRing;
 			break;
 		default:
-			return 0;
+			return NULL;
 		}
 
 	}
@@ -413,9 +661,9 @@ CvUnit* GetPlayerUnit(const IDInfo& unit)
 
 bool isBeforeUnitCycle(const CvUnit* pFirstUnit, const CvUnit* pSecondUnit)
 {
-	CvAssert(pFirstUnit != NULL);
-	CvAssert(pSecondUnit != NULL);
-	CvAssert(pFirstUnit != pSecondUnit);
+	ASSERT_DEBUG(pFirstUnit != NULL);
+	ASSERT_DEBUG(pSecondUnit != NULL);
+	ASSERT_DEBUG(pFirstUnit != pSecondUnit);
 
 	if(!pFirstUnit || !pSecondUnit)
 		return false;
@@ -459,24 +707,16 @@ bool IsPromotionValidForUnitCombatType(PromotionTypes ePromotion, UnitTypes eUni
 	CvUnitEntry* unitInfo = GC.getUnitInfo(eUnit);
 	CvPromotionEntry* promotionInfo = GC.getPromotionInfo(ePromotion);
 
-	if(unitInfo == NULL || promotionInfo == NULL)
+	if (!unitInfo || !promotionInfo)
 		return false;
 
 	// No combat class (civilians)
-	if(unitInfo->GetUnitCombatType() == NO_UNITCOMBAT)
-	{
+	if (unitInfo->GetUnitCombatType() == NO_UNITCOMBAT)
 		return false;
-	}
 
 	// Combat class not valid for this Promotion
-#if defined(MOD_GLOBAL_PROMOTION_CLASSES)
-	if(!(promotionInfo->GetUnitCombatClass(unitInfo->GetUnitPromotionType())))
-#else
-	if(!(promotionInfo->GetUnitCombatClass(unitInfo->GetUnitCombatType())))
-#endif
-	{
+	if (!promotionInfo->GetUnitCombatClass(unitInfo->GetUnitPromotionType()))
 		return false;
-	}
 
 	return true;
 }
@@ -486,13 +726,11 @@ bool IsPromotionValidForCivilianUnitType(PromotionTypes ePromotion, UnitTypes eU
 {
 	CvPromotionEntry* promotionInfo = GC.getPromotionInfo(ePromotion);
 
-	if(promotionInfo == NULL)
+	if (!promotionInfo)
 		return false;
 
-	if(!(promotionInfo->GetCivilianUnitType((int)eUnit)))
-	{
+	if (!promotionInfo->GetCivilianUnitType(eUnit))
 		return false;
-	}
 
 	return true;
 }
@@ -706,7 +944,7 @@ int getWonderScore(BuildingClassTypes eWonderClass)
 
 ImprovementTypes finalImprovementUpgrade(ImprovementTypes eImprovement, int iCount)
 {
-	CvAssertMsg(eImprovement != NO_IMPROVEMENT, "Improvement is not assigned a valid value");
+	ASSERT_DEBUG(eImprovement != NO_IMPROVEMENT, "Improvement is not assigned a valid value");
 
 	if(iCount > GC.getNumImprovementInfos())
 	{
@@ -826,11 +1064,7 @@ bool isUnitLimitPerCity(UnitClassTypes eUnitClass)
 
 bool isLimitedUnitClass(UnitClassTypes eUnitClass)
 {
-#if defined(MOD_BALANCE_CORE)
 	return (isWorldUnitClass(eUnitClass) || isTeamUnitClass(eUnitClass) || isNationalUnitClass(eUnitClass) || isUnitLimitPerCity(eUnitClass));
-#else
-	return (isWorldUnitClass(eUnitClass) || isTeamUnitClass(eUnitClass) || isNationalUnitClass(eUnitClass));
-#endif
 }
 
 bool isWorldProject(ProjectTypes eProject)
@@ -898,33 +1132,33 @@ TechTypes getDiscoveryTech(UnitTypes eUnit, PlayerTypes ePlayer)
 
 bool PUF_isPlayer(const CvUnit* pUnit, int iData1, int)
 {
-	CvAssertMsg(iData1 != -1, "Invalid data argument, should be >= 0");
+	ASSERT_DEBUG(iData1 != -1, "Invalid data argument, should be >= 0");
 	return (pUnit->getOwner() == iData1);
 }
 
 bool PUF_isTeam(const CvUnit* pUnit, int iData1, int)
 {
-	CvAssertMsg(iData1 != -1, "Invalid data argument, should be >= 0");
+	ASSERT_DEBUG(iData1 != -1, "Invalid data argument, should be >= 0");
 	return (pUnit->getTeam() == iData1);
 }
 
 bool PUF_isCombatTeam(const CvUnit* pUnit, int iData1, int iData2)
 {
-	CvAssertMsg(iData1 != -1, "Invalid data argument, should be >= 0");
-	CvAssertMsg(iData2 != -1, "Invalid data argument, should be >= 0");
+	ASSERT_DEBUG(iData1 != -1, "Invalid data argument, should be >= 0");
+	ASSERT_DEBUG(iData2 != -1, "Invalid data argument, should be >= 0");
 
 	return (GET_PLAYER(pUnit->getCombatOwner((TeamTypes)iData2, *(pUnit->plot()))).getTeam() == iData1 && !pUnit->isInvisible((TeamTypes)iData2, false, false));
 }
 
 bool PUF_isOtherPlayer(const CvUnit* pUnit, int iData1, int)
 {
-	CvAssertMsg(iData1 != -1, "Invalid data argument, should be >= 0");
+	ASSERT_DEBUG(iData1 != -1, "Invalid data argument, should be >= 0");
 	return (pUnit->getOwner() != iData1);
 }
 
 bool PUF_isOtherTeam(const CvUnit* pUnit, int iData1, int)
 {
-	CvAssertMsg(iData1 != -1, "Invalid data argument, should be >= 0");
+	ASSERT_DEBUG(iData1 != -1, "Invalid data argument, should be >= 0");
 	TeamTypes eTeam = GET_PLAYER((PlayerTypes)iData1).getTeam();
 	if(pUnit->canCoexistWithEnemyUnit(eTeam))
 	{
@@ -936,8 +1170,8 @@ bool PUF_isOtherTeam(const CvUnit* pUnit, int iData1, int)
 
 bool PUF_isEnemy(const CvUnit* pUnit, int iData1, int iData2)
 {
-	CvAssertMsg(iData1 != -1, "Invalid data argument, should be >= 0");
-	CvAssertMsg(iData2 != -1, "Invalid data argument, should be >= 0");
+	ASSERT_DEBUG(iData1 != -1, "Invalid data argument, should be >= 0");
+	ASSERT_DEBUG(iData2 != -1, "Invalid data argument, should be >= 0");
 
 	TeamTypes eOtherTeam = GET_PLAYER((PlayerTypes)iData1).getTeam();
 	TeamTypes eOurTeam = GET_PLAYER(pUnit->getCombatOwner(eOtherTeam, *(pUnit->plot()))).getTeam();
@@ -952,26 +1186,26 @@ bool PUF_isEnemy(const CvUnit* pUnit, int iData1, int iData2)
 
 bool PUF_isVisible(const CvUnit* pUnit, int iData1, int)
 {
-	CvAssertMsg(iData1 != -1, "Invalid data argument, should be >= 0");
+	ASSERT_DEBUG(iData1 != -1, "Invalid data argument, should be >= 0");
 	return !(pUnit->isInvisible(GET_PLAYER((PlayerTypes)iData1).getTeam(), false));
 }
 
 bool PUF_isVisibleDebug(const CvUnit* pUnit, int iData1, int)
 {
-	CvAssertMsg(iData1 != -1, "Invalid data argument, should be >= 0");
+	ASSERT_DEBUG(iData1 != -1, "Invalid data argument, should be >= 0");
 	return !(pUnit->isInvisible(GET_PLAYER((PlayerTypes)iData1).getTeam(), true));
 }
 
 bool PUF_canSiege(const CvUnit* pUnit, int iData1, int)
 {
-	CvAssertMsg(iData1 != -1, "Invalid data argument, should be >= 0");
+	ASSERT_DEBUG(iData1 != -1, "Invalid data argument, should be >= 0");
 	return pUnit->canSiege(GET_PLAYER((PlayerTypes)iData1).getTeam());
 }
 
 bool PUF_canDeclareWar(const CvUnit* pUnit, int iData1, int iData2)
 {
-	CvAssertMsg(iData1 != -1, "Invalid data argument, should be >= 0");
-	CvAssertMsg(iData2 != -1, "Invalid data argument, should be >= 0");
+	ASSERT_DEBUG(iData1 != -1, "Invalid data argument, should be >= 0");
+	ASSERT_DEBUG(iData2 != -1, "Invalid data argument, should be >= 0");
 
 	TeamTypes eOtherTeam = GET_PLAYER((PlayerTypes)iData1).getTeam();
 	TeamTypes eOurTeam = GET_PLAYER(pUnit->getCombatOwner(eOtherTeam, *(pUnit->plot()))).getTeam();
@@ -996,8 +1230,8 @@ bool PUF_cannotDefend(const CvUnit* pUnit, int, int)
 
 bool PUF_canDefendEnemy(const CvUnit* pUnit, int iData1, int iData2)
 {
-	CvAssertMsg(iData1 != -1, "Invalid data argument, should be >= 0");
-	CvAssertMsg(iData2 != -1, "Invalid data argument, should be >= 0");
+	ASSERT_DEBUG(iData1 != -1, "Invalid data argument, should be >= 0");
+	ASSERT_DEBUG(iData2 != -1, "Invalid data argument, should be >= 0");
 	return (PUF_canDefend(pUnit, iData1, iData2) && PUF_isEnemy(pUnit, iData1, iData2));
 }
 
@@ -1008,19 +1242,19 @@ bool PUF_isFighting(const CvUnit* pUnit, int, int)
 
 bool PUF_isDomainType(const CvUnit* pUnit, int iData1, int)
 {
-	CvAssertMsg(iData1 != -1, "Invalid data argument, should be >= 0");
+	ASSERT_DEBUG(iData1 != -1, "Invalid data argument, should be >= 0");
 	return (pUnit->getDomainType() == iData1);
 }
 
 bool PUF_isUnitType(const CvUnit* pUnit, int iData1, int)
 {
-	CvAssertMsg(iData1 != -1, "Invalid data argument, should be >= 0");
+	ASSERT_DEBUG(iData1 != -1, "Invalid data argument, should be >= 0");
 	return (pUnit->getUnitType() == iData1);
 }
 
 bool PUF_isUnitAIType(const CvUnit* pUnit, int iData1, int)
 {
-	CvAssertMsg(iData1 != -1, "Invalid data argument, should be >= 0");
+	ASSERT_DEBUG(iData1 != -1, "Invalid data argument, should be >= 0");
 	return (pUnit->AI_getUnitAIType() == iData1);
 }
 
@@ -1076,7 +1310,7 @@ int getTurnMonthForGame(int iGameTurn, int iStartYear, CalendarTypes eCalendar, 
 	if(pkGameSpeedInfo == NULL)
 	{
 		//This function requires a valid game speed type!
-		CvAssert(pkGameSpeedInfo);
+		ASSERT_DEBUG(pkGameSpeedInfo);
 		return 0;
 	}
 
@@ -1137,7 +1371,7 @@ int getTurnMonthForGame(int iGameTurn, int iStartYear, CalendarTypes eCalendar, 
 		break;
 
 	default:
-		CvAssert(false);
+		ASSERT_DEBUG(false);
 	}
 
 	return iTurnMonth;
@@ -1159,7 +1393,7 @@ void boolsToString(const bool* pBools, int iNumBools, CvString* szOut)
 //
 void stringToBools(const char* szString, int* iNumBools, bool** ppBools)
 {
-	CvAssertMsg(szString, "null string");
+	ASSERT_DEBUG(szString, "null string");
 	if(szString)
 	{
 		*iNumBools = strlen(szString);
@@ -1548,55 +1782,167 @@ int MapToPercent(int iValue, int iZeroAt, int iHundredAt)
 		return 50;
 }
 
-// add a fraction to a referenced fraction without losing information; the referenced fraction is assumed to have the larger dividend & divisor
-void AddFractionToReference(pair<int,int>& A, const pair<int,int>& B)
+//------------------------------------------------------------------------------
+fraction& fraction::operator+=(const fraction &rhs)
 {
-	// protect from integer overflow (safe, simple max that will probably never be hit)
-	if (A.first >= (INT_MAX / B.first / B.second) - A.second)
-	{
-		// Divisor or Dividend is too large! Start fresh
-		if (A.first > A.second)
-		{
-			A.first /= A.second;
-			A.second = 1;
-		}
-		else
-		{
-			A.second /= A.first;
-			A.first = 1;
-		}
-	}
-
-	// N / D = nA / dA + nB / dB
+	// N / D = nA/dA + nB/dB
 	//       = (nA*dB + nB*dA) / (dB*dA)
-	A.first *= B.second;
-	A.first += B.first * A.second;
-
-	A.second *= B.second;
-}
-
-// add two fractions together without losing information; A is assumed to have the larger dividend & divisor
-pair<int,int> AddFractions(pair<int,int>& A, pair<int,int>& B)
-{
-	AddFractionToReference(A, B);
-	return A;
-}
-
-// add a list of fractions together (separated numerators and denominators)
-pair<int,int> AddFractions(vector<int>& aDividendList, vector<int>& aDivisorList)
-{
-	CvAssert(aDividendList.size() == aDivisorList.size());
-
-	pair<int,int> result = make_pair(0, 1);
-
-	for (size_t jJ = 0, jlen = aDividendList.size(); jJ < jlen; ++jJ)
+	if (den == rhs.den)
 	{
-		AddFractionToReference(result, make_pair(aDividendList[jJ], aDivisorList[jJ]));
+		num += rhs.num;
 	}
-	return result;
+	else
+	{
+		num *= rhs.den;
+		num += rhs.num * den;
+		den *= rhs.den;
+	}
+
+	return *this;
+}
+fraction& fraction::operator-=(const fraction &rhs)
+{
+	// N / D = nA/dA - nB/dB
+	//       = (nA*dB + -nB*dA) / (dB*dA)
+	fraction neg(-rhs.num, rhs.den);
+	return *this += neg;
+}
+fraction& fraction::operator*=(const fraction &rhs)
+{
+	// N / D = nA/dA * nB/dB
+	//       = (nA*nB) / (dA*dB)
+	num *= rhs.num;
+	den *= rhs.den;
+	return *this;
+}
+fraction& fraction::operator/=(const fraction &rhs)
+{
+	// N / D = nA/dA / nB/dB
+	//       = (nA*dB) / (dA*nB)
+	ASSERT_DEBUG(rhs.num != 0);
+	num *= rhs.den;
+	den *= rhs.num;
+	return *this;
+}
+
+fraction fraction::operator+(const fraction &rhs)
+{
+	fraction lhs = *this;
+	return lhs += rhs;
+}
+fraction fraction::operator-(const fraction &rhs)
+{
+	fraction lhs = *this;
+	return lhs -= rhs;
+}
+fraction fraction::operator*(const fraction &rhs)
+{
+	fraction lhs = *this;
+	return lhs *= rhs;
+}
+fraction fraction::operator/(const fraction &rhs)
+{
+	fraction lhs = *this;
+	return lhs /= rhs;
+}
+
+bool fraction::operator==(const fraction &rhs) const
+{
+	fraction lhs = *this;
+	return lhs.num * rhs.den == rhs.num * lhs.den;
+}
+bool fraction::operator<(const fraction &rhs) const
+{
+	fraction lhs = *this;
+	return lhs.num * rhs.den < rhs.num * lhs.den;
+}
+
+fraction abs(const fraction &lhs)
+{
+	return fraction(abs(lhs.num), abs(lhs.den));
+}
+bool operator==(const int lhs, const fraction &rhs)
+{
+	return lhs * rhs.den == rhs.num;
+}
+bool operator!=(const int lhs, const fraction &rhs)
+{
+	return !operator==(lhs, rhs);
+}
+
+// checks to see if an operation will put the above the max, and if so, reduce the divisor & dividend
+fraction fraction::checkOperands(const fraction &rhs)
+{
+	if(abs(num) >= abs(INT_MAX / rhs.num / rhs.den - den))
+	{
+		fraction lhsN = *this;
+		fraction rhsN = rhs;fraction lhsO = *this;
+		fraction rhsO = rhs;
+		if (lhsN < rhsN)
+		{
+			lhsN = rhsO;
+			rhsN = lhsO;
+		}
+		
+		lhsN.Reduce();
+		rhsN.Reduce();
+		// if reduce failed, start fresh
+		if (lhsN.isIdentical(lhsO) && rhsN.isIdentical(rhsO))
+		{
+			if (lhsN.num >= lhsN.den)
+			{
+				lhsN.num /= lhsN.den;
+				lhsN.den = 1;
+			}
+			else
+			{
+				lhsN.num = 1;
+				lhsN.den /= lhsN.num;
+			}
+			*this = lhsN;
+			return rhsN;
+		}
+		rhsN = lhsN.checkOperands(rhsN);
+		*this = lhsN;
+		return rhsN;
+	}
+	return rhs;
+}
+bool fraction::isIdentical(const fraction &rhs) const
+{
+	return num == rhs.num && den == rhs.den;
+}
+// find the greatest common denominator and reduce the fraction
+fraction& fraction::Reduce()
+{
+	int cd = gcd(num, den);
+	num /= cd;
+	den /= cd;
+	return *this;
+}
+int fraction::gcd(int a, int b)
+{
+	if (b == 0)
+		return a;
+
+	return gcd(b, a % b);
+}
+
+FDataStream& operator<<(FDataStream& saveTo, const fraction& readFrom)
+{
+	saveTo << readFrom.num;
+	saveTo << readFrom.den;
+	return saveTo;
+}
+FDataStream& operator>>(FDataStream& loadFrom, fraction& writeTo)
+{
+	loadFrom >> writeTo.num;
+	loadFrom >> writeTo.den;
+	return loadFrom;
 }
 #endif
 
+//------------------------------------------------------------------------------
 void PrintMemoryInfo(const char* hint)
 {
 	DWORD processID = GetCurrentProcessId();

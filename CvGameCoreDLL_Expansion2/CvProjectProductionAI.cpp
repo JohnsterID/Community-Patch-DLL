@@ -1,5 +1,5 @@
 /*	-------------------------------------------------------------------------------------------------------
-	© 1991-2012 Take-Two Interactive Software and its subsidiaries.  Developed by Firaxis Games.  
+	Â© 1991-2012 Take-Two Interactive Software and its subsidiaries.  Developed by Firaxis Games.  
 	Sid Meier's Civilization V, Civ, Civilization, 2K Games, Firaxis Games, Take-Two Interactive Software 
 	and their respective logos are all trademarks of Take-Two interactive Software, Inc.  
 	All other marks and trademarks are the property of their respective owners.  
@@ -100,7 +100,7 @@ int CvProjectProductionAI::GetWeight(ProjectTypes eProject)
 /// Recommend highest-weighted Project
 ProjectTypes CvProjectProductionAI::RecommendProject()
 {
-	CvAssert(m_pCity);
+	ASSERT_DEBUG(m_pCity);
 	if(!m_pCity)
 		return NO_PROJECT;
 
@@ -372,7 +372,7 @@ void CvProjectProductionAI::LogPossibleBuilds()
 		CvString strDesc;
 		CvString strLogName;
 
-		CvAssert(m_pCity);
+		ASSERT_DEBUG(m_pCity);
 		if(!m_pCity) return;
 
 		// Find the name of this civ and city
@@ -382,7 +382,7 @@ void CvProjectProductionAI::LogPossibleBuilds()
 		// Open the log file
 		FILogFile* pLog = NULL;
 		pLog = LOGFILEMGR.GetLog(m_pCity->GetCityStrategyAI()->GetLogFileName(playerName, cityName), FILogFile::kDontTimeStamp);
-		CvAssert(pLog);
+		ASSERT_DEBUG(pLog);
 		if(!pLog) return;
 
 		// Get the leading info for this line

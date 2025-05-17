@@ -165,7 +165,7 @@ public:
 	int GetEnemyWarWearinessModifier() const;
 	int GetCombatBonusVsHigherPop() const;
 	bool IsBuyOwnedTiles() const;
-	bool IsReconquista() const;
+	bool IsNewCitiesStartWithCapitalReligion() const;
 	bool IsForeignReligionSpreadImmune() const;
 	int GetInspirationalLeader() const;
 	int GetBullyMilitaryStrengthModifier() const;
@@ -200,7 +200,7 @@ public:
 	int GetWLTKDGATimer() const;
 	int GetWLTKDUnhappinessNeedsMod() const;
 	int GetStartingSpies() const;
-	int GetStartingSpyRank() const;
+	int GetSpyOffensiveStrengthModifier() const;
 	int GetSpyMoveRateBonus() const;
 	int GetSpySecurityModifier() const;
 	int GetSpyExtraRankBonus() const;
@@ -271,11 +271,6 @@ public:
 	int GetNumFreeBuildings() const;
 	TechTypes GetFreeBuildingPrereqTech() const;
 	TechTypes GetCapitalFreeBuildingPrereqTech() const;
-	int YieldFromRouteMovement(int i) const;
-	int YieldFromOwnPantheon(int i) const;
-	int YieldFromHistoricEvent(int i) const;
-	int YieldFromXMilitaryUnits(int i) const;
-	int YieldFromLevelUp(int i) const;
 #endif
 
 	TechTypes GetFreeUnitPrereqTech() const;
@@ -391,6 +386,8 @@ public:
 	int GetYieldFromCSFriend(int i) const;
 	int GetYieldFromSettle(int i) const;
 	int GetYieldFromConquest(int i) const;
+	int GetYieldFromCityDamageTimes100(int i) const;
+	int GetPurchasedUnitsBonusXP() const;
 	int GetVotePerXCSAlliance() const;
 	int GetVotePerXCSFollowingYourReligion() const;
 	int GetChanceToConvertReligiousUnits() const;
@@ -424,6 +421,7 @@ public:
 	int GetYieldFromKills(YieldTypes eYield) const;
 	int GetYieldFromBarbarianKills(YieldTypes eYield) const;
 	int GetYieldFromMinorDemand(YieldTypes eYield) const;
+	int GetYieldFromLuxuryResourceGain(YieldTypes eYield) const;
 	int GetYieldChangeTradeRoute(int i) const;
 	int GetYieldChangeWorldWonder(int i) const;
 	int GetTradeRouteYieldChange(DomainTypes eIndex1, YieldTypes eIndex2) const;
@@ -451,6 +449,10 @@ public:
 	bool UnitClassCanBuild(const int buildID, const int unitClassID) const;
 	bool TerrainClaimBoost(TerrainTypes eTerrain);
 #endif
+	set<int> GetFreePromotions() const
+	{
+		return m_siFreePromotions;
+	}
 #if defined(MOD_TRAITS_TRADE_ROUTE_PRODUCTION_SIPHON)
 	TradeRouteProductionSiphon GetTradeRouteProductionSiphon(const bool bInternationalOnly) const;
 #endif
@@ -540,9 +542,9 @@ protected:
 	int m_iEnemyWarWearinessModifier;
 	int m_iCombatBonusVsHigherPop;
 	bool m_bBuyOwnedTiles;
-	bool m_bReconquista;
+	bool m_bNewCitiesStartWithCapitalReligion;
 	bool m_bNoSpread;
-	int m_iInspirationalLeader;
+	int m_iInspirationalLeader; // OBSOLETE: to be removed in VP5.0
 	int m_iBullyMilitaryStrengthModifier;
 	int m_iBullyValueModifier;
 	bool m_bIgnoreBullyPenalties;
@@ -639,7 +641,7 @@ protected:
 	int m_iWLTKDGATimer;
 	int m_iWLTKDUnhappinessNeedsMod;
 	int m_iStartingSpies;
-	int m_iStartingSpyRank;
+	int m_iSpyOffensiveStrengthModifier;
 	int m_iSpyMoveRateBonus;
 	int m_iSpySecurityModifier;
 	int m_iSpyExtraRankBonus;
@@ -745,6 +747,8 @@ protected:
 	int* m_piYieldFromCSFriend;
 	int* m_piYieldFromSettle;
 	int* m_piYieldFromConquest;
+	int* m_piYieldFromCityDamageTimes100;
+	int m_iPurchasedUnitsBonusXP;
 	int m_iVotePerXCSAlliance;
 	int m_iVotePerXCSFollowingFollowingYourReligion;
 	int m_iChanceToConvertReligiousUnits;
@@ -784,6 +788,7 @@ protected:
 	int* m_piYieldFromKills;
 	int* m_piYieldFromBarbarianKills;
 	int* m_piYieldFromMinorDemand;
+	int* m_piYieldFromLuxuryResourceGain;
 	int* m_piYieldChangeTradeRoute;
 	int* m_piYieldChangeWorldWonder;
 	int** m_ppiTradeRouteYieldChange;
@@ -818,6 +823,8 @@ protected:
 #endif
 	std::vector<FreeResourceXCities> m_aFreeResourceXCities;
 	std::vector<bool> m_abNoTrainUnitClass;
+
+	set<int> m_siFreePromotions;
 
 private:
 	CvTraitEntry(const CvTraitEntry&);
@@ -1137,9 +1144,9 @@ public:
 	{
 		return m_bBuyOwnedTiles;
 	};
-	bool IsReconquista() const
+	bool IsNewCitiesStartWithCapitalReligion() const
 	{
-		return m_bReconquista;
+		return m_bNewCitiesStartWithCapitalReligion;
 	};
 	bool IsForeignReligionSpreadImmune() const
 	{
@@ -1277,9 +1284,9 @@ public:
 	{
 		return m_iStartingSpies;
 	};
-	int GetStartingSpyRank() const
+	int GetSpyOffensiveStrengthModifier() const
 	{
-		return m_iStartingSpyRank;
+		return m_iSpyOffensiveStrengthModifier;
 	};
 	int GetSpyMoveRateBonus() const
 	{
@@ -1877,6 +1884,14 @@ public:
 	{
 		return m_iYieldFromConquest[(int)eYield];
 	};
+	int GetYieldFromCityDamageTimes100(YieldTypes eYield) const
+	{
+		return m_iYieldFromCityDamageTimes100[static_cast<int>(eYield)];
+	};
+	int GetPurchasedUnitsBonusXP() const
+	{
+		return m_iPurchasedUnitsBonusXP;
+	};
 	int GetVotePerXCSAlliance() const
 	{
 		return m_iVotePerXCSAlliance;
@@ -1985,6 +2000,7 @@ public:
 	int GetYieldFromKills(YieldTypes eYield) const;
 	int GetYieldFromBarbarianKills(YieldTypes eYield) const;
 	int GetYieldFromMinorDemand(YieldTypes eYield) const;
+	int GetYieldFromLuxuryResourceGain(YieldTypes eYield) const;
 	int GetYieldChangeTradeRoute(YieldTypes eYield) const
 	{
 		return m_iYieldChangeTradeRoute[(int)eYield];
@@ -2079,6 +2095,7 @@ public:
 	CvString GetMayaCalendarLongString();
 	void ChooseMayaBoost();
 	void ComputeMayaDate();
+	int GetCurrentBaktun() const;
 	int GetUnitBaktun(UnitTypes eUnit) const;
 	void SetUnitBaktun(UnitTypes eUnit);
 	bool IsFreeMayaGreatPersonChoice() const;
@@ -2092,6 +2109,11 @@ public:
 	void Write(FDataStream& kStream) const;
 
 	const std::vector<TraitTypes> GetPotentiallyActiveTraits() { return m_vPotentiallyActiveLeaderTraits; }
+
+	set<PromotionTypes> GetFreePromotions() const
+	{
+		return m_seFreePromotions;
+	}
 
 private:
 	bool ConvertBarbarianCamp(CvUnit* pByUnit, CvPlot* pPlot);
@@ -2170,9 +2192,9 @@ private:
 	int m_iEnemyWarWearinessModifier;
 	int m_iCombatBonusVsHigherPop;
 	bool m_bBuyOwnedTiles;
-	bool m_bReconquista;
+	bool m_bNewCitiesStartWithCapitalReligion;
 	bool m_bNoSpread;
-	int m_iInspirationalLeader;
+	int m_iInspirationalLeader; // OBSOLETE: to be removed in VP5.0
 	int m_iBullyMilitaryStrengthModifier;
 	int m_iBullyValueModifier;
 	bool m_bIgnoreBullyPenalties;
@@ -2205,7 +2227,7 @@ private:
 	int m_iWLTKDGATimer;
 	int m_iWLTKDUnhappinessNeedsMod;
 	int m_iStartingSpies;
-	int m_iStartingSpyRank;
+	int m_iSpyOffensiveStrengthModifier;
 	int m_iSpyMoveRateBonus;
 	int m_iSpySecurityModifier;
 	int m_iSpyExtraRankBonus;
@@ -2391,11 +2413,13 @@ private:
 	int m_iYieldFromCSFriend[NUM_YIELD_TYPES];
 	int m_iYieldFromSettle[NUM_YIELD_TYPES];
 	int m_iYieldFromConquest[NUM_YIELD_TYPES];
+	int m_iYieldFromCityDamageTimes100[NUM_YIELD_TYPES];
 	std::map<int, int> m_aiGoldenAgeYieldModifier;
 	std::map<int, std::pair<int, bool>> m_aibUnitCombatProductionCostModifier;
 	int m_iNonSpecialistFoodChange;
 	std::vector<int> m_aiNoBuilds;
 	std::map<int, int> m_aiDomainProductionModifiersPerSpecialist;
+	int m_iPurchasedUnitsBonusXP;
 	int m_iVotePerXCSAlliance;
 	int m_iVotePerXCSFollowingFollowingYourReligion;
 	int m_iChanceToConvertReligiousUnits;
@@ -2439,6 +2463,7 @@ private:
 	int m_iYieldFromKills[NUM_YIELD_TYPES];
 	int m_iYieldFromBarbarianKills[NUM_YIELD_TYPES];
 	int m_iYieldFromMinorDemand[NUM_YIELD_TYPES];
+	int m_iYieldFromLuxuryResourceGain[NUM_YIELD_TYPES];
 	int m_iYieldChangeTradeRoute[NUM_YIELD_TYPES];
 	int m_iYieldChangeWorldWonder[NUM_YIELD_TYPES];
 	std::vector< Firaxis::Array<int, NUM_YIELD_TYPES > > m_ppiTradeRouteYieldChange;
@@ -2462,6 +2487,8 @@ private:
 	std::vector< Firaxis::Array<int, NUM_YIELD_TYPES > > m_ppaaiUnimprovedFeatureYieldChange;
 
 	std::vector<FreeResourceXCities> m_aFreeResourceXCities;
+
+	set<PromotionTypes> m_seFreePromotions;
 };
 
 FDataStream& operator>>(FDataStream&, CvPlayerTraits&);

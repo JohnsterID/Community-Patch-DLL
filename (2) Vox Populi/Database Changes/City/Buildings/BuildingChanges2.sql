@@ -165,9 +165,9 @@ VALUES
 	('BUILDING_MANDIR', 'YIELD_FAITH', 3);
 
 INSERT INTO Building_YieldFromBirth
-	(BuildingType, YieldType, Yield)
+	(BuildingType, YieldType, Yield, IsEraScaling)
 SELECT
-	'BUILDING_MANDIR', Type, 5
+	'BUILDING_MANDIR', Type, 5, 1
 FROM Yields
 WHERE ID < 6; -- "All" yields
 
@@ -194,11 +194,6 @@ INSERT INTO Building_YieldFromUnitProduction
 	(BuildingType, YieldType, Yield)
 VALUES
 	('BUILDING_ORDER', 'YIELD_FAITH', 10);
-
-INSERT INTO Building_YieldFromFaithPurchase
-	(BuildingType, YieldType, Yield)
-VALUES
-	('BUILDING_ORDER', 'YIELD_PRODUCTION', 10);
 
 -- Teocalli
 INSERT INTO Building_YieldChanges
@@ -521,7 +516,6 @@ UPDATE Buildings
 SET
 	GreatWorkCount = 2,
 	ThemingBonusHelp = 'TXT_KEY_PARTHENON_THEMING_BONUS_HELP',
-	CitySupplyModifier = 10,
 	BoredomFlatReduction = 1
 WHERE Type = 'BUILDING_PARTHENON';
 
@@ -803,13 +797,19 @@ VALUES
 UPDATE Buildings
 SET
 	PolicyBranchType = NULL,
-	IlliteracyFlatReduction = 1
+	IlliteracyFlatReduction = 1,
+	MedianTechPercentChange = 0
 WHERE Type = 'BUILDING_PORCELAIN_TOWER';
 
 INSERT INTO Building_YieldChanges
 	(BuildingType, YieldType, Yield)
 VALUES
 	('BUILDING_PORCELAIN_TOWER', 'YIELD_CULTURE', 1);
+
+INSERT INTO Building_YieldModifiers
+	(BuildingType, YieldType, Yield)
+VALUES
+	('BUILDING_PORCELAIN_TOWER', 'YIELD_SCIENCE', 10);
 
 -- Taj Mahal
 UPDATE Buildings
@@ -873,7 +873,7 @@ INSERT INTO Building_ResourceQuantity
 VALUES
 	('BUILDING_SUMMER_PALACE', 'RESOURCE_PAPER', 1);
 
-INSERT INTO Building_UnitCombatProductionModifiers
+INSERT INTO Building_UnitCombatProductionModifiersGlobal
 	(BuildingType, UnitCombatType, Modifier)
 VALUES
 	('BUILDING_SUMMER_PALACE', 'UNITCOMBAT_DIPLOMACY', 20);

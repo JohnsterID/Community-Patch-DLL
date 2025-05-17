@@ -1,5 +1,5 @@
 /*	-------------------------------------------------------------------------------------------------------
-	© 1991-2012 Take-Two Interactive Software and its subsidiaries.  Developed by Firaxis Games.  
+	Â© 1991-2012 Take-Two Interactive Software and its subsidiaries.  Developed by Firaxis Games.  
 	Sid Meier's Civilization V, Civ, Civilization, 2K Games, Firaxis Games, Take-Two Interactive Software 
 	and their respective logos are all trademarks of Take-Two interactive Software, Inc.  
 	All other marks and trademarks are the property of their respective owners.  
@@ -16,28 +16,75 @@
 
 struct SPrecomputedExpensiveNumbers
 {
-	int iExcessFoodTimes100;
+	bool bNeedUpdate;
+	int iFoodRateTimes100;
+	int iFoodConsumptionTimes100;
+	int iFoodConsumptionAssumeNoReductionNonSpecialistsTimes100;
 	int iFoodCorpMod;
 	int iFamine;
 	int iDistress;
 	int iPoverty;
 	int iIlliteracy;
 	int iBoredom;
-	int iAmountForDistressReductionTimes100;
-	int iAmountForPovertyReductionTimes100;
-	int iAmountForIlliteracyReductionTimes100;
-	int iAmountForBoredomReductionTimes100;
-	int iReligiousUnrest;
-	int iGlobalHappiness;
+	int iUrbanization;
+	int iGrowthMod;
+	int iLocalHappiness;
+	int iLocalUnhappiness;
+	int iHappinessOtherCities;
+	int iUnhappinessOtherCities;
+	int iBasicNeedsRateChangeForReducedDistress;
+	int iGoldRateChangeForReducedPoverty;
+	int iScienceRateChangeForReducedIlliteracy;
+	int iCultureRateChangeForReducedBoredom;
+	int iBasicNeedsRateChangeForIncreasedDistress;
+	int iGoldRateChangeForIncreasedPoverty;
+	int iScienceRateChangeForIncreasedIlliteracy;
+	int iCultureRateChangeForIncreasedBoredom;
+	int iOtherUnhappiness;
 	bool bWantArt;
 	bool bWantScience;
 	bool bWantDiplo;
+	int iNetGold;
+
+	vector<int> iSpecialistGPPRates;
+	vector<bool> bAnySpecialistInOtherCity;
+	vector<int> iYieldChangeAnySpecialist;
 
 	vector<vector<int>> bonusForXTerrain; //updated on demand only
 	vector<vector<int>> bonusForXFeature; //updated on demand only
 
 	SPrecomputedExpensiveNumbers();
-	void update(CvCity* pCity);
+	void update(CvCity* pCity, bool bInsideLoop=false);
+};
+
+// used for the yield changes corresponding to a change in tile/specialist assignment
+// consists of: vector of yields, vector of specialist GPP points, number of specialists added/removed (for unhappiness calculation)
+struct YieldAndGPPList
+{
+	vector<int>yield;
+	vector<int>iNumSpecialists;
+
+	YieldAndGPPList();
+	YieldAndGPPList negative();
+	bool isNoPositivePlotYield();
+
+	bool operator==(const YieldAndGPPList& other) const
+	{
+		return (other.yield == yield && other.iNumSpecialists == iNumSpecialists);
+	}
+};
+
+YieldAndGPPList operator+(const YieldAndGPPList&, const YieldAndGPPList&);
+
+// structure to describe a single tile change. can be a plot or a specialist (including laborer)
+struct TileChange
+{
+	CvPlot* plot;
+	SpecialistTypes specialist;
+
+	TileChange();
+	TileChange(CvPlot* pPlot);
+	TileChange(SpecialistTypes eSpecialist);
 };
 
 //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -79,8 +126,6 @@ public:
 	void DoTurn();
 
 	int GetBonusPlotValue(CvPlot* pPlot, YieldTypes eYield, SPrecomputedExpensiveNumbers& cache);
-	int GetPlotValue(CvPlot* pPlot, SPrecomputedExpensiveNumbers& cache);
-	int GetYieldModifierTimes100(YieldTypes eYield, const SPrecomputedExpensiveNumbers& cache);
 	bool CityShouldEmphasizeFood(int iAssumedExcessFood) const;
 	bool CityShouldEmphasizeProduction() const;
 
@@ -97,12 +142,25 @@ public:
 	bool SetForcedAvoidGrowth(bool bAvoidGrowth, bool bReallocate = false);
 	CityAIFocusTypes GetFocusType() const;
 	bool SetFocusType(CityAIFocusTypes eFocus, bool bReallocate = false);
-	int GetYieldModForFocus(YieldTypes eYield, CityAIFocusTypes eFocus, bool bEmphasizeFood, const SPrecomputedExpensiveNumbers& cache);
 
-	// Specialist AI
-	BuildingTypes GetAIBestSpecialistBuilding(int& iSpecialistValue, bool bLogging = false);
-	BuildingTypes GetAIBestSpecialistCurrentlyInBuilding(int& iSpecialistValue, bool bWantBest);
-	int GetSpecialistValue(SpecialistTypes eSpecialist, SPrecomputedExpensiveNumbers& cache);
+	BuildingTypes GetAIBestSpecialistBuilding(int& iSpecialistValue, SPrecomputedExpensiveNumbers& cache, bool bLogging = false);
+	BuildingTypes GetAIWorstSpecialistCurrentlyInBuilding(int& iSpecialistValue, SPrecomputedExpensiveNumbers& cache);
+	int GetSpecialistGPPRate(SpecialistTypes eSpecialist, SPrecomputedExpensiveNumbers& cache);
+
+	YieldAndGPPList GetPlotYields(CvPlot* pPlot, SPrecomputedExpensiveNumbers& cache);
+	YieldAndGPPList GetSpecialistYields(SpecialistTypes eSpecialist);
+
+	int GetBaseValuePerYield(YieldTypes eYield, SPrecomputedExpensiveNumbers& cache, bool bAssumeStarving = false, bool bAssumeBelowGrowthThreshold = false, bool bAssumeInDebt = false) const;
+	int GetBaseValuePerGPP(SpecialistTypes eSpecialist, SPrecomputedExpensiveNumbers& cache) const;
+
+	int GetPlotValueQuick(CvPlot* pPlot, bool bAdd, SPrecomputedExpensiveNumbers& cache, bool bAssumeStarving = false, bool bAssumeBelowGrowthThreshold = false, bool bAssumeInDebt = false);
+	int GetPlotValue(CvPlot* pPlot, bool bAdd, SPrecomputedExpensiveNumbers& cache);
+	int GetSpecialistValueQuick(SpecialistTypes eSpecialist, bool bAdd, SPrecomputedExpensiveNumbers& cache, bool bAssumeStarving = false, bool bAssumeBelowGrowthThreshold = false, bool bAssumeInDebt = false);
+	int GetSpecialistValue(SpecialistTypes eSpecialist, bool bAdd, SPrecomputedExpensiveNumbers& cache);
+	int ScoreYieldChangeQuick(YieldAndGPPList yieldChanges, SPrecomputedExpensiveNumbers& cache, bool bAssumeStarving = false, bool bAssumeBelowGrowthThreshold = false, bool bAssumeInDebt = false);
+	int ScoreYieldChange(YieldAndGPPList yieldChanges, SPrecomputedExpensiveNumbers& cache);
+
+	vector<TileChange> GetBestOptionsQuick(int iNumOptions, bool bAdd, bool bAllowOverride, SPrecomputedExpensiveNumbers& cache, bool bAssumeStarving, bool bAssumeBelowGrowthThreshold, bool bAssumeInDebt, bool bIncludePlots = true, bool bIncludeSpecialists = true, bool bNoTwoOptionsWithSameYields = false);
 
 	// Citizen Assignment
 	int GetNumUnassignedCitizens() const;
@@ -110,8 +168,10 @@ public:
 	int GetNumCitizensWorkingPlots() const;
 	void ChangeNumCitizensWorkingPlots(int iChange);
 
+	void DoInitialAssigment(bool bAssumeStarving, bool bAssumeBelowGrowthThreshold, bool bLogging);
 	bool DoAddBestCitizenFromUnassigned(CvCity::eUpdateMode updateMode, bool bLogging = false, bool NoSpecialists = false);
 	bool DoRemoveWorstCitizen(CvCity::eUpdateMode updateMode, bool bRemoveForcedStatus = false, SpecialistTypes eDontChangeSpecialist = NO_SPECIALIST);
+	void DoApplyTileChange(TileChange tileChange, bool bAdd, bool bLogging = false);
 
 	void SetDirty(bool bValue);
 	bool IsDirty() const;
@@ -119,7 +179,7 @@ public:
 
 	void OptimizeWorkedPlots(bool bLogging);
 	bool NeedReworkCitizens();
-	CvPlot* GetBestCityPlotWithValue(int& iChosenValue, ePlotSelectionMode eMode, bool Logging = false);
+	CvPlot* GetBestCityPlotWithValue(int& iChosenValue, ePlotSelectionMode eMode, SPrecomputedExpensiveNumbers& cache, bool Logging = false);
 
 	// Worked Plots
 	bool IsWorkingPlot(int iIndex) const;
@@ -189,12 +249,9 @@ public:
 
 	int GetNumSpecialistsAllowedByBuilding(const CvBuildingEntry& kBuilding);
 
-	int GetSpecialistUpgradeThreshold(UnitClassTypes eUnitClass);
-#if defined(MOD_GLOBAL_TRULY_FREE_GP)
+	int GetSpecialistUpgradeThreshold(UnitClassTypes eUnitClass) const;
+
 	void DoSpawnGreatPerson(UnitTypes eUnit, bool bIncrementCount, bool bCountAsProphet, bool bIsFree);
-#else
-	void DoSpawnGreatPerson(UnitTypes eUnit, bool bIncrementCount, bool bCountAsProphet);
-#endif
 
 	YieldTypes GetFocusTypeYield(CityAIFocusTypes eFocus);
 

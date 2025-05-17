@@ -1,5 +1,5 @@
 /*	-------------------------------------------------------------------------------------------------------
-	� 1991-2012 Take-Two Interactive Software and its subsidiaries.  Developed by Firaxis Games.  
+	© 1991-2012 Take-Two Interactive Software and its subsidiaries.  Developed by Firaxis Games.  
 	Sid Meier's Civilization V, Civ, Civilization, 2K Games, Firaxis Games, Take-Two Interactive Software 
 	and their respective logos are all trademarks of Take-Two interactive Software, Inc.  
 	All other marks and trademarks are the property of their respective owners.  
@@ -306,7 +306,6 @@ int CvLuaEnums::pRegister(lua_State* L)
 	RegisterEnum(ORDER_TRAIN);
 	RegisterEnum(ORDER_CONSTRUCT);
 	RegisterEnum(ORDER_CREATE);
-	RegisterEnum(ORDER_PREPARE);
 	RegisterEnum(ORDER_MAINTAIN);
 	RegisterEnum(NUM_ORDER_TYPES);
 	EnumEnd(L);
@@ -374,7 +373,7 @@ int CvLuaEnums::pRegister(lua_State* L)
 		{
 			CvNotificationEntry* pkEntry = pkNotifications->GetEntry(i);		
 			if (pkEntry)
-				pRegisterEnum(L, pkEntry->GetType(), FString::Hash(pkEntry->GetType()));
+				pRegisterEnum(L, pkEntry->GetType(), FStringHash(pkEntry->GetType()));
 		}
 	}
 	EnumEnd(L);
@@ -838,7 +837,6 @@ int CvLuaEnums::pRegister(lua_State* L)
 
 	// CivApproachTypes
 	EnumStart(L, "CivApproachTypes");
-	RegisterEnum(NO_CIV_APPROACH);
 	RegisterEnum(CIV_APPROACH_WAR);
 	RegisterEnum(CIV_APPROACH_HOSTILE);
 	RegisterEnum(CIV_APPROACH_DECEPTIVE);
@@ -860,6 +858,30 @@ int CvLuaEnums::pRegister(lua_State* L)
 	RegisterEnum(MAJOR_CIV_APPROACH_NEUTRAL);
 	RegisterEnum(MAJOR_CIV_APPROACH_FRIENDLY);
 	RegisterEnum(NUM_MAJOR_CIV_APPROACHES);
+	EnumEnd(L);
+
+	EnumStart(L, "AccomplishmentTypes");
+	RegisterEnum(ACCOMPLISHMENT_POLICY_BRANCH_ANCIENT);
+	RegisterEnum(ACCOMPLISHMENT_POLICY_BRANCH_MEDIEVAL);
+	RegisterEnum(ACCOMPLISHMENT_POLICY_BRANCH_INDUSTRIAL);
+	RegisterEnum(ACCOMPLISHMENT_CHOOSE_IDEOLOGY);
+	RegisterEnum(ACCOMPLISHMENT_BELIEF_PANTHEON);
+	RegisterEnum(ACCOMPLISHMENT_BELIEF_FOUNDER);
+	RegisterEnum(ACCOMPLISHMENT_BELIEF_FOLLOWER);
+	RegisterEnum(ACCOMPLISHMENT_BELIEF_ENHANCER);
+	RegisterEnum(ACCOMPLISHMENT_BELIEF_REFORMATION);
+	RegisterEnum(ACCOMPLISHMENT_LONGCOUNT_GENERAL);
+	RegisterEnum(ACCOMPLISHMENT_LONGCOUNT_ADMIRAL);
+	RegisterEnum(ACCOMPLISHMENT_LONGCOUNT_PROPHET);
+	RegisterEnum(ACCOMPLISHMENT_LONGCOUNT_WRITER);
+	RegisterEnum(ACCOMPLISHMENT_LONGCOUNT_ARTIST);
+	RegisterEnum(ACCOMPLISHMENT_LONGCOUNT_MUSICIAN);
+	RegisterEnum(ACCOMPLISHMENT_LONGCOUNT_ENGINEER);
+	RegisterEnum(ACCOMPLISHMENT_LONGCOUNT_MERCHANT);
+	RegisterEnum(ACCOMPLISHMENT_LONGCOUNT_SCIENTIST);
+	RegisterEnum(ACCOMPLISHMENT_LONGCOUNT_DIPLOMAT);
+	RegisterEnum(ACCOMPLISHMENT_ELIMINATE_PLAYER);
+	RegisterEnum(ACCOMPLISHMENT_DIPLOMATIC_MISSION_BOOST);
 	EnumEnd(L);
 
 	EnumStart(L, "InstantYieldType");
@@ -917,6 +939,11 @@ int CvLuaEnums::pRegister(lua_State* L)
 	RegisterEnum(INSTANT_YIELD_TYPE_SPY_IDENTIFY);
 	RegisterEnum(INSTANT_YIELD_TYPE_SPY_DEFENSE_OR_ID);
 	RegisterEnum(INSTANT_YIELD_TYPE_SPY_RIG_ELECTION);
+	RegisterEnum(INSTANT_YIELD_TYPE_CITY_DAMAGE);
+	RegisterEnum(INSTANT_YIELD_TYPE_LUXURY_RESOURCE_GAIN);
+	RegisterEnum(INSTANT_YIELD_TYPE_GOLDEN_AGE_START);
+	RegisterEnum(INSTANT_YIELD_TYPE_UNIT_GIFT);
+	RegisterEnum(INSTANT_YIELD_TYPE_BAKTUN_END);
 	RegisterEnum(NUM_INSTANT_YIELD_TYPES);
 	EnumEnd(L);
 
@@ -1139,7 +1166,6 @@ int CvLuaEnums::pRegister(lua_State* L)
 
 #if defined(MOD_BALANCE_CORE)
 	EnumStart(L, "StrengthTypes");
-	RegisterEnum(NO_STRENGTH_VALUE);
 	RegisterEnum(STRENGTH_PATHETIC);
 	RegisterEnum(STRENGTH_WEAK);
 	RegisterEnum(STRENGTH_POOR);
@@ -1163,7 +1189,6 @@ int CvLuaEnums::pRegister(lua_State* L)
 	EnumEnd(L);
 
 	EnumStart(L, "CivOpinionTypes");
-	RegisterEnum(NO_CIV_OPINION);
 	RegisterEnum(CIV_OPINION_UNFORGIVABLE);
 	RegisterEnum(CIV_OPINION_ENEMY);
 	RegisterEnum(CIV_OPINION_COMPETITOR);
@@ -1220,6 +1245,9 @@ int CvLuaEnums::pRegister(lua_State* L)
 	RegisterEnum(CONTROL_ESPIONAGE_OVERVIEW);
 	RegisterEnum(CONTROL_RELIGION_OVERVIEW);
 	RegisterEnum(CONTROL_RESTART_GAME);
+	RegisterEnum(CONTROL_TOGGLE_OBSERVER_MODE);
+	RegisterEnum(CONTROL_TOGGLE_AI_TAKEOVER);
+	RegisterEnum(CONTROL_SWITCH_TO_NEXT_PLAYER);
 	EnumEnd(L);
 
 	// TradeConnectionTypes

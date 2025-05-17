@@ -33,7 +33,7 @@ UPDATE Buildings
 SET
 	EventTourism = 7,
 	NoUnhappfromXSpecialists = 1,
-	VassalLevyEra = 1
+	VassalLevyEra = 2
 WHERE BuildingClass = 'BUILDINGCLASS_PALACE';
 
 INSERT INTO Helper
@@ -381,37 +381,17 @@ WHERE Type = 'BUILDING_HOSPITAL';
 UPDATE Buildings
 SET
 	AlwaysHeal = 15,
-	PovertyFlatReduction = 1
+	PovertyFlatReduction = 1,
+	NoUnhappfromXSpecialists = 2
 WHERE BuildingClass = 'BUILDINGCLASS_HOSPITAL';
 
-INSERT INTO Building_YieldChanges
-	(BuildingType, YieldType, Yield)
+INSERT INTO Building_SpecialistYieldChangesLocal
+	(BuildingType, SpecialistType, YieldType, Yield)
 SELECT
-	Type, 'YIELD_FOOD', 2
-FROM Buildings
-WHERE BuildingClass = 'BUILDINGCLASS_HOSPITAL';
-
-INSERT INTO Building_YieldFromYieldPercent
-	(BuildingType, YieldIn, YieldOut, Value)
-SELECT
-	Type, 'YIELD_FOOD', 'YIELD_SCIENCE', 5
-FROM Buildings
-WHERE BuildingClass = 'BUILDINGCLASS_HOSPITAL';
-
-INSERT INTO Building_YieldChangesPerPop
-	(BuildingType, YieldType, Yield)
-SELECT
-	Type, 'YIELD_FOOD', 10
-FROM Buildings
-WHERE BuildingClass = 'BUILDINGCLASS_HOSPITAL';
-
--- Medical Lab
-UPDATE Buildings
-SET
-	PopulationChange = 2,
-	FoodKept = 15,
-	PovertyFlatReduction = 1
-WHERE BuildingClass = 'BUILDINGCLASS_MEDICAL_LAB';
+	a.Type, b.Type, 'YIELD_FOOD', 1
+FROM Buildings a, Specialists b
+WHERE a.BuildingClass = 'BUILDINGCLASS_HOSPITAL'
+AND b.GreatPeopleUnitClass IS NOT NULL;
 
 INSERT INTO Helper
 	(SpecialistType, YieldType)
@@ -425,9 +405,30 @@ INSERT INTO Building_SpecialistYieldChangesLocal
 SELECT
 	a.Type, b.SpecialistType, b.YieldType, 2
 FROM Buildings a, Helper b
-WHERE a.BuildingClass = 'BUILDINGCLASS_MEDICAL_LAB';
+WHERE a.BuildingClass = 'BUILDINGCLASS_HOSPITAL';
 
 DELETE FROM Helper;
+
+-- Medical Lab
+UPDATE Buildings
+SET
+	PopulationChange = 2,
+	FoodKept = 15
+WHERE BuildingClass = 'BUILDINGCLASS_MEDICAL_LAB';
+
+INSERT INTO Building_YieldFromBirth
+	(BuildingType, YieldType, Yield)
+SELECT
+	Type, 'YIELD_SCIENCE', 50
+FROM Buildings
+WHERE BuildingClass = 'BUILDINGCLASS_MEDICAL_LAB';
+
+INSERT INTO Building_YieldFromBirthRetroactive
+	(BuildingType, YieldType, Yield)
+SELECT
+	Type, 'YIELD_SCIENCE', 50
+FROM Buildings
+WHERE BuildingClass = 'BUILDINGCLASS_MEDICAL_LAB';
 
 ----------------------------------------------------------------------------
 -- Science line
@@ -442,9 +443,9 @@ FROM Buildings
 WHERE BuildingClass = 'BUILDINGCLASS_GROVE';
 
 INSERT INTO Building_YieldFromBirth
-	(BuildingType, YieldType, Yield)
+	(BuildingType, YieldType, Yield, IsEraScaling)
 SELECT
-	Type, 'YIELD_SCIENCE', 5
+	Type, 'YIELD_SCIENCE', 5, 1
 FROM Buildings
 WHERE BuildingClass = 'BUILDINGCLASS_GROVE';
 
@@ -790,14 +791,14 @@ WHERE Type = 'BUILDING_WALLS';
 UPDATE Buildings
 SET
 	CityRangedStrikeRange = 1,
-	CitySupplyModifier = 10,
+	CitySupplyModifier = 5,
 	EmpireSizeModifierReduction = -5
 WHERE BuildingClass = 'BUILDINGCLASS_WALLS';
 
 -- Castle
 UPDATE Buildings
 SET
-	CitySupplyModifier = 10,
+	CitySupplyModifier = 5,
 	GreatWorkSlotType = 'GREAT_WORK_SLOT_ART_ARTIFACT',
 	GreatWorkCount = 1,
 	EmpireSizeModifierReduction = -5
@@ -817,7 +818,7 @@ UPDATE Buildings
 SET
 	PrereqTech = 'TECH_COMBUSTION',
 	CityRangedStrikeRange = 1,
-	CitySupplyModifier = 10,
+	CitySupplyModifier = 5,
 	HealRateChange = 5,
 	EmpireSizeModifierReduction = -5
 WHERE BuildingClass = 'BUILDINGCLASS_ARSENAL';
@@ -827,7 +828,7 @@ UPDATE Buildings
 SET
 	PrereqTech = 'TECH_RADAR',
 	RangedStrikeModifier = 10,
-	CitySupplyModifier = 20,
+	CitySupplyModifier = 5,
 	HealRateChange = 20,
 	DistressFlatReduction = 1,
 	EmpireSizeModifierReduction = -5,
@@ -956,9 +957,7 @@ WHERE BuildingClass = 'BUILDINGCLASS_SPACESHIP_FACTORY';
 
 -- Lighthouse
 UPDATE Buildings
-SET
-	CitySupplyFlat = 1,
-	AllowsWaterRoutes = 1
+SET AllowsWaterRoutes = 1
 WHERE BuildingClass = 'BUILDINGCLASS_LIGHTHOUSE';
 
 -- Already has +1 food from vanilla
@@ -975,7 +974,7 @@ SET
 	AllowsWaterRoutes = 0,
 	FinishSeaTRTourism = 10,
 	TradeRouteSeaGoldBonus = 200,
-	CitySupplyFlat = 2
+	CitySupplyFlat = 1
 WHERE BuildingClass = 'BUILDINGCLASS_HARBOR';
 
 INSERT INTO Building_YieldChanges
@@ -1007,19 +1006,11 @@ FROM Buildings
 WHERE BuildingClass = 'BUILDINGCLASS_HARBOR';
 
 -- Seaport
-INSERT INTO Building_ResourceQuantityRequirements
-	(BuildingType, ResourceType, Cost)
-SELECT
-	Type, 'RESOURCE_COAL', 1
-FROM Buildings
-WHERE BuildingClass = 'BUILDINGCLASS_SEAPORT';
-
 UPDATE Buildings
 SET
 	PrereqTech = 'TECH_STEAM_POWER',
-	CitySupplyModifier = 20,
-	SpecialistType = 'SPECIALIST_ENGINEER',
-	SpecialistCount = 1
+	CitySupplyModifier = 10,
+	AllowsIndustrialWaterRoutes = 1
 WHERE BuildingClass = 'BUILDINGCLASS_SEAPORT';
 
 INSERT INTO Helper
@@ -1041,13 +1032,6 @@ FROM Buildings a, Helper b
 WHERE a.BuildingClass = 'BUILDINGCLASS_SEAPORT';
 
 DELETE FROM Helper;
-
-INSERT INTO Building_YieldModifiers
-	(BuildingType, YieldType, Yield)
-SELECT
-	Type, 'YIELD_PRODUCTION', 25
-FROM Buildings
-WHERE BuildingClass = 'BUILDINGCLASS_SEAPORT';
 
 -- Mine Field
 INSERT INTO Building_ResourceQuantityRequirements
@@ -1189,24 +1173,10 @@ WHERE BuildingClass = 'BUILDINGCLASS_STADIUM';
 UPDATE Buildings
 SET
 	EspionageModifier = 0,
-	SpySecurityModifier = 15,
+	SpySecurityModifier = 20,
+	SpySecurityModifierPerXPop = 180, -- ESPIONAGE_SECURITY_PER_POPULATION_BUILDING_SCALER = 360, so 180/360 gives 1 per 2 population in city
 	DistressFlatReduction = 1
 WHERE BuildingClass = 'BUILDINGCLASS_CONSTABLE';
-
-INSERT INTO Helper
-	(YieldType)
-VALUES
-	('YIELD_SCIENCE'),
-	('YIELD_CULTURE');
-
-INSERT INTO Building_YieldFromSpyIdentify
-	(BuildingType, YieldType, Yield)
-SELECT
-	a.Type, b.YieldType, 25
-FROM Buildings a, Helper b
-WHERE a.BuildingClass = 'BUILDINGCLASS_CONSTABLE';
-
-DELETE FROM Helper;
 
 -- Police Station
 UPDATE Buildings
@@ -1214,27 +1184,12 @@ SET
 	PrereqTech = 'TECH_ELECTRONICS',
 	EspionageModifier = 0,
 	SpySecurityModifier = 10,
-	SpySecurityModifierPerPop = 1,
+	SpySecurityModifierPerXPop = 180, -- ESPIONAGE_SECURITY_PER_POPULATION_BUILDING_SCALER = 360, so 180/360 gives 1 per 2 population in city
 	DistressFlatReduction = 1,
 	PovertyFlatReduction = 1,
 	IlliteracyFlatReduction = 1,
 	BoredomFlatReduction = 1
 WHERE BuildingClass = 'BUILDINGCLASS_POLICE_STATION';
-
-INSERT INTO Helper
-	(YieldType)
-VALUES
-	('YIELD_SCIENCE'),
-	('YIELD_CULTURE');
-
-INSERT INTO Building_YieldFromSpyDefense
-	(BuildingType, YieldType, Yield)
-SELECT
-	a.Type, b.YieldType, 100
-FROM Buildings a, Helper b
-WHERE a.BuildingClass = 'BUILDINGCLASS_POLICE_STATION';
-
-DELETE FROM Helper;
 
 ----------------------------------------------------------------------------
 -- Tourism line
@@ -1698,7 +1653,7 @@ DELETE FROM Helper;
 UPDATE Buildings
 SET
 	PrereqTech = 'TECH_CHIVALRY',
-	CitySupplyModifier = 10
+	CitySupplyFlat = 1
 WHERE BuildingClass = 'BUILDINGCLASS_STABLE';
 
 INSERT INTO Building_YieldChanges
@@ -1804,18 +1759,18 @@ SELECT
 FROM Buildings
 WHERE BuildingClass = 'BUILDINGCLASS_BATH';
 
--- Train Station
+-- Coaling Station
 INSERT INTO Building_ResourceQuantityRequirements
 	(BuildingType, ResourceType, Cost)
 SELECT
 	Type, 'RESOURCE_COAL', 1
 FROM Buildings
-WHERE BuildingClass = 'BUILDINGCLASS_TRAINSTATION';
+WHERE BuildingClass = 'BUILDINGCLASS_COALING_STATION';
 
 INSERT INTO Helper
 	(YieldType, Yield)
 VALUES
-	('YIELD_PRODUCTION', 25),
+	('YIELD_PRODUCTION', 20),
 	('YIELD_GOLD', 10);
 
 INSERT INTO Building_YieldModifiers
@@ -1823,7 +1778,7 @@ INSERT INTO Building_YieldModifiers
 SELECT
 	a.Type, b.YieldType, b.Yield
 FROM Buildings a, Helper b
-WHERE a.BuildingClass = 'BUILDINGCLASS_TRAINSTATION';
+WHERE a.BuildingClass = 'BUILDINGCLASS_COALING_STATION';
 
 DELETE FROM Helper;
 
@@ -1895,9 +1850,9 @@ FROM Buildings
 WHERE BuildingClass = 'BUILDINGCLASS_NATIONAL_EPIC';
 
 INSERT INTO Building_YieldFromBirth
-	(BuildingType, YieldType, Yield)
+	(BuildingType, YieldType, Yield, IsEraScaling)
 SELECT
-	Type, 'YIELD_CULTURE', 15
+	Type, 'YIELD_CULTURE', 15, 1
 FROM Buildings
 WHERE BuildingClass = 'BUILDINGCLASS_NATIONAL_EPIC';
 
@@ -2288,7 +2243,7 @@ INSERT INTO Helper
 	(BuildingClassType, YieldType, Yield)
 VALUES
 	('BUILDINGCLASS_LIGHTHOUSE', 'YIELD_FOOD', 4),
-	('BUILDINGCLASS_TRAINSTATION', 'YIELD_FOOD', 6),
+	('BUILDINGCLASS_COALING_STATION', 'YIELD_FOOD', 6),
 	('BUILDINGCLASS_STABLE', 'YIELD_PRODUCTION', 2),
 	('BUILDINGCLASS_WORKSHOP', 'YIELD_PRODUCTION', 4);
 
@@ -2376,7 +2331,7 @@ CREATE TEMP TABLE BuildingsTemp (
 
 INSERT INTO BuildingsTemp
 VALUES
-	('BUILDINGCLASS_WALLS', 600, 125, 0),
+	('BUILDINGCLASS_WALLS', 600, 100, 0),
 	('BUILDINGCLASS_CASTLE', 800, 0, 2),
 	('BUILDINGCLASS_FORTRESS', 1000, 0, 2),
 	('BUILDINGCLASS_ARSENAL', 1200, 300, 0),

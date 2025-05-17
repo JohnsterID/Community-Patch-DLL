@@ -1,5 +1,5 @@
 /*	-------------------------------------------------------------------------------------------------------
-	© 1991-2012 Take-Two Interactive Software and its subsidiaries.  Developed by Firaxis Games.  
+	Â© 1991-2012 Take-Two Interactive Software and its subsidiaries.  Developed by Firaxis Games.  
 	Sid Meier's Civilization V, Civ, Civilization, 2K Games, Firaxis Games, Take-Two Interactive Software 
 	and their respective logos are all trademarks of Take-Two interactive Software, Inc.  
 	All other marks and trademarks are the property of their respective owners.  
@@ -352,7 +352,7 @@ int CvProcessProductionAI::CheckProcessBuildSanity(ProcessTypes eProcess, int iT
 				for (uint i = 0; i < veRewards.size(); i++)
 				{
 					CvLeagueProjectRewardEntry* pRewardInfo = GC.getLeagueProjectRewardInfo(veRewards[i]);
-					CvAssert(pRewardInfo);
+					ASSERT_DEBUG(pRewardInfo);
 					if (!pRewardInfo) continue;
 
 					// Free Building in Capital
@@ -446,17 +446,12 @@ int CvProcessProductionAI::CheckProcessBuildSanity(ProcessTypes eProcess, int iT
 						UnitTypes eUnit = kPlayer.GetSpecificUnitType(pRewardInfo->GetFreeUnitClass());
 						if (eUnit != NO_UNIT)
 						{
-							CvUnitEntry* pkUnitInfo = GC.getUnitInfo(eUnit);
-							if(pkUnitInfo)
-							{
-								int iValue = 1500;
-								if(kPlayer.getCapitalCity() != NULL)
-								{
-									iValue = kPlayer.getCapitalCity()->GetCityStrategyAI()->GetUnitProductionAI()->CheckUnitBuildSanity(eUnit, false, iValue);
-								}
-								if (iValue > 0)
-									iModifier += iValue;
-							}
+							int iValue = 1500;
+							if(kPlayer.getCapitalCity())
+								iValue = kPlayer.getCapitalCity()->GetCityStrategyAI()->GetUnitProductionAI()->CheckUnitBuildSanity(eUnit, false, iValue);
+
+							if (iValue > 0)
+								iModifier += iValue;
 						}
 					}
 					EconomicAIStrategyTypes eStrategyConquest = (EconomicAIStrategyTypes) GC.getInfoTypeForString("ECONOMICAISTRATEGY_GS_CONQUEST");
@@ -521,7 +516,7 @@ void CvProcessProductionAI::LogPossibleBuilds()
 		CvString strDesc;
 		CvString strLogName;
 
-		CvAssert(m_pCity);
+		ASSERT_DEBUG(m_pCity);
 		if(!m_pCity) return;
 
 		// Find the name of this civ and city
@@ -531,7 +526,7 @@ void CvProcessProductionAI::LogPossibleBuilds()
 		// Open the log file
 		FILogFile* pLog = NULL;
 		pLog = LOGFILEMGR.GetLog(m_pCity->GetCityStrategyAI()->GetLogFileName(playerName, cityName), FILogFile::kDontTimeStamp);
-		CvAssert(pLog);
+		ASSERT_DEBUG(pLog);
 		if(!pLog) return;
 
 		// Get the leading info for this line

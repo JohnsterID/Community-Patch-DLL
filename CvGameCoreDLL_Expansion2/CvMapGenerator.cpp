@@ -1,5 +1,5 @@
 /*	-------------------------------------------------------------------------------------------------------
-	© 1991-2012 Take-Two Interactive Software and its subsidiaries.  Developed by Firaxis Games.  
+	Â© 1991-2012 Take-Two Interactive Software and its subsidiaries.  Developed by Firaxis Games.  
 	Sid Meier's Civilization V, Civ, Civilization, 2K Games, Firaxis Games, Take-Two Interactive Software 
 	and their respective logos are all trademarks of Take-Two interactive Software, Inc.  
 	All other marks and trademarks are the property of their respective owners.  
@@ -36,7 +36,7 @@ CvMapGenerator::CvMapGenerator(const char* szMapScriptName)
 	m_pkLuaState = pkScriptSystem->CreateLuaThread("Map Script");
 	const bool bLoaded = pkScriptSystem->LoadFile(m_pkLuaState, szMapScriptName);
 	DEBUG_VARIABLE(bLoaded);
-	CvAssertMsg(bLoaded, "Cannot load mapscript.");
+	ASSERT_DEBUG(bLoaded, "Cannot load mapscript.");
 }
 //------------------------------------------------------------------------------
 CvMapGenerator::~CvMapGenerator()
@@ -61,7 +61,7 @@ bool CvMapGenerator::GetMapInitData(CvMapInitData& kData, WorldSizeTypes eWorldS
 	}
 	else
 	{
-		CvAssertMsg(false, "Could not find world size entry.")
+		ASSERT_DEBUG(false, "Could not find world size entry.")
 	}
 
 	ICvEngineScriptSystem1* pkScriptSystem = gDLL->GetScriptSystem();

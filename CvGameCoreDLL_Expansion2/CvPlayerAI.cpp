@@ -40,18 +40,14 @@
 // Include this after all other headers.
 #include "LintFree.h"
 
-#if defined(MOD_BALANCE_CORE_MILITARY)
-#include <queue>
-#endif
-
 // statics
 
 static CvEnumMap<PlayerTypes, CvPlayerAI> s_players;
 
-inline CvPlayerAI& CvPlayerAI::getPlayer(PlayerTypes ePlayer)
+CvPlayerAI& CvPlayerAI::getPlayer(PlayerTypes ePlayer)
 {
-	CvAssertMsg(ePlayer != NO_PLAYER, "Player is not assigned a valid value");
-	CvAssertMsg(ePlayer < MAX_PLAYERS, "Player is not assigned a valid value");
+	ASSERT_DEBUG(ePlayer != NO_PLAYER, "Player is not assigned a valid value");
+	ASSERT_DEBUG(ePlayer < MAX_PLAYERS, "Player is not assigned a valid value");
 
 	if (ePlayer <= NO_PLAYER || ePlayer >= MAX_PLAYERS)
 		ePlayer = BARBARIAN_PLAYER;
@@ -99,14 +95,15 @@ void CvPlayerAI::AI_uninit()
 
 void CvPlayerAI::AI_reset()
 {
+	m_iCurrentCitadelTargetsTurn = -1;
 	AI_uninit();
 }
 
 void CvPlayerAI::AI_doTurnPre()
 {
-	CvAssertMsg(getPersonalityType() != NO_LEADER, "getPersonalityType() is not expected to be equal with NO_LEADER");
-	CvAssertMsg(getLeaderType() != NO_LEADER, "getLeaderType() is not expected to be equal with NO_LEADER");
-	CvAssertMsg(getCivilizationType() != NO_CIVILIZATION, "getCivilizationType() is not expected to be equal with NO_CIVILIZATION");
+	ASSERT_DEBUG(getPersonalityType() != NO_LEADER, "getPersonalityType() is not expected to be equal with NO_LEADER");
+	ASSERT_DEBUG(getLeaderType() != NO_LEADER, "getLeaderType() is not expected to be equal with NO_LEADER");
+	ASSERT_DEBUG(getCivilizationType() != NO_CIVILIZATION, "getCivilizationType() is not expected to be equal with NO_CIVILIZATION");
 
 	if(isHuman())
 	{
@@ -179,12 +176,13 @@ void CvPlayerAI::AI_doTurnUnitsPre()
 	for (size_t i = 0; i < unitsToDelete.size(); i++)
 		unitsToDelete[i]->doDelayedDeath();
 
-#if defined(MOD_CORE_DELAYED_VISIBILITY)
-	//force explicit visibility update for killed units
-	if (!unitsToDelete.empty())
-		for (int iI = 0; iI < GC.getMap().numPlots(); iI++)
-			GC.getMap().plotByIndexUnchecked(iI)->flipVisibility(getTeam());
-#endif
+	if (MOD_CORE_DELAYED_VISIBILITY)
+	{
+		// Force explicit visibility update for killed units
+		if (!unitsToDelete.empty())
+			for (int iI = 0; iI < GC.getMap().numPlots(); iI++)
+				GC.getMap().plotByIndexUnchecked(iI)->flipVisibility(getTeam());
+	}
 
 	//army cleanup (two step approach because deleting a unit invalidates the iterator)
 	std::vector<int> itemsToDelete;
@@ -535,11 +533,7 @@ void CvPlayerAI::AI_chooseFreeGreatPerson()
 			CvCity* pCapital = getCapitalCity();
 			if(pCapital)
 			{
-#if defined(MOD_GLOBAL_TRULY_FREE_GP)
 				pCapital->GetCityCitizens()->DoSpawnGreatPerson(eDesiredGreatPerson, true, false, MOD_GLOBAL_TRULY_FREE_GP);
-#else
-				pCapital->GetCityCitizens()->DoSpawnGreatPerson(eDesiredGreatPerson, true, false);
-#endif
 			}
 			ChangeNumFreeGreatPeople(-1);
 		}
@@ -559,19 +553,18 @@ void CvPlayerAI::AI_chooseFreeTech()
 
 	clearResearchQueue();
 
-#if defined(MOD_EVENTS_AI_OVERRIDE_TECH)
-	if (MOD_EVENTS_AI_OVERRIDE_TECH && eBestTech == NO_TECH) {
+	if (MOD_EVENTS_AI_OVERRIDE_TECH && eBestTech == NO_TECH)
+	{
 		int iValue = 0;
-		if (GAMEEVENTINVOKE_VALUE(iValue, GAMEEVENT_AiOverrideChooseNextTech, GetID(), true) == GAMEEVENTRETURN_VALUE) {
+		if (GAMEEVENTINVOKE_VALUE(iValue, GAMEEVENT_AiOverrideChooseNextTech, GetID(), true) == GAMEEVENTRETURN_VALUE)
+		{
 			// Defend against modder stupidity!
-			if (iValue >= 0 && iValue < GC.getNumTechInfos() && !GET_TEAM(getTeam()).GetTeamTechs()->HasTech((TechTypes) iValue)) {
+			if (iValue >= 0 && iValue < GC.getNumTechInfos() && !GET_TEAM(getTeam()).GetTeamTechs()->HasTech((TechTypes) iValue))
+			{
 				eBestTech = (TechTypes)iValue;
 			}
 		}
 	}
-#else
-	// TODO: script override
-#endif
 
 	if(eBestTech == NO_TECH)
 	{
@@ -616,7 +609,6 @@ void CvPlayerAI::AI_chooseResearch()
 
 	if(GetPlayerTechs()->GetCurrentResearch() == NO_TECH)
 	{
-#if defined(MOD_EVENTS_AI_OVERRIDE_TECH)
 		if (MOD_EVENTS_AI_OVERRIDE_TECH && eBestTech == NO_TECH) 
 		{
 			int iValue = 0;
@@ -629,9 +621,6 @@ void CvPlayerAI::AI_chooseResearch()
 				}
 			}
 		}
-#else
-		//todo: script override
-#endif
 
 		if(eBestTech == NO_TECH)
 		{
@@ -1208,7 +1197,7 @@ void CvPlayerAI::AI_DoEventChoice(EventTypes eChosenEvent)
 
 void CvPlayerAI::AI_doResearch()
 {
-	CvAssertMsg(!isHuman(), "isHuman did not return false as expected");
+	ASSERT_DEBUG(!isHuman(), "isHuman did not return false as expected");
 
 	if(GetPlayerTechs()->GetCurrentResearch() == NO_TECH)
 	{
@@ -1277,10 +1266,10 @@ OperationSlot CvPlayerAI::PeekAtNextUnitToBuildForOperationSlot(CvCity* pCity, b
 			if (!pMusterPlot)
 				continue;
 
-			if (pCity == pMusterPlot->getOwningCity() && pCity->HasAccessToLandmass(pMusterPlot->getLandmass()))
+			if (pCity == pMusterPlot->getOwningCity() && pCity->HasAccessToLandmassOrOcean(pMusterPlot->getLandmass()))
 				bCitySameAsMuster = true;
 
-			if (pThisOperation->IsNavalOperation() && !pCity->HasAccessToLandmass(pMusterPlot->getLandmass()))
+			if (pThisOperation->IsNavalOperation() && !pCity->HasAccessToLandmassOrOcean(pMusterPlot->getLandmass()))
 				continue;
 
 			OperationSlot thisSlot = pThisOperation->PeekAtNextUnitToBuild();
@@ -1350,7 +1339,7 @@ void CvPlayerAI::ProcessGreatPeople(void)
 {
 	SpecialUnitTypes eSpecialUnitGreatPerson = (SpecialUnitTypes) GC.getInfoTypeForString("SPECIALUNIT_PEOPLE");
 
-	CvAssert(isAlive());
+	ASSERT_DEBUG(isAlive());
 
 	if(!isAlive())
 		return;
@@ -1425,13 +1414,13 @@ void CvPlayerAI::ProcessGreatPeople(void)
 
 bool PreparingForWar(CvPlayerAI* pPlayer)
 {
-	CvAssertMsg(pPlayer, "Need a player");
+	ASSERT_DEBUG(pPlayer, "Need a player");
 	if(!pPlayer)
 	{
 		return false;
 	}
 	CvMilitaryAI* pMilitaryAI = pPlayer->GetMilitaryAI();
-	CvAssertMsg(pMilitaryAI, "No military AI");
+	ASSERT_DEBUG(pMilitaryAI, "No military AI");
 	if(!pMilitaryAI)
 	{
 		return false;
@@ -1610,7 +1599,6 @@ GreatPeopleDirectiveTypes CvPlayerAI::GetDirectiveEngineer(CvUnit* pGreatEnginee
 	if (eDirective == NO_GREAT_PEOPLE_DIRECTIVE_TYPE && (GC.getGame().getGameTurn() - pGreatEngineer->getGameTurnCreated()) < /*5*/ GD_INT_GET(AI_HOMELAND_GREAT_PERSON_TURNS_TO_WAIT))
 		return eDirective;
 
-#if defined(MOD_BALANCE_CORE)
 	ImprovementTypes eManufactory = (ImprovementTypes)GC.getInfoTypeForString("IMPROVEMENT_MANUFACTORY");
 	int iFlavor =  GetFlavorManager()->GetPersonalityIndividualFlavor((FlavorTypes)GC.getInfoTypeForString("FLAVOR_PRODUCTION"));
 	iFlavor += GetFlavorManager()->GetPersonalityIndividualFlavor((FlavorTypes)GC.getInfoTypeForString("FLAVOR_GROWTH"));
@@ -1623,8 +1611,9 @@ GreatPeopleDirectiveTypes CvPlayerAI::GetDirectiveEngineer(CvUnit* pGreatEnginee
 		iFlavor += GetPlayerTraits()->GetYieldChangePerImprovementBuilt(eManufactory, eYield);
 	}
 	iFlavor -= (GetCurrentEra() + GetCurrentEra() + getGreatEngineersCreated(true));
+
 	// Build manufactories up to your flavor.
-	if(eDirective == NO_GREAT_PEOPLE_DIRECTIVE_TYPE)
+	if (eDirective == NO_GREAT_PEOPLE_DIRECTIVE_TYPE)
 	{
 		int iNumImprovement = getImprovementCount(eManufactory);
 		if(iNumImprovement <= iFlavor)
@@ -1632,17 +1621,8 @@ GreatPeopleDirectiveTypes CvPlayerAI::GetDirectiveEngineer(CvUnit* pGreatEnginee
 			eDirective = GREAT_PEOPLE_DIRECTIVE_CONSTRUCT_IMPROVEMENT;
 		}
 	}
-	if(eDirective == NO_GREAT_PEOPLE_DIRECTIVE_TYPE && (GC.getGame().getGameTurn() - pGreatEngineer->getGameTurnCreated()) >= (/*5*/ GD_INT_GET(AI_HOMELAND_GREAT_PERSON_TURNS_TO_WAIT) - GetCurrentEra()))
-#else
-	if (eDirective == NO_GREAT_PEOPLE_DIRECTIVE_TYPE && GC.getGame().getGameTurn() <= ((GC.getGame().getEstimateEndTurn() * 3) / 4))
-	{
-		if (GetDiplomacyAI()->IsGoingForWorldConquest())
-		{
-			eDirective = GREAT_PEOPLE_DIRECTIVE_CONSTRUCT_IMPROVEMENT;
-		}
-	}
-	if(eDirective == NO_GREAT_PEOPLE_DIRECTIVE_TYPE && (GC.getGame().getGameTurn() - pGreatEngineer->getGameTurnCreated()) >= /*5*/ GD_INT_GET(AI_HOMELAND_GREAT_PERSON_TURNS_TO_WAIT))
-#endif
+
+	if (eDirective == NO_GREAT_PEOPLE_DIRECTIVE_TYPE && (GC.getGame().getGameTurn() - pGreatEngineer->getGameTurnCreated()) >= (/*5*/ GD_INT_GET(AI_HOMELAND_GREAT_PERSON_TURNS_TO_WAIT) - GetCurrentEra()))
 	{
 		eDirective = GREAT_PEOPLE_DIRECTIVE_CONSTRUCT_IMPROVEMENT;
 	}
@@ -1737,14 +1717,22 @@ GreatPeopleDirectiveTypes CvPlayerAI::GetDirectiveScientist(CvUnit* /*pGreatScie
 
 GreatPeopleDirectiveTypes CvPlayerAI::GetDirectiveGeneral(CvUnit* pGreatGeneral)
 {
+	bool bHasGeneralNegation = false;
 	if (MOD_ERA_RESTRICTED_GENERALS)
 	{
-		bool bHasGeneralNegation = false;
-		std::string GGNegationPromotions[4] = { "PROMOTION_NEGATE_GENERAL", "PROMOTION_NEGATE_GENERAL_S", "PROMOTION_NEGATE_GENERAL_P", "PROMOTION_NEGATE_GENERAL_SP" };
+		string GGNegationPromotions[4] = {
+			"PROMOTION_NEGATE_GENERAL",
+			"PROMOTION_NEGATE_GENERAL_S",
+			"PROMOTION_NEGATE_GENERAL_P",
+			"PROMOTION_NEGATE_GENERAL_SP",
+		};
 
 		for (int i = 0; i < 4; i++)
-			if (pGreatGeneral->isHasPromotion((PromotionTypes)GC.getInfoTypeForString(GGNegationPromotions[i].c_str(), true)))
+		{
+			PromotionTypes eNegationPromotion = static_cast<PromotionTypes>(GC.getInfoTypeForString(GGNegationPromotions[i].c_str(), true));
+			if (pGreatGeneral->isHasPromotion(eNegationPromotion))
 				bHasGeneralNegation = true;
+		}
 
 		if (bHasGeneralNegation)
 		{
@@ -1754,19 +1742,18 @@ GreatPeopleDirectiveTypes CvPlayerAI::GetDirectiveGeneral(CvUnit* pGreatGeneral)
 				strLogString.Format("%s is obsolete", pGreatGeneral->getName().GetCString());
 				GetHomelandAI()->LogHomelandMessage(strLogString);
 			}
-			return GREAT_PEOPLE_DIRECTIVE_USE_POWER;
 		}
 	}
 
-	//units in armies are always field commanders
-	if (pGreatGeneral->getArmyID() != -1)
+	// Units in armies are always field commanders
+	if (!bHasGeneralNegation && pGreatGeneral->getArmyID() != -1)
 		return GREAT_PEOPLE_DIRECTIVE_FIELD_COMMAND;
 
-	//this one is sticky
+	// Always stick to culture bomb if it has already decided to do so (it can be reset in CvHomelandAI)
 	if (pGreatGeneral->GetGreatPeopleDirective() == GREAT_PEOPLE_DIRECTIVE_USE_POWER)
 		return GREAT_PEOPLE_DIRECTIVE_USE_POWER;
 
-	//we might have multiple generals ... first get an overview
+	// We might have multiple generals... First get an overview
 	int iCommanders = 0;
 	int iCitadels = 0;
 	int iLoop = 0;
@@ -1777,6 +1764,7 @@ GreatPeopleDirectiveTypes CvPlayerAI::GetDirectiveGeneral(CvUnit* pGreatGeneral)
 			switch (pLoopUnit->GetGreatPeopleDirective())
 			{
 			case NO_GREAT_PEOPLE_DIRECTIVE_TYPE:
+			case GREAT_PEOPLE_DIRECTIVE_CONSTRUCT_IMPROVEMENT:
 				break;
 			case GREAT_PEOPLE_DIRECTIVE_USE_POWER:
 				iCitadels++;
@@ -1790,27 +1778,34 @@ GreatPeopleDirectiveTypes CvPlayerAI::GetDirectiveGeneral(CvUnit* pGreatGeneral)
 		}
 	}
 
-	//during war we want field commanders
-	int iWars = (int)GetPlayersAtWarWith().size();
-	//just a rough estimation
-	int iPotentialArmies = max(1,GetMilitaryAI()->GetNumLandUnits()-getNumCities()*3) / 13;
-
-	int iDesiredNumCommanders = max(1, (iWars+iPotentialArmies)/2);
-	if (iCommanders <= iDesiredNumCommanders || pGreatGeneral->getArmyID() != -1 || pGreatGeneral->IsRecentlyDeployedFromOperation())
-		return GREAT_PEOPLE_DIRECTIVE_FIELD_COMMAND;
-
-	//build one citadel at a time
-	std::vector<CvPlot*> vDummy;
-	BuildTypes eCitadel = (BuildTypes)GC.getInfoTypeForString("BUILD_CITADEL");
-	if(iCitadels==0)
+	if (!bHasGeneralNegation)
 	{
-		CvPlot* pTargetPlot = FindBestCultureBombPlot(pGreatGeneral, eCitadel, vDummy, false);
-		if (pTargetPlot)
-		return GREAT_PEOPLE_DIRECTIVE_USE_POWER;
+		// During war we want field commanders
+		int iWars = static_cast<int>(GetPlayersAtWarWith().size() + GetPlayersAtWarWithInFuture().size() / 2);
+		// Just a rough estimation
+		int iNumPotentialUnits = GetMilitaryAI()->GetNumLandUnits() - getNumCities();
+		int iPotentialArmies = min(3, max(1, iNumPotentialUnits / 12));
+
+		int iDesiredNumCommanders = iWars > 0 ? iPotentialArmies : 0;
+		if (iCommanders < iDesiredNumCommanders || pGreatGeneral->getArmyID() != -1 || pGreatGeneral->IsRecentlyDeployedFromOperation())
+			return GREAT_PEOPLE_DIRECTIVE_FIELD_COMMAND;
 	}
+
+	// Build improvement (citadel or otherwise)
+	for (int iI = 0; iI < GC.getNumBuildInfos(); iI++)
+	{
+		BuildTypes eBuild = static_cast<BuildTypes>(iI);
+
+		if (!canBuild(NULL, eBuild, true))
+			continue;
+
+		if (pGreatGeneral->canBuild(NULL, eBuild))
+			return GREAT_PEOPLE_DIRECTIVE_CONSTRUCT_IMPROVEMENT;
+	}
+
+	// Default
+	return bHasGeneralNegation ? NO_GREAT_PEOPLE_DIRECTIVE_TYPE : GREAT_PEOPLE_DIRECTIVE_FIELD_COMMAND;
 	
-	// default
-	return GREAT_PEOPLE_DIRECTIVE_FIELD_COMMAND;
 }
 
 GreatPeopleDirectiveTypes CvPlayerAI::GetDirectiveProphet(CvUnit* pUnit)
@@ -1874,14 +1869,22 @@ GreatPeopleDirectiveTypes CvPlayerAI::GetDirectiveProphet(CvUnit* pUnit)
 
 GreatPeopleDirectiveTypes CvPlayerAI::GetDirectiveAdmiral(CvUnit* pGreatAdmiral)
 {
+	bool bHasAdmiralNegation = false;
 	if (MOD_ERA_RESTRICTED_GENERALS)
 	{
-		bool bHasAdmiralNegation = false;
-		std::string GANegationPromotions[4] = {"PROMOTION_NEGATE_ADMIRAL", "PROMOTION_NEGATE_ADMIRAL_S", "PROMOTION_NEGATE_ADMIRAL_P", "PROMOTION_NEGATE_ADMIRAL_SP"};
+		string GANegationPromotions[4] = {
+			"PROMOTION_NEGATE_ADMIRAL",
+			"PROMOTION_NEGATE_ADMIRAL_S",
+			"PROMOTION_NEGATE_ADMIRAL_P",
+			"PROMOTION_NEGATE_ADMIRAL_SP",
+		};
 
 		for (int i = 0; i < 4; i++)
-			if (pGreatAdmiral->isHasPromotion((PromotionTypes)GC.getInfoTypeForString(GANegationPromotions[i].c_str(), true)))
+		{
+			PromotionTypes eNegationPromotion = static_cast<PromotionTypes>(GC.getInfoTypeForString(GANegationPromotions[i].c_str(), true));
+			if (pGreatAdmiral->isHasPromotion(eNegationPromotion))
 				bHasAdmiralNegation = true;
+		}
 
 		if (bHasAdmiralNegation)
 		{
@@ -1891,30 +1894,76 @@ GreatPeopleDirectiveTypes CvPlayerAI::GetDirectiveAdmiral(CvUnit* pGreatAdmiral)
 				strLogString.Format("%s is obsolete", pGreatAdmiral->getName().GetCString());
 				GetHomelandAI()->LogHomelandMessage(strLogString);
 			}
-			return GREAT_PEOPLE_DIRECTIVE_USE_POWER;
 		}
 	}
 
-	if (IsAtWar() || pGreatAdmiral->getArmyID() != -1 || pGreatAdmiral->IsRecentlyDeployedFromOperation())
+	// Units in armies are always field commanders
+	if (!bHasAdmiralNegation && pGreatAdmiral->getArmyID() != -1)
 		return GREAT_PEOPLE_DIRECTIVE_FIELD_COMMAND;
 
-	int iGreatAdmiralCount = 0;
+	int iCommanders = 0;
 	int iLoop = 0;
 	for (CvUnit* pLoopUnit = firstUnit(&iLoop); pLoopUnit; pLoopUnit = nextUnit(&iLoop))
 	{
-		if (pLoopUnit->IsGreatAdmiral() && pLoopUnit->GetGreatPeopleDirective() != GREAT_PEOPLE_DIRECTIVE_USE_POWER) // should not count the admirals set for use_power as it expends all at the same turn
+		if (pLoopUnit != pGreatAdmiral && pLoopUnit->IsGreatAdmiral())
 		{
-			iGreatAdmiralCount++;
+			switch (pLoopUnit->GetGreatPeopleDirective())
+			{
+			case NO_GREAT_PEOPLE_DIRECTIVE_TYPE:
+			case GREAT_PEOPLE_DIRECTIVE_CONSTRUCT_IMPROVEMENT:
+			case GREAT_PEOPLE_DIRECTIVE_USE_POWER:
+				break;
+			case GREAT_PEOPLE_DIRECTIVE_FIELD_COMMAND:
+				iCommanders++;
+				break;
+			default:
+				UNREACHABLE(); // Great admirals shouldn't have directives other than these.
+			}
 		}
 	}
 
-	int iThreshold = IsEmpireUnhappy() ? 0 : ((GetNumEffectiveCoastalCities() / 2) + 1); // open to tweaks, but a human player would rarely expend if happy, so should AI
-	if (iGreatAdmiralCount > iThreshold && pGreatAdmiral->canGetFreeLuxury())
+	if (!bHasAdmiralNegation)
 	{
-		return GREAT_PEOPLE_DIRECTIVE_USE_POWER;
+		// During war we want field commanders
+		int iWars = static_cast<int>(GetPlayersAtWarWith().size() + GetPlayersAtWarWithInFuture().size() / 2);
+		// Just a rough estimation
+		int iNumPotentialUnits = GetMilitaryAI()->GetNumNavalUnits() - getNumCities();
+		int iPotentialArmies = min(2, max(1, iNumPotentialUnits / 12));
+
+		int iDesiredNumCommanders = iWars > 0 ? iPotentialArmies : 0;
+		if (iCommanders < iDesiredNumCommanders || pGreatAdmiral->getArmyID() != -1 || pGreatAdmiral->IsRecentlyDeployedFromOperation())
+			return GREAT_PEOPLE_DIRECTIVE_FIELD_COMMAND;
 	}
 
-	return NO_GREAT_PEOPLE_DIRECTIVE_TYPE;
+	// Can this admiral build improvements?
+	for (int iI = 0; iI < GC.getNumBuildInfos(); iI++)
+	{
+		BuildTypes eBuild = static_cast<BuildTypes>(iI);
+
+		CvBuildInfo* pkBuildInfo = GC.getBuildInfo(eBuild);
+		if (!pkBuildInfo)
+			continue;
+
+		ImprovementTypes eImprovement = (ImprovementTypes)pkBuildInfo->getImprovement();
+		if (eImprovement == NO_IMPROVEMENT)
+			continue;
+
+		if (!canBuild(NULL, eBuild, true))
+			continue;
+
+		if (pGreatAdmiral->canBuild(NULL, eBuild))
+			return GREAT_PEOPLE_DIRECTIVE_CONSTRUCT_IMPROVEMENT;
+	}
+
+	// We're unhappy or have too many admirals; expend some!
+	if (pGreatAdmiral->canGetFreeLuxury())
+	{
+		int iThreshold = IsEmpireUnhappy() ? 0 : GetNumEffectiveCoastalCities() / 2 + 1;
+		if (iCommanders > iThreshold)
+			return GREAT_PEOPLE_DIRECTIVE_USE_POWER;
+	}
+
+	return bHasAdmiralNegation ? NO_GREAT_PEOPLE_DIRECTIVE_TYPE : GREAT_PEOPLE_DIRECTIVE_FIELD_COMMAND;
 }
 
 GreatPeopleDirectiveTypes CvPlayerAI::GetDirectiveDiplomat(CvUnit* pGreatDiplomat)
@@ -2051,25 +2100,19 @@ CvPlot* CvPlayerAI::FindBestMerchantTargetPlotForCash(CvUnit* pMerchant)
 
 //	--------------------------------------------------------------------------------
 /// planner for AI spaceship production: returns the cities in which the currently available spaceship parts should be built in order to achieve SV as early as possible
-vector<CvCity*> CvPlayerAI::GetBestCitiesForSpaceshipParts()
+const vector<CvCity*> CvPlayerAI::GetBestCitiesForSpaceshipParts()
 {
-	if (GC.getGame().getGameTurn() == m_iCitiesForSpaceshipPartsUpdateTurn)
-	{
-		return m_vCitiesForSpaceshipParts;
-	}
-
-	m_iCitiesForSpaceshipPartsUpdateTurn = GC.getGame().getGameTurn();
-	m_vCitiesForSpaceshipParts.clear();
+	const vector<CvCity*> vpEmpty;
 
 	CvCity* pCapital = getCapitalCity();
 	if (!pCapital)
-		return m_vCitiesForSpaceshipParts;
+		return vpEmpty;
 
 	int iNumSpaceshipPartsStillNeeded = 6 - GET_TEAM(getTeam()).GetSSProjectCount(/*bIncludeApollo*/ false);
 	int iNumSpaceshipPartsBuildableNow = GetNumSpaceshipPartsBuildableNow(/*bIncludeCurrentlyInProduction*/ true);
 
 	if (iNumSpaceshipPartsStillNeeded == 0 || iNumSpaceshipPartsBuildableNow == 0)
-		return m_vCitiesForSpaceshipParts;
+		return vpEmpty;
 
 	// get unit type for one of the spaceship parts
 	UnitTypes eSpaceshipUnit = NO_UNIT;
@@ -2119,7 +2162,7 @@ vector<CvCity*> CvPlayerAI::GetBestCitiesForSpaceshipParts()
 
 	int iNumCitiesToConsider = vCitiesToConsider.size();
 	if (iNumCitiesToConsider == 0)
-		return m_vCitiesForSpaceshipParts;
+		return vpEmpty;
 
 	// we want to assign spaceship part to cities in such a way that the total number of turns to bring all spaceship parts to the capital is minimized
 	// to do this, we loop through the spaceship parts we still need and assign each of it to the best city. one city can be considered for multiple parts.
@@ -2148,7 +2191,7 @@ vector<CvCity*> CvPlayerAI::GetBestCitiesForSpaceshipParts()
 		{
 			// rough approximation
 			iTransportTurns = plotDistance(pLoopCity->getX(), pLoopCity->getY(), pCapital->getX(), pCapital->getY()) / 15;
-			if (!pLoopCity->HasAccessToLandmass(pCapital->plot()->getLandmass()))
+			if (!pLoopCity->HasAccessToLandmassOrOcean(pCapital->plot()->getLandmass()))
 			{
 				iTransportTurns += 2;
 			}
@@ -2246,9 +2289,11 @@ vector<CvCity*> CvPlayerAI::GetBestCitiesForSpaceshipParts()
 	vCitiesSortedByTurns.StableSortItems();
 
 	// for the parts we can produce right now, choose the worst cities.
-	for (int k = 0; k < min(vCitiesSortedByTurns.size(), iNumSpaceshipPartsBuildableNow); k++)
+	int iNumCitiesForSpaceship = min(vCitiesSortedByTurns.size(), iNumSpaceshipPartsBuildableNow);
+	vector<CvCity*> vpCitiesForSpaceshipParts(iNumCitiesForSpaceship);
+	for (int i = 0; i < iNumCitiesForSpaceship; i++)
 	{
-		m_vCitiesForSpaceshipParts.push_back(vCitiesSortedByTurns.GetElement(k));
+		vpCitiesForSpaceshipParts[i] = vCitiesSortedByTurns.GetElement(i);
 	}
 
 	if (GC.getLogging())
@@ -2269,7 +2314,7 @@ vector<CvCity*> CvPlayerAI::GetBestCitiesForSpaceshipParts()
 		}
 	}
 
-	return m_vCitiesForSpaceshipParts;
+	return vpCitiesForSpaceshipParts;
 }
 
 //	--------------------------------------------------------------------------------
@@ -2282,9 +2327,8 @@ void CvPlayerAI::AI_doSpaceshipProduction()
 	if (GetNumSpaceshipPartsBuildableNow(true) == 0)
 		return;
 
-
 	// calculate cities to build spaceship parts in
-	vector<CvCity*> vBestCitiesForSpaceshipParts = GetBestCitiesForSpaceshipParts();
+	const vector<CvCity*> vBestCitiesForSpaceshipParts = GetBestCitiesForSpaceshipParts();
 
 	// cancel spaceship part production in cities that are not considered the best cities (have to do this first to make the parts available)
 	CvString strOutBuf;
@@ -2413,20 +2457,21 @@ CvPlot* CvPlayerAI::FindBestDiplomatTargetPlot(CvUnit* pUnit)
 	{
 		//don't check for cities directly because we cannot enter them ...
 		CvPlot* pPlot = GC.getMap().plotByIndexUnchecked(it->iPlotIndex);
-		if (GET_PLAYER(pPlot->getOwner()).isMinorCiv())
+		PlayerTypes ePlotOwner = pPlot->getOwner();
+		if (ePlotOwner != NO_PLAYER && GET_PLAYER(ePlotOwner).isMinorCiv())
 		{
 			//small performance optimization
-			if (badTargets.find(pPlot->getOwner()) != badTargets.end())
+			if (badTargets.find(ePlotOwner) != badTargets.end())
 				continue;
 
 			//we iterate by distance, so take the first one we find
-			CvCity* pCity = GET_PLAYER(pPlot->getOwner()).getCapitalCity();
+			CvCity* pCity = GET_PLAYER(ePlotOwner).getCapitalCity();
 
 			CvPlot* pBuildPlot = HomelandAIHelpers::GetPlotForEmbassy(pUnit, pCity);
 			if (pBuildPlot)
 				return pBuildPlot;
 			else
-				badTargets.insert(pPlot->getOwner());
+				badTargets.insert(ePlotOwner);
 		}
 	}
 
@@ -2525,13 +2570,31 @@ int CvPlayerAI::ScoreCityForMessenger(CvCity* pCity, CvUnit* pUnit)
 	if (pMinorCivAI->IsQuestInfluenceDisabled(GetID()))
 		return 0;
 
+	// Don't compete with our teammates for Influence.
+	PlayerTypes eAlliedPlayer = pMinorCivAI->GetAlly();
+	if (eAlliedPlayer != NO_PLAYER && eAlliedPlayer != GetID() && GET_PLAYER(eAlliedPlayer).getTeam() == getTeam() && GET_PLAYER(eAlliedPlayer).getNumCities() > 0)
+		return 0;
+
 	// They captured one of our cities? Do not raise influence; we want to recapture.
 	if (GetNumOurCitiesOwnedBy(kMinor.GetID()) > 0)
 		return 0;
 
 	//Return if we can't embark and they aren't on our landmass.
-	if (!pCity->HasAccessToLandmass(pUnit->plot()->getLandmass()) && !CanEmbark())
+	if (!pCity->HasAccessToLandmassOrOcean(pUnit->plot()->getLandmass()) && !CanEmbark())
 		return 0;
+
+	//Is there a proposal (not resolution) involving a Sphere of Influence or Open Door?
+	CvLeague* pLeague = GC.getGame().GetGameLeagues()->GetActiveLeague();
+	if (pLeague != NULL) 
+	{
+		for (EnactProposalList::iterator it = pLeague->m_vEnactProposals.begin(); it != pLeague->m_vEnactProposals.end(); ++it)
+		{
+			if ((it->GetEffects()->bSphereOfInfluence || it->GetEffects()->bOpenDoor) && it->GetProposerDecision()->GetDecision() == pCity->getOwner())
+			{
+				return 0;
+			}
+		}
+	}
 
 	//are we at war with a player close to this CS? Don't go near here!
 	vector<PlayerTypes> currentWars = GetPlayersAtWarWith();
@@ -2742,7 +2805,6 @@ int CvPlayerAI::ScoreCityForMessenger(CvCity* pCity, CvUnit* pUnit)
 	// **************************
 
 	int iFriendshipWithMinor = pMinorCivAI->GetBaseFriendshipWithMajor(GetID());
-	PlayerTypes eAlliedPlayer = pMinorCivAI->GetAlly();
 
 	int iHighestInfluence = 0;
 	// Loop through other players to see if we can pass them in influence
@@ -2865,7 +2927,7 @@ int CvPlayerAI::ScoreCityForMessenger(CvCity* pCity, CvUnit* pUnit)
 		iDistance *= 3;
 
 	//Let's downplay far/distant minors without full embarkation.
-	if(!pCity->HasAccessToLandmass(pUnit->plot()->getLandmass()) && !GET_PLAYER(GetID()).CanCrossOcean())
+	if(!pCity->HasAccessToLandmassOrOcean(pUnit->plot()->getLandmass()) && !GET_PLAYER(GetID()).CanCrossOcean())
 		iDistance *= 3;
 
 	//If this is way too far away, let's not penalize it too much.
@@ -2916,268 +2978,294 @@ CvPlot* CvPlayerAI::FindBestMusicianTargetPlot(CvUnit* pMusician)
 	return NULL;
 }
 
-CvPlot* CvPlayerAI::FindBestCultureBombPlot(CvUnit* pUnit, BuildTypes eBuild, const std::vector<CvPlot*>& vPlotsToAvoid, bool bMustBeWorkable)
+priority_queue<SPlotWithScore> CvPlayerAI::GetBestCultureBombPlots(const UnitTypes eUnit, const vector<CvPlot*>& vPlotsToAvoid, bool bCheckDanger)
+{
+	priority_queue<SPlotWithScore> goodPlots;
+	if (eUnit == NO_UNIT)
+		return goodPlots;
+
+	CvUnitEntry* pkUnitInfo = GC.getUnitInfo(eUnit);
+
+	// Find the improvement (we assume there's only one) that can culture bomb
+	for (int iI = 0; iI < GC.getNumBuildInfos(); iI++)
+	{
+		if (!pkUnitInfo->GetBuilds(iI))
+			continue;
+
+		BuildTypes eBuild = static_cast<BuildTypes>(iI);
+		CvBuildInfo* pkBuildInfo = GC.getBuildInfo(eBuild);
+		if (!pkBuildInfo)
+			continue;
+
+		ImprovementTypes eImprovement = static_cast<ImprovementTypes>(pkBuildInfo->getImprovement());
+		CvImprovementEntry* pkImprovementInfo = GC.getImprovementInfo(eImprovement);
+		if (!pkImprovementInfo)
+			continue;
+
+		if (pkImprovementInfo->GetCultureBombRadius() <= 0)
+			continue;
+
+		int iRange = range(pkImprovementInfo->GetCultureBombRadius() + GetCultureBombBoost(), 1, 5);
+
+		// Build a list of valid candidate plots, and score them
+		for (int iJ = 0; iJ < GC.getMap().numPlots(); iJ++)
+		{
+			CvPlot* pPlot = GC.getMap().plotByIndexUnchecked(iJ);
+			if (!pPlot)
+				continue;
+
+			// Don't consider plots we already targeted
+			bool bTooClose = false;
+			for (vector<CvPlot*>::const_iterator it = vPlotsToAvoid.begin(); it != vPlotsToAvoid.end(); ++it)
+			{
+				if (plotDistance(**it, *pPlot) < iRange)
+					bTooClose = true;
+			}
+			if (bTooClose)
+				continue;
+
+			// Don't replace other Great Person improvements
+			ImprovementTypes eExistingImprovement = pPlot->getImprovementType();
+			if (eExistingImprovement != NO_IMPROVEMENT)
+			{
+				CvImprovementEntry* pkImprovementInfo2 = GC.getImprovementInfo(eExistingImprovement);
+				if (pkImprovementInfo2->IsCreatedByGreatPerson())
+					continue;
+			}
+
+			// Can we build it at all?
+			if (!pPlot->canBuild(eBuild, GetID()))
+				continue;
+
+			// Not if we're about to give up the city
+			CvCity* pCity = pPlot->getOwningCity();
+			if (pCity && pCity->IsRazing())
+				continue;
+
+			// This plot should be more defensive with the improvement
+			// The function returns a value in the thousands; we only want a tenth of it
+			int iPlotScore = pPlot->GetDefenseBuildValue(GetID(), eBuild, eImprovement) / 10;
+			if (iPlotScore <= 0)
+				continue;
+
+			// Can the plot be worked?
+			CvCity* pClosestCity = GetClosestCityByPlots(pPlot);
+			if (pClosestCity && pClosestCity->getWorkPlotDistance() >= GetCityDistanceInPlots(pPlot))
+				iPlotScore += 100;
+
+			int iStealScore = 0;
+			bool bIncludeEnemyPlot = false;
+			for (int iK = 0; iK < RING_PLOTS[iRange]; iK++)
+			{
+				CvPlot* pAdjacentPlot = iterateRingPlots(pPlot, iK);
+				if (!pAdjacentPlot)
+					continue;
+
+				// We can't steal city plots
+				if (pAdjacentPlot->isCity())
+					continue;
+
+				PlayerTypes eOwner = pAdjacentPlot->getOwner();
+
+				// We already own this plot
+				if (eOwner == GetID())
+					continue;
+
+				if (pAdjacentPlot->IsStealBlockedByImprovement())
+					continue;
+
+				if (eOwner != NO_PLAYER)
+				{
+					// We shouldn't steal from them
+					if (isMajorCiv() && GetDiplomacyAI()->IsBadTheftTarget(eOwner, THEFT_TYPE_CULTURE_BOMB))
+					{
+						iStealScore = 0;
+						break;
+					}
+					else if (isMinorCiv())
+					{
+						if (GetMinorCivAI()->IsFriends(eOwner) || GetMinorCivAI()->IsProtectedByMajor(eOwner))
+						{
+							iStealScore = 0;
+							break;
+						}
+						PlayerTypes eAlly = GetMinorCivAI()->GetAlly();
+						if (eAlly != NO_PLAYER && GET_PLAYER(eAlly).getTeam() == GET_PLAYER(eOwner).getTeam())
+						{
+							iStealScore = 0;
+							break;
+						}
+					}
+				}
+
+				// It's dangerous to go there - only check radius 1
+				if (bCheckDanger && iK < RING1_PLOTS && GetPossibleAttackers(*pAdjacentPlot, getTeam()).size() > 0)
+				{
+					iStealScore = 0;
+					break;
+				}
+
+				int iMultiplier = 1;
+				int iTempScore = 10;
+
+				// We're stealing a choke point - more score if it's from our enemy!
+				if (pAdjacentPlot->IsChokePoint())
+				{
+					iTempScore += 50;
+					if (eOwner != NO_PLAYER)
+						iTempScore += 50;
+				}
+
+				// There's a resource on the plot
+				ResourceTypes eResource = pAdjacentPlot->getResourceType(getTeam());
+				if (eResource != NO_RESOURCE)
+				{
+					CvResourceInfo* pkResourceInfo = GC.getResourceInfo(eResource);
+					ResourceUsageTypes eUsage = pkResourceInfo->getResourceUsage();
+					if (eUsage == RESOURCEUSAGE_STRATEGIC || eUsage == RESOURCEUSAGE_LUXURY)
+					{
+						iTempScore += 50;
+						if (eOwner != NO_PLAYER)
+							iTempScore += 50;
+					}
+				}
+
+				// These only apply when we're stealing from other players
+				if (eOwner != NO_PLAYER)
+				{
+					bIncludeEnemyPlot = true;
+					if (GET_PLAYER(eOwner).isMinorCiv())
+					{
+						iMultiplier = 3;
+
+						// We're stealing someone else's embassy
+						if (pAdjacentPlot->IsImprovementEmbassy())
+						{
+							// Not our own!
+							if (GET_PLAYER(pAdjacentPlot->GetPlayerThatBuiltImprovement()).getTeam() == getTeam())
+							{
+								iStealScore = 0;
+								break;
+							}
+
+							iTempScore += 300;
+						}
+					}
+					// For major civs (and barbarians), it depends on how much we hate them
+					else
+					{
+						CivOpinionTypes eOpinion = GetDiplomacyAI()->GetCivOpinion(eOwner);
+						if (eOpinion < CIV_OPINION_NEUTRAL)
+							iMultiplier = 8;
+						else if (eOpinion == CIV_OPINION_NEUTRAL)
+							iMultiplier = 4;
+					}
+
+					// We're stealing a defensive plot or Great Person improvement
+					ImprovementTypes eAdjacentImprovement = pAdjacentPlot->getImprovementType();
+					if (eAdjacentImprovement != NO_IMPROVEMENT)
+					{
+						CvImprovementEntry* pkAdjacentImprovementInfo = GC.getImprovementInfo(eAdjacentImprovement);
+						if (pkAdjacentImprovementInfo->IsNoFollowUp())
+							iTempScore += 20;
+
+						if (pkAdjacentImprovementInfo->IsCreatedByGreatPerson())
+							iTempScore += 50;
+
+						iTempScore += pkAdjacentImprovementInfo->GetDefenseModifier();
+					}
+
+					// Finally we tie break with yields (only a rough count)
+					for (int iYield = 0; iYield < YIELD_JFD_HEALTH; iYield++)
+					{
+						YieldTypes eYield = static_cast<YieldTypes>(iYield);
+						iTempScore += pAdjacentPlot->getYield(eYield);
+					}
+				}
+
+				iStealScore += iTempScore * iMultiplier;
+			}
+
+			// It needs to steal at least one enemy plot
+			if (bIncludeEnemyPlot)
+				goodPlots.push(SPlotWithScore(pPlot, iPlotScore + iStealScore));
+		}
+
+		// We have one valid improvement; time to get out of here
+		break;
+	}
+
+	return goodPlots;
+}
+
+const vector<CvPlot*>& CvPlayerAI::GetTopCitadelPlotsCached()
+{
+	const int MAX_CANDIDATES = 5;
+
+	if (m_iCurrentCitadelTargetsTurn == GC.getGame().getGameTurn())
+		return m_vCurrentCitadelTargets;
+
+	static const UnitClassTypes eGeneralClass = static_cast<UnitClassTypes>(GC.getInfoTypeForString("UNITCLASS_GREAT_GENERAL"));
+	const UnitTypes eGeneral = GetSpecificUnitType(eGeneralClass);
+
+	m_vCurrentCitadelTargets.clear();
+	priority_queue<SPlotWithScore> goodPlots = GetBestCultureBombPlots(eGeneral, vector<CvPlot*>(), false);
+	for (int i = 0; i < MAX_CANDIDATES && !goodPlots.empty(); i++)
+	{
+		SPlotWithScore candidate = goodPlots.top();
+
+		m_vCurrentCitadelTargets.push_back(candidate.pPlot);
+		goodPlots.pop();
+
+		//give up if the rest is much worse than what we just had
+		if (goodPlots.top().score < candidate.score * 0.7f)
+			break;
+	}
+
+	m_iCurrentCitadelTargetsTurn = GC.getGame().getGameTurn();
+	return m_vCurrentCitadelTargets;
+}
+
+bool CvPlayerAI::IsNicePlotForCitadel(const CvPlot* pPlot)
+{
+	const vector<CvPlot*>& choices = GetTopCitadelPlotsCached();
+	return std::find(choices.begin(), choices.end(), pPlot) != choices.end();
+}
+
+CvPlot* CvPlayerAI::FindBestCultureBombPlot(CvUnit* pUnit, const vector<CvPlot*>& vPlotsToAvoid)
 {
 	if (!pUnit)
 		return NULL;
 
-	// we may build in one of our border tiles or in enemy tiles adjacent to them
-	std::set<int> setCandidates;
-	ImprovementTypes eImprovement = NO_IMPROVEMENT;
-	CvImprovementEntry* pkImprovementInfo = NULL;
-	int iRange = 0;
+	priority_queue<SPlotWithScore> goodPlots = GetBestCultureBombPlots(pUnit->getUnitType(), vPlotsToAvoid, true);
 
-	if (eBuild == NO_BUILD)
-	{
-		CvUnitEntry *pkUnitEntry = GC.getUnitInfo(pUnit->getUnitType());
-		if (!pkUnitEntry || !pUnit->isCultureBomb())
-			return NULL;
-
-		iRange = range(pkUnitEntry->GetCultureBombRadius() + GetCultureBombBoost(), 1, 5);
-	}
-	else
-	{
-		CvBuildInfo* pkBuildInfo = GC.getBuildInfo(eBuild);
-		if (!pkBuildInfo)
-			return NULL;
-
-		eImprovement = (ImprovementTypes)pkBuildInfo->getImprovement();
-		pkImprovementInfo = GC.getImprovementInfo(eImprovement);
-		if (!pkImprovementInfo)
-			return NULL;
-
-		iRange = range(pkImprovementInfo->GetCultureBombRadius() + GetCultureBombBoost(), 1, 5);
-	}
-
-	// loop through plots and wipe out ones that are invalid
-	for (PlotIndexContainer::iterator it = m_aiPlots.begin(); it != m_aiPlots.end(); ++it)
-	{
-		CvPlot* pPlot = GC.getMap().plotByIndex(*it);
-		if(!pPlot)
-			continue;
-
-		//don't consider plots we already targeted
-		bool bTooClose = false;
-		for (size_t i=0; i<vPlotsToAvoid.size(); i++)
-			if (plotDistance(*vPlotsToAvoid[i],*pPlot)<3)
-				bTooClose = true;
-		if (bTooClose)
-			continue;
-		
-		bool bGoodCandidate = true;
-		std::vector<int> vPossibleTiles;
-
-		//watch this! plotDirection[NUM_DIRECTION_TYPES] is the plot itself
-		//we need to include it as it may belong to us or the enemy
-		for(int iI = 0; iI < NUM_DIRECTION_TYPES+1; ++iI)
-		{
-			CvPlot* pAdjacentPlot = plotDirection(pPlot->getX(), pPlot->getY(), ((DirectionTypes)iI));
-			if(pAdjacentPlot == NULL)
-				continue;
-			if (!pUnit->canMoveInto(*pAdjacentPlot, CvUnit::MOVEFLAG_DESTINATION))
-				continue;
-
-			// don't waste a colonia ...
-			if (bMustBeWorkable)
-			{
-				CvCity* pClosestCity = GetClosestCityByPlots(pAdjacentPlot);
-				if (pClosestCity && pClosestCity->getWorkPlotDistance() < GetCityDistanceInPlots(pAdjacentPlot))
-					continue;
-			}
-
-			// not if we're about to give up the city
-			if (pAdjacentPlot->getOwningCity() && pAdjacentPlot->getOwningCity()->IsRazing())
-				continue;
-
-			// can't build on some plots
-			if(pAdjacentPlot->isCity() || pAdjacentPlot->isWater() || !pAdjacentPlot->isValidMovePlot(GetID()) )
-				continue;
-			if(eBuild != NO_BUILD && !pAdjacentPlot->canBuild(eBuild, GetID()))
-				continue;
-
-			//citadel special
-			if (pkImprovementInfo && pkImprovementInfo->GetDefenseModifier() > 0)
-			{
-				//we want to steal at least one plot
-				if (!pAdjacentPlot->IsAdjacentOwnedByTeamOtherThan(getTeam()))
-					continue;
-
-				if (pAdjacentPlot->GetDefenseBuildValue(GetID(), eBuild, eImprovement) <= 0)
-					continue;
-			}
-
-			//don't remove existing great people improvements
-			ImprovementTypes eExistingImprovement = pAdjacentPlot->getImprovementType();
-			if (eExistingImprovement != NO_IMPROVEMENT)
-			{
-				CvImprovementEntry* pkImprovementInfo2 = GC.getImprovementInfo(eExistingImprovement);
-				if(pkImprovementInfo2 && pkImprovementInfo2->IsCreatedByGreatPerson())
-					continue;
-			}
-
-			// make sure we don't step on the wrong toes
-			const PlayerTypes eOwner = pAdjacentPlot->getOwner();
-			if (eOwner != NO_PLAYER && eOwner != BARBARIAN_PLAYER && eOwner != m_eID)
-			{
-				if (GetDiplomacyAI()->IsPlayerBadTheftTarget(eOwner, THEFT_TYPE_CULTURE_BOMB))
-				{
-					bGoodCandidate = false;
-					break;
-				}
-			}
-
-			vPossibleTiles.push_back(pAdjacentPlot->GetPlotIndex());
-		}
-
-		//a set guarantees uniqueness
-		if (bGoodCandidate)
-			setCandidates.insert(vPossibleTiles.begin(), vPossibleTiles.end() );
-	}
-
-	std::priority_queue<SPlotWithScore> goodPlots;
-
-	//now that we have a number of possible plots, score each
-	for (std::set<int>::iterator it = setCandidates.begin(); it != setCandidates.end(); ++it)
-	{
-		CvPlot* pPlot = GC.getMap().plotByIndexUnchecked(*it);
-		int iScore = (pkImprovementInfo && (pkImprovementInfo->GetDefenseModifier() > 0 || pkImprovementInfo->GetNearbyEnemyDamage() > 0)) ? pPlot->GetDefenseBuildValue(GetID(), eBuild, eImprovement) : 0;
-
-		for (int iI=0; iI<RING_PLOTS[iRange]; iI++)
-		{
-			CvPlot* pAdjacentPlot = iterateRingPlots(pPlot,iI);
-			if(pAdjacentPlot == NULL)
-				continue;
-
-			// don't evaluate city plots since we don't get ownership of them with the bomb
-			if(pAdjacentPlot->isCity())
-				continue;
-
-			//don't count the plot if we already own it
-			if (pAdjacentPlot->getOwner() == GetID())
-				continue;
-
-			//danger is bad - check even adjacent plots!
-			int iDanger = pUnit->GetDanger(pAdjacentPlot);
-			if (iDanger > 20) //allow fog
-			{
-				iScore = 0;
-				break;
-			}
-
-			// don't build next to existing bombs
-			if (iRange == 1)
-			{
-				ImprovementTypes eExistingImprovement = pAdjacentPlot->getImprovementType();
-				if (eExistingImprovement != NO_IMPROVEMENT)
-				{
-					CvImprovementEntry* pkImprovementInfo2 = GC.getImprovementInfo(eExistingImprovement);
-					if (pkImprovementInfo2 && pkImprovementInfo2->GetCultureBombRadius() > 1)
-					{
-						iScore = 0;
-						break;
-					}
-				}
-			}
-
-			int iWeightFactor = 1;
-			// choke points are good, even if only adjacent to the citadel
-			if(pAdjacentPlot->IsChokePoint())
-			{
-				iWeightFactor += 3;
-			}
-
-			//Let's grab embassies if we can!
-			if (pAdjacentPlot->IsImprovementEmbassy())
-			{
-				if (GET_PLAYER(pAdjacentPlot->GetPlayerThatBuiltImprovement()).getTeam() != GET_PLAYER(pUnit->getOwner()).getTeam())
-					iWeightFactor += 5;
-				else //don't steal our own embassy
-					iWeightFactor = 1;
-			}
-
-			const PlayerTypes eOtherPlayer = pAdjacentPlot->getOwner();
-			if (eOtherPlayer != NO_PLAYER && eOtherPlayer != BARBARIAN_PLAYER && eOtherPlayer != GetID())
-			{
-				if (GetDiplomacyAI()->IsPlayerBadTheftTarget(eOtherPlayer, THEFT_TYPE_CULTURE_BOMB))
-				{
-					iScore = 0;
-					break;
-				}
-				else if (GET_PLAYER(eOtherPlayer).isMinorCiv())
-				{
-					// grabbing tiles away from minors is nice
-					iWeightFactor += 3;
-				}
-				else
-				{
-					// grabbing tiles away from majors is really nice
-					iWeightFactor += 4;
-				}
-			}
-
-			// score resource - this may be the dominant factor!
-			ResourceTypes eResource = pAdjacentPlot->getResourceType(getTeam());
-			if(eResource != NO_RESOURCE)
-			{
-				iScore += (GetBuilderTaskingAI()->GetResourceWeight(eResource, NO_IMPROVEMENT, pAdjacentPlot->getNumResource()) * iWeightFactor);
-			}
-
-			// score yield
-			for(int iYield = 0; iYield <= YIELD_TOURISM; iYield++)
-			{
-				iScore += (pAdjacentPlot->getYield((YieldTypes)iYield) * iWeightFactor);
-			}
-		}
-
-		//require a certain minimum score ...
-		if (iScore > 0)
-		{
-			goodPlots.push(SPlotWithScore(pPlot, iScore));
-		}
-	}
-
-	if ( goodPlots.size() == 0 )
-	{
+	if (goodPlots.empty())
 		return NULL;
-	}
-	else if ( goodPlots.size() == 1 )
+
+	SPlotWithScore nr1 = goodPlots.top();
+	goodPlots.pop();
+	SPlotWithScore nr2 = goodPlots.empty() ? SPlotWithScore(NULL, 0) : goodPlots.top();
+	CvString strLogMessage;
+	SPlotWithScore chosen;
+	if (nr1.score * 0.8f > nr2.score)
 	{
-		if(GC.getLogging() && GC.getAILogging())
-		{
-			CvString strLogString;
-			strLogString.Format("Found a single culture bomb location, Location: X: %d, Y: %d. SCORE: %d", goodPlots.top().pPlot->getX(), goodPlots.top().pPlot->getY(), goodPlots.top().score);
-			GetHomelandAI()->LogHomelandMessage(strLogString);
-		}
-		return goodPlots.top().pPlot;
+		strLogMessage = "Found one good culture bomb location: X: %d, Y: %d. SCORE: %d";
+		chosen = nr1;
 	}
 	else
 	{
-		//look at the top two and take the closer one
-		SPlotWithScore nr1 = goodPlots.top(); goodPlots.pop();
-		SPlotWithScore nr2 = goodPlots.top(); goodPlots.pop();
-		if (nr1.score * 0.8f > nr2.score)
-		{
-			if(GC.getLogging() && GC.getAILogging())
-			{
-				CvString strLogString;
-				strLogString.Format("Found one good culture bomb location: X: %d, Y: %d. SCORE: %d", goodPlots.top().pPlot->getX(), goodPlots.top().pPlot->getY(), goodPlots.top().score);
-				GetHomelandAI()->LogHomelandMessage(strLogString);
-			}
-			return nr1.pPlot;
-		}
-		else
-		{
-			int iTurns1 = pUnit->TurnsToReachTarget(nr1.pPlot, true);
-			int iTurns2 = pUnit->TurnsToReachTarget(nr2.pPlot, true);
-			SPlotWithScore chosen = (iTurns2<iTurns1) ? nr2 : nr1;
-
-			if (GC.getLogging() && GC.getAILogging())
-			{
-				CvString strLogString;
-				strLogString.Format("Found at least two similar culture bomb locations, chosen location: X: %d, Y: %d. SCORE: %d", chosen.pPlot->getX(), chosen.pPlot->getY(), chosen.score);
-				GetHomelandAI()->LogHomelandMessage(strLogString);
-			}
-			return chosen.pPlot;
-		}
+		int iTurns1 = pUnit->TurnsToReachTarget(nr1.pPlot, true);
+		int iTurns2 = pUnit->TurnsToReachTarget(nr2.pPlot, true);
+		strLogMessage = "Found at least two similar culture bomb locations, chosen location: X: %d, Y: %d. SCORE: %d";
+		chosen = iTurns1 < iTurns2 ? nr1 : nr2;
 	}
+
+	if (GC.getLogging() && GC.getAILogging())
+	{
+		CvString strLogString;
+		strLogString.Format(strLogMessage, chosen.pPlot->getX(), chosen.pPlot->getY(), chosen.score);
+		GetHomelandAI()->LogHomelandMessage(strLogString);
+	}
+
+	return chosen.pPlot;
 }

@@ -1,5 +1,5 @@
 /*	-------------------------------------------------------------------------------------------------------
-	© 1991-2012 Take-Two Interactive Software and its subsidiaries.  Developed by Firaxis Games.  
+	Â© 1991-2012 Take-Two Interactive Software and its subsidiaries.  Developed by Firaxis Games.  
 	Sid Meier's Civilization V, Civ, Civilization, 2K Games, Firaxis Games, Take-Two Interactive Software 
 	and their respective logos are all trademarks of Take-Two interactive Software, Inc.  
 	All other marks and trademarks are the property of their respective owners.  
@@ -17,10 +17,10 @@ int **CvGoodyHuts::m_aaiPlayerGoodyHutResults = NULL;
 /// New Goody Hut Result from a Player
 void CvGoodyHuts::DoPlayerReceivedGoody(PlayerTypes ePlayer, GoodyTypes eGoody)
 {
-	FAssert(ePlayer >= 0);
-	FAssert(ePlayer < MAX_MAJOR_CIVS);
-	FAssert(eGoody >= 0);
-	//	FAssert(eGoody < DB.count("GoodyHuts"));
+	ASSERT_DEBUG(ePlayer >= 0);
+	ASSERT_DEBUG(ePlayer < MAX_MAJOR_CIVS);
+	ASSERT_DEBUG(eGoody >= 0);
+	//	ASSERT_DEBUG(eGoody < DB.count("GoodyHuts"));
 
 	// Push elements up in the array so that we free up element 0
 	for (int iGoodySlotLoop = 0; iGoodySlotLoop < NUM_GOODIES_REMEMBERED-1; iGoodySlotLoop++)
@@ -43,10 +43,10 @@ bool CvGoodyHuts::IsCanPlayerReceiveGoody(PlayerTypes ePlayer, GoodyTypes eGoody
 /// Have we gotten this type of Goody lately? (in the last 3 Goodies, defined by NUM_GOODIES_REMEMBERED)
 bool CvGoodyHuts::IsHasPlayerReceivedGoodyLately(PlayerTypes ePlayer, GoodyTypes eGoody)
 {
-	FAssert(ePlayer >= 0);
-	FAssert(ePlayer < MAX_MAJOR_CIVS);
-	FAssert(eGoody >= 0);
-	//	FAssert(eGoody < DB.count("GoodyHuts"));
+	ASSERT_DEBUG(ePlayer >= 0);
+	ASSERT_DEBUG(ePlayer < MAX_MAJOR_CIVS);
+	ASSERT_DEBUG(eGoody >= 0);
+	//	ASSERT_DEBUG(eGoody < DB.count("GoodyHuts"));
 
 	// Look at all of our Goody slots and see if the requested Goody matches anything
 	for (int iGoodySlotLoop = 0; iGoodySlotLoop < NUM_GOODIES_REMEMBERED; iGoodySlotLoop++)

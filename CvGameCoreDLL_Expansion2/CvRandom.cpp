@@ -1,5 +1,5 @@
 /*	-------------------------------------------------------------------------------------------------------
-	© 1991-2012 Take-Two Interactive Software and its subsidiaries.  Developed by Firaxis Games.  
+	Â© 1991-2012 Take-Two Interactive Software and its subsidiaries.  Developed by Firaxis Games.  
 	Sid Meier's Civilization V, Civ, Civilization, 2K Games, Firaxis Games, Take-Two Interactive Software 
 	and their respective logos are all trademarks of Take-Two interactive Software, Inc.  
 	All other marks and trademarks are the property of their respective owners.  
@@ -11,7 +11,6 @@
 #include "CvGlobals.h"
 #include "FCallStack.h"
 #include "FStlContainerSerialization.h"
-#include "stackwalker/StackWalker.h"
 
 // include this after all other headers!
 #include "LintFree.h"
@@ -28,6 +27,15 @@ CvRandom::CvRandom(const std::string& name) :
 	, m_bSynchronous(true)
 {
 	reset();
+}
+
+CvRandom* CvRandom::Clone() const {
+    CvRandom* newRandom = new CvRandom(m_name);
+    newRandom->m_ullRandomSeed = m_ullRandomSeed;
+    newRandom->m_ulCallCount = m_ulCallCount;
+    newRandom->m_ulResetCount = m_ulResetCount;
+    newRandom->m_bSynchronous = m_bSynchronous;
+    return newRandom;
 }
 
 /*
@@ -85,9 +93,11 @@ void CvRandom::reset(unsigned long long ullSeed)
 
 unsigned long CvRandom::get(unsigned long ulNum, const char* pszLog)
 {
-	if(!gDLL->IsGameCoreThread() && gDLL->IsGameCoreExecuting() && m_bSynchronous)
+	// Thread safety check
+	if (!gDLL->IsGameCoreThread() && gDLL->IsGameCoreExecuting() && m_bSynchronous)
 	{
 		OutputDebugString("Warning: GUI is accessing the synchronous random number generator while the game core is running.");
+		ASSERT_DEBUG(false && "Invalid thread access to synchronous RNG");
 	}
 
 	//catch trivial cases
@@ -99,29 +109,29 @@ unsigned long CvRandom::get(unsigned long ulNum, const char* pszLog)
 	unsigned long long ullNewSeed = ((RANDOM_A * m_ullRandomSeed) + RANDOM_C);
 	unsigned long ul = ((unsigned long)((((ullNewSeed >> RANDOM_SHIFT) & MAX_UNSIGNED_INT) * (ulNum)) / (MAX_UNSIGNED_INT + 1LL)));
 
-	if(GC.getLogging())
+	if (GC.getLogging())
 	{
 		int iRandLogging = GC.getRandLogging();
-		if(iRandLogging > 0 && (m_bSynchronous || (iRandLogging & RAND_LOGGING_ASYNCHRONOUS_FLAG) != 0))
+		if (iRandLogging > 0 && (m_bSynchronous || (iRandLogging & RAND_LOGGING_ASYNCHRONOUS_FLAG) != 0))
 		{
 			CvGame& kGame = GC.getGame();
-			if(kGame.getTurnSlice() > 0 || ((iRandLogging & RAND_LOGGING_PREGAME_FLAG) != 0))
+			if (kGame.getTurnSlice() > 0 || ((iRandLogging & RAND_LOGGING_PREGAME_FLAG) != 0))
 			{
 				FILogFile* pLog = LOGFILEMGR.GetLog("RandCalls.csv", FILogFile::kDontTimeStamp);
-				if(pLog)
+				if (pLog)
 				{
-					char szOut[1024] = {0};
-					sprintf_s(szOut, "%s, %d, max %lu, res %lu, seed %I64u, cc %d, rc %d, %s, %s\n", m_name.c_str(), kGame.getGameTurn(), 
+					char szOut[1024] = { 0 };
+					sprintf_s(szOut, "%s, %d, max %lu, res %lu, seed %I64u, cc %d, rc %d, %s, %s\n", m_name.c_str(), kGame.getGameTurn(),
 						ulNum, ul, ullNewSeed, m_ulCallCount, m_ulResetCount, m_bSynchronous ? "sync" : "async", (pszLog != NULL) ? pszLog : "Unknown");
 					pLog->Msg(szOut);
 
-#if defined(MOD_CORE_DEBUGGING)
-					if(false)
-					{
-						gStackWalker.SetLog(pLog);
-						gStackWalker.ShowCallstack(5);
-						gStackWalker.SetLog(NULL);
-					}
+#if defined(VPDEBUG)
+				if (m_ulResetCount > 100)  // Example check
+				{
+					char szDebugInfo[256];
+					sprintf_s(szDebugInfo, "Warning: High RNG reset count: %d\n", m_ulResetCount);
+					OutputDebugString(szDebugInfo);
+				}
 #endif
 				}
 			}

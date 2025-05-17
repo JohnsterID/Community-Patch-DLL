@@ -1,5 +1,5 @@
 /*	-------------------------------------------------------------------------------------------------------
-	� 1991-2012 Take-Two Interactive Software and its subsidiaries.  Developed by Firaxis Games.  
+	© 1991-2012 Take-Two Interactive Software and its subsidiaries.  Developed by Firaxis Games.  
 	Sid Meier's Civilization V, Civ, Civilization, 2K Games, Firaxis Games, Take-Two Interactive Software 
 	and their respective logos are all trademarks of Take-Two interactive Software, Inc.  
 	All other marks and trademarks are the property of their respective owners.  
@@ -15,6 +15,7 @@
 #include "CvGrandStrategyAI.h"
 #include "CvInfosSerializationHelper.h"
 #include "CvEnumMapSerialization.h"
+#include "CvInternalGameCoreUtils.h"
 
 // Include this after all other headers.
 #include "LintFree.h"
@@ -71,8 +72,6 @@ CvPolicyEntry::CvPolicyEntry(void):
 	m_iAllFeatureProduction(0),
 	m_iImprovementCostModifier(0),
 	m_iImprovementUpgradeRateModifier(0),
-	m_iSpecialistProductionModifier(0),
-	m_iSpecialistUpgradeModifier(0),
 	m_iMilitaryProductionModifier(0),
 	m_iBaseFreeUnits(0),
 	m_iBaseFreeMilitaryUnits(0),
@@ -99,12 +98,15 @@ CvPolicyEntry::CvPolicyEntry(void):
 	m_iLandmarksTourismPercent(0),
 	m_iArchaeologicalDigTourism(0),
 	m_iGoldenAgeTourism(0),
+	m_bInternalTRTourism(false),
 	m_iExtraCultureandScienceTradeRoutes(0),
 	m_iTradeRouteLandDistanceModifier(0),
 	m_iTradeRouteSeaDistanceModifier(0),
 	m_iEspionageNetworkPoints(0),
 	m_iRigElectionInfluenceModifier(0),
+	m_iPassiveEspionageBonusModifier(0),
 	m_iXCSAlliesLowersPolicyNeedWonders(0),
+	m_iHappinessPerCityOverStrengthThreshold(0),
 	m_iTRSpeedBoost(0),
 	m_iTRVisionBoost(0),
 	m_iHappinessPerXPolicies(0),
@@ -157,7 +159,6 @@ CvPolicyEntry::CvPolicyEntry(void):
 	m_iHappyPerMilitaryUnit(0),
 	m_iFreeSpecialist(0),
 	m_iTechPrereq(NO_TECH),
-	m_iMaxConscript(0),
 	m_iExpModifier(0),
 	m_iExpInBorderModifier(0),
 	m_iMinorQuestFriendshipMod(0),
@@ -205,7 +206,6 @@ CvPolicyEntry::CvPolicyEntry(void):
 	m_bEnablesSSPartHurry(false),
 	m_bEnablesSSPartPurchase(false),
 	m_iPolicyBranchType(NO_POLICY_BRANCH_TYPE),
-	m_iNumExtraBranches(0),
 	m_iHappinessToCulture(0),
 	m_iHappinessToScience(0),
 	m_iNumCitiesFreeCultureBuilding(0),
@@ -221,7 +221,6 @@ CvPolicyEntry::CvPolicyEntry(void):
 	m_iMonopolyModFlat(0),
 	m_iMonopolyModPercent(0),
 	m_bDummy(false),
-	m_bOpener(false),
 	m_bFinisher(false),
 	m_iCityStateCombatModifier(0),
 	m_iGreatEngineerRateModifier(0),
@@ -256,13 +255,11 @@ CvPolicyEntry::CvPolicyEntry(void):
 	m_iHappfromXSpecialists(0),
 	m_iNoUnhappfromXSpecialistsCapital(0),
 	m_iSpecialistFoodChange(0),
-	m_iNonSpecialistFoodChange(0),
 	m_iWarWearinessModifier(0),
 	m_iWarScoreModifier(0),
 	m_iGreatGeneralExtraBonus(0),
 	m_piPrereqOrPolicies(NULL),
 	m_piPrereqAndPolicies(NULL),
-	m_piPolicyDisables(NULL),
 	m_piYieldModifier(NULL),
 	m_piCityYieldChange(NULL),
 	m_piCoastalCityYieldChange(NULL),
@@ -313,6 +310,8 @@ CvPolicyEntry::CvPolicyEntry(void):
 	m_iPuppetProdMod(0),
 	m_iOccupiedProdMod(0),
 	m_iFreeWCVotes(0),
+	m_iSpySecurityModifier(0),
+	m_iVotesPerFollowingCityTimes100(0),
 	m_iInfluenceGPExpend(0),
 	m_iFreeTradeRoute(0),
 	m_iFreeSpy(0),
@@ -379,6 +378,8 @@ CvPolicyEntry::CvPolicyEntry(void):
 	m_piYieldModifierFromGreatWorks(NULL),
 	m_piYieldModifierFromActiveSpies(NULL),
 	m_piYieldFromDelegateCount(NULL),
+	m_piYieldFromXMilitaryUnits(NULL),
+	m_piYieldPerCityOverStrengthThreshold(NULL),
 	m_piYieldChangesPerReligion(NULL),
 	m_iMissionInfluenceModifier(0),
 	m_iHappinessPerActiveTradeRoute(0),
@@ -406,7 +407,6 @@ CvPolicyEntry::~CvPolicyEntry(void)
 {
 	SAFE_DELETE_ARRAY(m_piPrereqOrPolicies);
 	SAFE_DELETE_ARRAY(m_piPrereqAndPolicies);
-	SAFE_DELETE_ARRAY(m_piPolicyDisables);
 	SAFE_DELETE_ARRAY(m_piYieldModifier);
 	SAFE_DELETE_ARRAY(m_piCityYieldChange);
 	SAFE_DELETE_ARRAY(m_piCoastalCityYieldChange);
@@ -428,7 +428,6 @@ CvPolicyEntry::~CvPolicyEntry(void)
 	SAFE_DELETE_ARRAY(m_paiFreeUnitClasses);
 	SAFE_DELETE_ARRAY(m_paiTourismOnUnitCreation);
 
-//	SAFE_DELETE_ARRAY(m_pabHurry);
 	SAFE_DELETE_ARRAY(m_paiHurryModifier);
 	SAFE_DELETE_ARRAY(m_pabSpecialistValid);
 #if defined(MOD_BALANCE_CORE)
@@ -482,6 +481,8 @@ CvPolicyEntry::~CvPolicyEntry(void)
 	SAFE_DELETE_ARRAY(m_piYieldModifierFromGreatWorks);
 	SAFE_DELETE_ARRAY(m_piYieldModifierFromActiveSpies);
 	SAFE_DELETE_ARRAY(m_piYieldFromDelegateCount);
+	SAFE_DELETE_ARRAY(m_piYieldFromXMilitaryUnits);
+	SAFE_DELETE_ARRAY(m_piYieldPerCityOverStrengthThreshold);
 	SAFE_DELETE_ARRAY(m_piYieldChangesPerReligion);
 #if defined(HH_MOD_API_TRADEROUTE_MODIFIERS)
 	SAFE_DELETE_ARRAY(m_piInternationalRouteYieldModifiers);
@@ -550,8 +551,6 @@ bool CvPolicyEntry::CacheResults(Database::Results& kResults, CvDatabaseUtility&
 	m_iAllFeatureProduction = kResults.GetInt("AllFeatureProduction");
 	m_iImprovementCostModifier = kResults.GetInt("ImprovementCostModifier");
 	m_iImprovementUpgradeRateModifier = kResults.GetInt("ImprovementUpgradeRateModifier");
-	m_iSpecialistProductionModifier = kResults.GetInt("SpecialistProductionModifier");
-	m_iSpecialistUpgradeModifier = kResults.GetInt("SpecialistUpgradeModifier");
 	m_iMilitaryProductionModifier = kResults.GetInt("MilitaryProductionModifier");
 	m_iBaseFreeUnits = kResults.GetInt("BaseFreeUnits");
 	m_iBaseFreeMilitaryUnits = kResults.GetInt("BaseFreeMilitaryUnits");
@@ -581,12 +580,15 @@ bool CvPolicyEntry::CacheResults(Database::Results& kResults, CvDatabaseUtility&
 	m_iLandmarksTourismPercent = kResults.GetInt("LandmarksTourismPercent");
 	m_iArchaeologicalDigTourism = kResults.GetInt("ArchaeologicalDigTourism");
 	m_iGoldenAgeTourism = kResults.GetInt("GoldenAgeTourism");
+	m_bInternalTRTourism = kResults.GetBool("InternalTRTourism");
 	m_iExtraCultureandScienceTradeRoutes = kResults.GetInt("ExtraCultureandScienceTradeRoutes");
 	m_iTradeRouteLandDistanceModifier = kResults.GetInt("TradeRouteLandDistanceModifier");
 	m_iTradeRouteSeaDistanceModifier = kResults.GetInt("TradeRouteSeaDistanceModifier");
 	m_iEspionageNetworkPoints = kResults.GetInt("EspionageNetworkPoints");
 	m_iRigElectionInfluenceModifier = kResults.GetInt("RigElectionInfluenceModifier");
+	m_iPassiveEspionageBonusModifier = kResults.GetInt("PassiveEspionageBonusModifier");
 	m_iXCSAlliesLowersPolicyNeedWonders = kResults.GetInt("XCSAlliesLowersPolicyNeedWonders");
+	m_iHappinessPerCityOverStrengthThreshold  = kResults.GetInt("HappinessPerCityOverStrengthThreshold");
 	m_iTRVisionBoost = kResults.GetInt("TRVisionBoost");
 	m_iTRSpeedBoost = kResults.GetInt("TRSpeedBoost");
 	m_iHappinessPerXPolicies = kResults.GetInt("HappinessPerXPolicies");
@@ -652,14 +654,12 @@ bool CvPolicyEntry::CacheResults(Database::Results& kResults, CvDatabaseUtility&
 	m_iMonopolyModFlat = kResults.GetInt("MonopolyModFlat");
 	m_iMonopolyModPercent = kResults.GetInt("MonopolyModPercent");
 	m_bDummy = kResults.GetBool("IsDummy");
-	m_bOpener = kResults.GetBool("IsOpener");
 	m_bFinisher = kResults.GetBool("IsFinisher");
 	m_iCityStateCombatModifier = kResults.GetInt("CityStateCombatModifier");
 	m_iGreatEngineerRateModifier = kResults.GetInt("GreatEngineerRateModifier");
 	m_iDefenseBoost = kResults.GetInt("DefenseBoostAllCities");
 #endif
 	m_bMilitaryFoodProduction = kResults.GetBool("MilitaryFoodProduction");
-	m_iMaxConscript = kResults.GetInt("MaxConscript");
 	m_iWoundedUnitDamageMod = kResults.GetInt("WoundedUnitDamageMod");
 	m_iUnitUpgradeCostMod = kResults.GetInt("UnitUpgradeCostMod");
 	m_iBarbarianCombatBonus = kResults.GetInt("BarbarianCombatBonus");
@@ -737,7 +737,6 @@ bool CvPolicyEntry::CacheResults(Database::Results& kResults, CvDatabaseUtility&
 	m_iHappfromXSpecialists = kResults.GetInt("HappfromXSpecialists");
 	m_iNoUnhappfromXSpecialistsCapital = kResults.GetInt("NoUnhappfromXSpecialistsCapital");
 	m_iSpecialistFoodChange = kResults.GetInt("SpecialistFoodChange");
-	m_iNonSpecialistFoodChange = kResults.GetInt("NonSpecialistFoodChange");
 	m_iWarWearinessModifier = kResults.GetInt("WarWearinessModifier");
 	m_iWarScoreModifier = kResults.GetInt("WarScoreModifier");
 	m_iGreatGeneralExtraBonus = kResults.GetInt("GreatGeneralExtraBonus");
@@ -772,6 +771,8 @@ bool CvPolicyEntry::CacheResults(Database::Results& kResults, CvDatabaseUtility&
 	m_iPuppetProdMod = kResults.GetInt("PuppetProdMod");
 	m_iOccupiedProdMod = kResults.GetInt("OccupiedProdMod");
 	m_iFreeWCVotes = kResults.GetInt("FreeWCVotes");
+	m_iSpySecurityModifier= kResults.GetInt("SpySecurityModifier");
+	m_iVotesPerFollowingCityTimes100 = kResults.GetInt("VotesPerFollowingCityTimes100");
 	m_iInfluenceGPExpend = kResults.GetInt("InfluenceGPExpend");
 	m_iFreeTradeRoute = kResults.GetInt("FreeTradeRoute");
 	m_iFreeSpy = kResults.GetInt("FreeSpy");
@@ -798,8 +799,6 @@ bool CvPolicyEntry::CacheResults(Database::Results& kResults, CvDatabaseUtility&
 
 	const char* szPolicyBranchType = kResults.GetText("PolicyBranchType");
 	m_iPolicyBranchType = GC.getInfoTypeForString(szPolicyBranchType, true);
-
-	m_iNumExtraBranches = kResults.GetInt("NumExtraBranches");
 
 	const char* szFreeBuilding = kResults.GetText("FreeBuildingOnConquest");
 	if(szFreeBuilding)
@@ -880,6 +879,8 @@ bool CvPolicyEntry::CacheResults(Database::Results& kResults, CvDatabaseUtility&
 	kUtility.PopulateArrayByValue(m_paiFreeUnitClasses, "UnitClasses", "Policy_FreeUnitClasses", "UnitClassType", "PolicyType", szPolicyType, "Count");
 	kUtility.PopulateArrayByValue(m_paiTourismOnUnitCreation, "UnitClasses", "Policy_TourismOnUnitCreation", "UnitClassType", "PolicyType", szPolicyType, "Tourism");
 
+	kUtility.PopulateSetByExistence(m_siPolicyDisables, "Policies", "Policy_Disables", "PolicyDisable", "PolicyType", szPolicyType);
+
 	//BuildingYieldModifiers
 	{
 		kUtility.Initialize2DArray(m_ppiBuildingClassYieldModifiers, "BuildingClasses", "Yields");
@@ -948,7 +949,7 @@ bool CvPolicyEntry::CacheResults(Database::Results& kResults, CvDatabaseUtility&
 			m_ppiImprovementYieldChanges[ImprovementID][YieldID] = yield;
 		}
 	}
-#if defined(MOD_BALANCE_CORE_POLICIES)
+
 	//ReligionBuildingYieldMod
 	{
 		kUtility.Initialize2DArray(m_ppiReligionBuildingYieldMod, "BuildingClasses", "Yields");
@@ -971,7 +972,6 @@ bool CvPolicyEntry::CacheResults(Database::Results& kResults, CvDatabaseUtility&
 			m_ppiReligionBuildingYieldMod[BuildingClassID][iYieldID] = iYieldMod;
 		}
 	}
-#endif
 
 	//PlotYieldChanges
 	{
@@ -1200,6 +1200,8 @@ bool CvPolicyEntry::CacheResults(Database::Results& kResults, CvDatabaseUtility&
 	kUtility.SetYields(m_piYieldModifierFromGreatWorks, "Policy_YieldModifierFromGreatWorks", "PolicyType", szPolicyType);
 	kUtility.SetYields(m_piYieldModifierFromActiveSpies, "Policy_YieldModifierFromActiveSpies", "PolicyType", szPolicyType);
 	kUtility.SetYields(m_piYieldFromDelegateCount, "Policy_YieldFromDelegateCount", "PolicyType", szPolicyType);
+	kUtility.SetYields(m_piYieldFromXMilitaryUnits, "Policy_YieldFromXMilitaryUnits", "PolicyType", szPolicyType);
+	kUtility.SetYields(m_piYieldPerCityOverStrengthThreshold, "Policy_YieldPerCityOverStrengthThreshold", "PolicyType", szPolicyType);
 
 	kUtility.SetYields(m_piYieldChangesPerReligion, "Policy_YieldChangesPerReligion", "PolicyType", szPolicyType);
 
@@ -1295,29 +1297,6 @@ bool CvPolicyEntry::CacheResults(Database::Results& kResults, CvDatabaseUtility&
 		while(pResults->Step())
 		{
 			m_piPrereqAndPolicies[i++] = pResults->GetInt(0);
-		}
-
-		pResults->Reset();
-	}
-
-	//Policy_Disables
-	{
-		kUtility.InitializeArray(m_piPolicyDisables, "Policies", (int)NO_POLICY);
-
-		std::string sqlKey = "m_piPolicyDisables";
-		Database::Results* pResults = kUtility.GetResults(sqlKey);
-		if(pResults == NULL)
-		{
-			const char* szSQL = "select Policies.ID from Policy_Disables inner join Policies on Policies.Type = PolicyDisable where PolicyType = ?";
-			pResults = kUtility.PrepareResults(sqlKey, szSQL);
-		}
-
-		pResults->Bind(1, szPolicyType, false);
-
-		int i = 0;
-		while(pResults->Step())
-		{
-			m_piPolicyDisables[i++] = pResults->GetInt(0);
 		}
 
 		pResults->Reset();
@@ -1693,18 +1672,6 @@ int CvPolicyEntry::GetImprovementUpgradeRateModifier() const
 	return m_iImprovementUpgradeRateModifier;
 }
 
-/// Specialist production boost
-int CvPolicyEntry::GetSpecialistProductionModifier() const
-{
-	return m_iSpecialistProductionModifier;
-}
-
-/// Increase rate of Specialist growth
-int CvPolicyEntry::GetSpecialistUpgradeModifier() const
-{
-	return m_iSpecialistUpgradeModifier;
-}
-
 /// Military unit production boost
 int CvPolicyEntry::GetMilitaryProductionModifier() const
 {
@@ -1830,6 +1797,10 @@ int CvPolicyEntry::GetGoldenAgeTourism() const
 {
 	return m_iGoldenAgeTourism;
 }
+bool CvPolicyEntry::IsInternalTRTourism() const
+{
+	return m_bInternalTRTourism;
+}
 int CvPolicyEntry::GetExtraCultureandScienceTradeRoutes() const
 {
 	return m_iExtraCultureandScienceTradeRoutes;
@@ -1850,9 +1821,17 @@ int CvPolicyEntry::GetRigElectionInfluenceModifier() const
 {
 	return m_iRigElectionInfluenceModifier;
 }
+int CvPolicyEntry::GetPassiveEspionageBonusModifier() const
+{
+	return m_iPassiveEspionageBonusModifier;
+}
 int CvPolicyEntry::GetXCSAlliesLowersPolicyNeedWonders() const
 {
 	return m_iXCSAlliesLowersPolicyNeedWonders;
+}
+int CvPolicyEntry::GetHappinessPerCityOverStrengthThreshold() const
+{
+	return m_iHappinessPerCityOverStrengthThreshold;
 }
 
 int CvPolicyEntry::GetTRVisionBoost() const
@@ -2129,12 +2108,6 @@ int CvPolicyEntry::GetTechPrereq() const
 	return m_iTechPrereq;
 }
 
-/// Number of units that may be conscripted
-int CvPolicyEntry::GetMaxConscript() const
-{
-	return m_iMaxConscript;
-}
-
 /// Modifier to experience
 int CvPolicyEntry::GetExpModifier() const
 {
@@ -2358,12 +2331,6 @@ int CvPolicyEntry::GetPolicyBranchType() const
 	return m_iPolicyBranchType;
 }
 
-/// How many extra branches are we allowed to pick from?
-int CvPolicyEntry::GetNumExtraBranches() const
-{
-	return m_iNumExtraBranches;
-}
-
 /// Excess Happiness converted into Culture
 int CvPolicyEntry::GetHappinessToCulture() const
 {
@@ -2433,10 +2400,6 @@ int CvPolicyEntry::GetMonopolyModPercent() const
 bool CvPolicyEntry::IsDummy() const
 {
 	return m_bDummy;
-}
-bool CvPolicyEntry::IsOpener() const
-{
-	return m_bOpener;
 }
 bool CvPolicyEntry::IsFinisher() const
 {
@@ -2625,10 +2588,6 @@ int CvPolicyEntry::GetSpecialistFoodChange() const
 {
 	return m_iSpecialistFoodChange;
 }
-int CvPolicyEntry::GetNonSpecialistFoodChange() const
-{
-	return m_iNonSpecialistFoodChange;
-}
 int CvPolicyEntry::GetWarWearinessModifier() const
 {
 	return m_iWarWearinessModifier;
@@ -2669,17 +2628,11 @@ int CvPolicyEntry::GetPrereqAndPolicies(int i) const
 	return m_piPrereqAndPolicies ? m_piPrereqAndPolicies[i] : -1;
 }
 
-/// Policies disabled when this one achieved
-int CvPolicyEntry::GetPolicyDisables(int i) const
-{
-	return m_piPolicyDisables ? m_piPolicyDisables[i] : -1;
-}
-
 /// Change to yield by type
 int CvPolicyEntry::GetYieldModifier(int i) const
 {
-	CvAssertMsg(i < NUM_YIELD_TYPES, "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < NUM_YIELD_TYPES, "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
 	return m_piYieldModifier ? m_piYieldModifier[i] : -1;
 }
 
@@ -2692,8 +2645,8 @@ int* CvPolicyEntry::GetYieldModifierArray() const
 /// Change to traderoute yield modifier by type
 int CvPolicyEntry::GetInternationalRouteYieldModifier(int i) const
 {
-	CvAssertMsg(i < NUM_YIELD_TYPES, "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < NUM_YIELD_TYPES, "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
 	return m_piInternationalRouteYieldModifiers ? m_piInternationalRouteYieldModifiers[i] : -1;
 }
 
@@ -2719,8 +2672,8 @@ std::map<UnitClassTypes, UnitClassTypes> CvPolicyEntry::GetUnitClassReplacements
 /// Change to yield in every City by type
 int CvPolicyEntry::GetCityYieldChange(int i) const
 {
-	CvAssertMsg(i < NUM_YIELD_TYPES, "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < NUM_YIELD_TYPES, "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
 	return m_piCityYieldChange ? m_piCityYieldChange[i] : -1;
 }
 
@@ -2733,8 +2686,8 @@ int* CvPolicyEntry::GetCityYieldChangeArray() const
 /// Change to yield in coastal Cities by type
 int CvPolicyEntry::GetCoastalCityYieldChange(int i) const
 {
-	CvAssertMsg(i < NUM_YIELD_TYPES, "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < NUM_YIELD_TYPES, "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
 	return m_piCoastalCityYieldChange ? m_piCoastalCityYieldChange[i] : -1;
 }
 
@@ -2747,8 +2700,8 @@ int* CvPolicyEntry::GetCoastalCityYieldChangeArray() const
 /// Change to yield in Capital by type
 int CvPolicyEntry::GetCapitalYieldChange(int i) const
 {
-	CvAssertMsg(i < NUM_YIELD_TYPES, "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < NUM_YIELD_TYPES, "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
 	return m_piCapitalYieldChange ? m_piCapitalYieldChange[i] : -1;
 }
 
@@ -2761,8 +2714,8 @@ int* CvPolicyEntry::GetCapitalYieldChangeArray() const
 /// Change to yield in Capital by type (per pop)
 int CvPolicyEntry::GetCapitalYieldPerPopChange(int i) const
 {
-	CvAssertMsg(i < NUM_YIELD_TYPES, "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < NUM_YIELD_TYPES, "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
 	return m_piCapitalYieldPerPopChange ? m_piCapitalYieldPerPopChange[i] : -1;
 }
 
@@ -2776,8 +2729,8 @@ int* CvPolicyEntry::GetCapitalYieldPerPopChangeArray() const
 /// Change to yield in Capital by type (per pop)
 int CvPolicyEntry::GetCapitalYieldPerPopChangeEmpire(int i) const
 {
-	CvAssertMsg(i < NUM_YIELD_TYPES, "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < NUM_YIELD_TYPES, "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
 	return m_piCapitalYieldPerPopChangeEmpire ? m_piCapitalYieldPerPopChangeEmpire[i] : -1;
 }
 
@@ -2789,8 +2742,8 @@ int* CvPolicyEntry::GetCapitalYieldPerPopChangeEmpireArray() const
 /// Change to yield in capital by type
 int CvPolicyEntry::GetCapitalYieldModifier(int i) const
 {
-	CvAssertMsg(i < NUM_YIELD_TYPES, "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < NUM_YIELD_TYPES, "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
 	return m_piCapitalYieldModifier ? m_piCapitalYieldModifier[i] : -1;
 }
 
@@ -2803,8 +2756,8 @@ int* CvPolicyEntry::GetCapitalYieldModifierArray() const
 /// Change to Great Work yield by type
 int CvPolicyEntry::GetGreatWorkYieldChange(int i) const
 {
-	CvAssertMsg(i < NUM_YIELD_TYPES, "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < NUM_YIELD_TYPES, "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
 	return m_piGreatWorkYieldChange ? m_piGreatWorkYieldChange[i] : -1;
 }
 
@@ -2817,8 +2770,8 @@ int* CvPolicyEntry::GetGreatWorkYieldChangeArray() const
 /// Extra specialist yield by yield type
 int CvPolicyEntry::GetSpecialistExtraYield(int i) const
 {
-	CvAssertMsg(i < NUM_YIELD_TYPES, "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < NUM_YIELD_TYPES, "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
 	return m_piSpecialistExtraYield ? m_piSpecialistExtraYield[i] : -1;
 }
 
@@ -2831,14 +2784,16 @@ int* CvPolicyEntry::GetSpecialistExtraYieldArray() const
 /// Production modifier by unit type
 int CvPolicyEntry::GetUnitCombatProductionModifiers(int i) const
 {
-	CvAssertMsg(i < GC.getNumUnitCombatClassInfos(), "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < GC.getNumUnitCombatClassInfos(), "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
 	return m_paiUnitCombatProductionModifiers ? m_paiUnitCombatProductionModifiers[i] : -1;
 }
 /// Do all Units get Promotion ID i?
-int CvPolicyEntry::IsFreePromotion(int i) const
+bool CvPolicyEntry::IsFreePromotion(int i) const
 {
-	return m_pabFreePromotion ? m_pabFreePromotion[i] : -1;
+	ASSERT_DEBUG(i < GC.getNumPromotionInfos(), "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
+	return m_pabFreePromotion[i];
 }
 
 /// Does the specific unit combat get a specific free promotion?
@@ -2890,8 +2845,8 @@ bool CvPolicyEntry::IsFaithPurchaseUnitClass(const int eUnitClass, const int eCu
 /// What is the golden age modifier for the specific yield type?
 int CvPolicyEntry::GetYieldChangesPerReligionTimes100(int iYield) const
 {
-	CvAssertMsg((YieldTypes)iYield < NUM_YIELD_TYPES, "Index out of bounds");
-	CvAssertMsg((YieldTypes)iYield > -1, "Index out of bounds");
+	ASSERT_DEBUG((YieldTypes)iYield < NUM_YIELD_TYPES, "Index out of bounds");
+	ASSERT_DEBUG((YieldTypes)iYield > -1, "Index out of bounds");
 
 	return m_piYieldChangesPerReligion ? m_piYieldChangesPerReligion[iYield] : 0;
 }
@@ -2905,143 +2860,135 @@ int* CvPolicyEntry::GetYieldChangesPerReligionTimes100Array() const
 /// Free experience by unit type
 int CvPolicyEntry::GetUnitCombatFreeExperiences(int i) const
 {
-	CvAssertMsg(i < GC.getNumUnitCombatClassInfos(), "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < GC.getNumUnitCombatClassInfos(), "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
 	return m_paiUnitCombatFreeExperiences ? m_paiUnitCombatFreeExperiences[i] : -1;
 }
 
 /// Amount of extra Culture per turn a BuildingClass provides
 int CvPolicyEntry::GetBuildingClassCultureChange(int i) const
 {
-	CvAssertMsg(i < GC.getNumBuildingClassInfos(), "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < GC.getNumBuildingClassInfos(), "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
 	return m_paiBuildingClassCultureChanges ? m_paiBuildingClassCultureChanges[i] : -1;
 }
 /// Amount of extra Security per turn a BuildingClass provides
 int CvPolicyEntry::GetBuildingClassSecurityChange(int i) const
 {
-	CvAssertMsg(i < GC.getNumBuildingClassInfos(), "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < GC.getNumBuildingClassInfos(), "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
 	return m_paiBuildingClassSecurityChanges ? m_paiBuildingClassSecurityChanges[i] : -1;
 }
 
 /// Amount of extra Culture per turn a BuildingClass provides
 int CvPolicyEntry::GetBuildingClassHappiness(int i) const
 {
-	CvAssertMsg(i < GC.getNumBuildingClassInfos(), "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < GC.getNumBuildingClassInfos(), "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
 	return m_paiBuildingClassHappiness ? m_paiBuildingClassHappiness[i] : -1;
 }
 
 /// Number of free Units provided by this Policy
 int CvPolicyEntry::GetNumFreeUnitsByClass(int i) const
 {
-	CvAssertMsg(i < GC.getNumUnitClassInfos(), "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < GC.getNumUnitClassInfos(), "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
 	return m_paiFreeUnitClasses ? m_paiFreeUnitClasses[i] : -1;
 }
 
 /// Instant tourism bump when a unit of a particular class is created
 int CvPolicyEntry::GetTourismByUnitClassCreated(int i) const
 {
-	CvAssertMsg(i < GC.getNumUnitClassInfos(), "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < GC.getNumUnitClassInfos(), "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
 	return m_paiTourismOnUnitCreation ? m_paiTourismOnUnitCreation[i] : -1;
 }
-
-/// Is this hurry type now enabled?
-//bool CvPolicyEntry::IsHurry(int i) const
-//{
-//	FAssertMsg(i < GC.getNumHurryInfos(), "Index out of bounds");
-//	FAssertMsg(i > -1, "Index out of bounds");
-//	return m_pabHurry ? m_pabHurry[i] : false;
-//}
 
 /// Modifier to Hurry cost
 int CvPolicyEntry::GetHurryModifier(int i) const
 {
-	CvAssertMsg(i < GC.getNumHurryInfos(), "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < GC.getNumHurryInfos(), "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
 	return m_paiHurryModifier ? m_paiHurryModifier[i] : -1;
 }
 
 /// Is this type of specialist now valid?
 bool CvPolicyEntry::IsSpecialistValid(int i) const
 {
-	CvAssertMsg(i < GC.getNumSpecialistInfos(), "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < GC.getNumSpecialistInfos(), "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
 	return m_pabSpecialistValid ? m_pabSpecialistValid[i] : false;
 }
 #if defined(MOD_BALANCE_CORE)
 /// Does this Policy grant a free building?
 int CvPolicyEntry::GetFreeChosenBuilding(int i) const
 {
-	CvAssertMsg(i < GC.getNumBuildingClassInfos(), "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < GC.getNumBuildingClassInfos(), "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
 	return m_paiFreeChosenBuilding ? m_paiFreeChosenBuilding[i] : -1;
 }
 #endif
 #if defined(MOD_BALANCE_CORE_POLICIES)
 int CvPolicyEntry::GetResourceFromCSAlly(int i) const
 {
-	CvAssertMsg(i < GC.getNumResourceInfos(), "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < GC.getNumResourceInfos(), "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
 	return m_piResourcefromCSAlly[i];
 }
 /// Does this Policy grant yields from citizen birth?
 int CvPolicyEntry::GetYieldFromBirth(int i) const
 {
-	CvAssertMsg(i < NUM_YIELD_TYPES, "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < NUM_YIELD_TYPES, "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
 	return m_piYieldFromBirth[i];
 }
 /// Does this Policy grant yields from citizen birth in the Capital?
 int CvPolicyEntry::GetYieldFromBirthCapital(int i) const
 {
-	CvAssertMsg(i < NUM_YIELD_TYPES, "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < NUM_YIELD_TYPES, "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
 	return m_piYieldFromBirthCapital[i];
 }
 
 int CvPolicyEntry::GetYieldFromBirthRetroactive(int i) const
 {
-	CvAssertMsg(i < NUM_YIELD_TYPES, "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < NUM_YIELD_TYPES, "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
 	return m_piYieldFromBirthRetroactive[i];
 }
 /// Does this Policy grant yields from citizen birth in the Capital?
 int CvPolicyEntry::GetYieldFromBirthCapitalRetroactive(int i) const
 {
-	CvAssertMsg(i < NUM_YIELD_TYPES, "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < NUM_YIELD_TYPES, "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
 	return m_piYieldFromBirthCapitalRetroactive[i];
 }
 /// Does this Policy grant yields from constructing buildings?
 int CvPolicyEntry::GetYieldFromConstruction(int i) const
 {
-	CvAssertMsg(i < NUM_YIELD_TYPES, "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < NUM_YIELD_TYPES, "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
 	return m_piYieldFromConstruction[i];
 }
 /// Does this Policy grant yields from constructing buildings?
 int CvPolicyEntry::GetYieldFromWorldWonderConstruction(int i) const
 {
-	CvAssertMsg(i < NUM_YIELD_TYPES, "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < NUM_YIELD_TYPES, "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
 	return m_piYieldFromWorldWonderConstruction[i];
 }
 /// Does this Policy grant yields from researching techs?
 int CvPolicyEntry::GetYieldFromTech(int i) const
 {
-	CvAssertMsg(i < NUM_YIELD_TYPES, "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < NUM_YIELD_TYPES, "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
 	return m_piYieldFromTech[i];
 }
 ///  Does this Policy grant yields from techs that were already researched?
 int CvPolicyEntry::GetYieldFromTechRetroactive(int i) const
 {
-	CvAssertMsg(i < NUM_YIELD_TYPES, "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < NUM_YIELD_TYPES, "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
 	return m_piYieldFromTechRetroactive[i];
 }
 /// Does this Policy negate expansion unhappiness?
@@ -3117,6 +3064,16 @@ int CvPolicyEntry::GetFreeWCVotes() const
 {
 	return m_iFreeWCVotes;
 }
+//Modifier to City Security?
+int CvPolicyEntry::GetSpySecurityModifier() const
+{
+	return m_iSpySecurityModifier;
+}
+// Votes per city following your state religion, times 100
+int CvPolicyEntry::GetVotesPerFollowingCityTimes100() const
+{
+	return m_iVotesPerFollowingCityTimes100;
+}
 //Influence from GP expenditure?
 int CvPolicyEntry::GetInfluenceGPExpend() const
 {
@@ -3145,15 +3102,15 @@ int CvPolicyEntry::GetPressureMod() const
 /// Does this Policy grant yields from border growth?
 int CvPolicyEntry::GetYieldFromBorderGrowth(int i) const
 {
-	CvAssertMsg(i < NUM_YIELD_TYPES, "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < NUM_YIELD_TYPES, "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
 	return m_piYieldFromBorderGrowth[i];
 }
 /// Does this Policy grant yields from expending GPs?
 int CvPolicyEntry::GetYieldGPExpend(int i) const
 {
-	CvAssertMsg(i < NUM_YIELD_TYPES, "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < NUM_YIELD_TYPES, "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
 	return m_piYieldGPExpend[i];
 }
 /// Does this Policy grant unhappiness reduction from garrisons?
@@ -3233,39 +3190,39 @@ bool CvPolicyEntry::IsNoPartisans() const
 /// Does this Policy grant yields from conquering cities?
 int CvPolicyEntry::GetConquerorYield(int i) const
 {
-	CvAssertMsg(i < NUM_YIELD_TYPES, "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < NUM_YIELD_TYPES, "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
 	return m_piConquerorYield[i];
 }
 
 /// Does this Policy grant yields from conquering cities?
 int CvPolicyEntry::GetFounderYield(int i) const
 {
-	CvAssertMsg(i < NUM_YIELD_TYPES, "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < NUM_YIELD_TYPES, "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
 	return m_piFounderYield[i];
 }
 /// Does this Policy boost yields from having your religion in the city?
 int CvPolicyEntry::GetReligionYieldMod(int i) const
 {
-	CvAssertMsg(i < NUM_YIELD_TYPES, "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < NUM_YIELD_TYPES, "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
 	return m_piReligionYieldMod[i];
 }
 /// Does this Policy boost building yields from having your religion in the city?
 int CvPolicyEntry::GetReligionBuildingYieldMod(int i, int j) const
 {
-	CvAssertMsg(i < GC.getNumBuildingClassInfos(), "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
-	CvAssertMsg(j < NUM_YIELD_TYPES, "Index out of bounds");
-	CvAssertMsg(j > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < GC.getNumBuildingClassInfos(), "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(j < NUM_YIELD_TYPES, "Index out of bounds");
+	ASSERT_DEBUG(j > -1, "Index out of bounds");
 	return m_ppiReligionBuildingYieldMod[i][j];
 }
 /// Does this Policy boost yields from golden ages?
 int CvPolicyEntry::GetGoldenAgeYieldMod(int i) const
 {
-	CvAssertMsg(i < NUM_YIELD_TYPES, "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < NUM_YIELD_TYPES, "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
 	return m_piGoldenAgeYieldMod[i];
 }
 
@@ -3279,106 +3236,106 @@ int CvPolicyEntry::GetInvestmentModifier () const
 /// Yield modifier for a specific improvement by yield type
 int CvPolicyEntry::GetImprovementYieldChanges(int i, int j) const
 {
-	CvAssertMsg(i < GC.getNumImprovementInfos(), "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
-	CvAssertMsg(j < NUM_YIELD_TYPES, "Index out of bounds");
-	CvAssertMsg(j > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < GC.getNumImprovementInfos(), "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(j < NUM_YIELD_TYPES, "Index out of bounds");
+	ASSERT_DEBUG(j > -1, "Index out of bounds");
 	return m_ppiImprovementYieldChanges[i][j];
 }
 
 /// Yield modifier for a specific plot by yield type
 int CvPolicyEntry::GetPlotYieldChanges(int i, int j) const
 {
-	CvAssertMsg(i < GC.getNumPlotInfos(), "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
-	CvAssertMsg(j < NUM_YIELD_TYPES, "Index out of bounds");
-	CvAssertMsg(j > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < GC.getNumPlotInfos(), "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(j < NUM_YIELD_TYPES, "Index out of bounds");
+	ASSERT_DEBUG(j > -1, "Index out of bounds");
 	return m_ppiPlotYieldChanges[i][j];
 }
 
 int CvPolicyEntry::GetFeatureYieldChanges(int i, int j) const
 {
-	CvAssertMsg(i < GC.getNumFeatureInfos(), "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
-	CvAssertMsg(j < NUM_YIELD_TYPES, "Index out of bounds");
-	CvAssertMsg(j > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < GC.getNumFeatureInfos(), "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(j < NUM_YIELD_TYPES, "Index out of bounds");
+	ASSERT_DEBUG(j > -1, "Index out of bounds");
 	return m_ppiFeatureYieldChanges[i][j];
 }
 
 int CvPolicyEntry::GetCityYieldFromUnimprovedFeature(int i, int j) const
 {
-	CvAssertMsg(i < GC.getNumFeatureInfos(), "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
-	CvAssertMsg(j < NUM_YIELD_TYPES, "Index out of bounds");
-	CvAssertMsg(j > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < GC.getNumFeatureInfos(), "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(j < NUM_YIELD_TYPES, "Index out of bounds");
+	ASSERT_DEBUG(j > -1, "Index out of bounds");
 	return m_ppiCityYieldFromUnimprovedFeature[i][j];
 }
 
 int CvPolicyEntry::GetUnimprovedFeatureYieldChanges(int i, int j) const
 {
-	CvAssertMsg(i < GC.getNumFeatureInfos(), "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
-	CvAssertMsg(j < NUM_YIELD_TYPES, "Index out of bounds");
-	CvAssertMsg(j > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < GC.getNumFeatureInfos(), "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(j < NUM_YIELD_TYPES, "Index out of bounds");
+	ASSERT_DEBUG(j > -1, "Index out of bounds");
 	return m_ppiUnimprovedFeatureYieldChanges[i][j];
 }
 
 int CvPolicyEntry::GetResourceYieldChanges(int i, int j) const
 {
-	CvAssertMsg(i < GC.getNumResourceInfos(), "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
-	CvAssertMsg(j < NUM_YIELD_TYPES, "Index out of bounds");
-	CvAssertMsg(j > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < GC.getNumResourceInfos(), "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(j < NUM_YIELD_TYPES, "Index out of bounds");
+	ASSERT_DEBUG(j > -1, "Index out of bounds");
 	return m_ppiResourceYieldChanges[i][j];
 }
 
 int CvPolicyEntry::GetTerrainYieldChanges(int i, int j) const
 {
-	CvAssertMsg(i < GC.getNumTerrainInfos(), "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
-	CvAssertMsg(j < NUM_YIELD_TYPES, "Index out of bounds");
-	CvAssertMsg(j > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < GC.getNumTerrainInfos(), "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(j < NUM_YIELD_TYPES, "Index out of bounds");
+	ASSERT_DEBUG(j > -1, "Index out of bounds");
 	return m_ppiTerrainYieldChanges[i][j];
 }
 
 int CvPolicyEntry::GetTradeRouteYieldChange(int i, int j) const
 {
-	CvAssertMsg(i < NUM_DOMAIN_TYPES, "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
-	CvAssertMsg(j < NUM_YIELD_TYPES, "Index out of bounds");
-	CvAssertMsg(j > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < NUM_DOMAIN_TYPES, "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(j < NUM_YIELD_TYPES, "Index out of bounds");
+	ASSERT_DEBUG(j > -1, "Index out of bounds");
 	return m_ppiTradeRouteYieldChange[i][j];
 }
 
 int CvPolicyEntry::GetSpecialistYieldChanges(int i, int j) const
 {
-	CvAssertMsg(i < GC.getNumSpecialistInfos(), "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
-	CvAssertMsg(j < NUM_YIELD_TYPES, "Index out of bounds");
-	CvAssertMsg(j > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < GC.getNumSpecialistInfos(), "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(j < NUM_YIELD_TYPES, "Index out of bounds");
+	ASSERT_DEBUG(j > -1, "Index out of bounds");
 	return m_ppiSpecialistYieldChanges[i][j];
 }
 
 int CvPolicyEntry::GetGreatPersonExpendedYield(int i, int j) const
 {
-	CvAssertMsg(i < GC.getNumGreatPersonInfos(), "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
-	CvAssertMsg(j < NUM_YIELD_TYPES, "Index out of bounds");
-	CvAssertMsg(j > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < GC.getNumGreatPersonInfos(), "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(j < NUM_YIELD_TYPES, "Index out of bounds");
+	ASSERT_DEBUG(j > -1, "Index out of bounds");
 	return m_ppiGreatPersonExpendedYield[i][j];
 }
 
 int CvPolicyEntry::GetGoldenAgeGreatPersonRateModifier(int i) const
 {
-	CvAssertMsg(i < GC.getNumGreatPersonInfos(), "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < GC.getNumGreatPersonInfos(), "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
 	return m_piGoldenAgeGreatPersonRateModifier ? m_piGoldenAgeGreatPersonRateModifier[i] : 0;
 }
 
 int CvPolicyEntry::GetYieldFromKills(int i) const
 {
-	CvAssertMsg(i < NUM_YIELD_TYPES, "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < NUM_YIELD_TYPES, "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
 	return m_piYieldFromKills ? m_piYieldFromKills[i] : 0;
 }
 
@@ -3389,8 +3346,8 @@ int* CvPolicyEntry::GetYieldFromKillsArray() const
 
 int CvPolicyEntry::GetYieldFromBarbarianKills(int i) const
 {
-	CvAssertMsg(i < NUM_YIELD_TYPES, "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < NUM_YIELD_TYPES, "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
 	return m_piYieldFromBarbarianKills ? m_piYieldFromBarbarianKills[i] : 0;
 }
 
@@ -3401,8 +3358,8 @@ int* CvPolicyEntry::GetYieldFromBarbarianKillsArray() const
 
 int CvPolicyEntry::GetYieldChangeTradeRoute(int i) const
 {
-	CvAssertMsg(i < NUM_YIELD_TYPES, "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < NUM_YIELD_TYPES, "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
 	return m_piYieldChangeTradeRoute ? m_piYieldChangeTradeRoute[i] : 0;
 }
 
@@ -3413,8 +3370,8 @@ int* CvPolicyEntry::GetYieldChangeTradeRouteArray() const
 
 int CvPolicyEntry::GetYieldChangesNaturalWonder(int i) const
 {
-	CvAssertMsg(i < NUM_YIELD_TYPES, "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < NUM_YIELD_TYPES, "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
 	return m_piYieldChangesNaturalWonder ? m_piYieldChangesNaturalWonder[i] : 0;
 }
 
@@ -3425,8 +3382,8 @@ int* CvPolicyEntry::GetYieldChangesNaturalWonderArray() const
 
 int CvPolicyEntry::GetYieldChangeWorldWonder(int i) const
 {
-	CvAssertMsg(i < NUM_YIELD_TYPES, "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < NUM_YIELD_TYPES, "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
 	return m_piYieldChangeWorldWonder ? m_piYieldChangeWorldWonder[i] : 0;
 }
 
@@ -3437,8 +3394,8 @@ int* CvPolicyEntry::GetYieldChangeWorldWonderArray() const
 
 int CvPolicyEntry::GetYieldFromMinorDemand(int i) const
 {
-	CvAssertMsg(i < NUM_YIELD_TYPES, "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < NUM_YIELD_TYPES, "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
 	return m_piYieldFromMinorDemand ? m_piYieldFromMinorDemand[i] : 0;
 }
 
@@ -3449,8 +3406,8 @@ int* CvPolicyEntry::GetYieldFromMinorDemandArray() const
 
 int CvPolicyEntry::GetYieldFromWLTKD(int i) const
 {
-	CvAssertMsg(i < NUM_YIELD_TYPES, "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < NUM_YIELD_TYPES, "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
 	return m_piYieldFromWLTKD ? m_piYieldFromWLTKD[i] : 0;
 }
 
@@ -3461,8 +3418,8 @@ int* CvPolicyEntry::GetYieldFromWLTKDArray() const
 
 int CvPolicyEntry::GetArtifactYieldChanges(int i) const
 {
-	CvAssertMsg(i < NUM_YIELD_TYPES, "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < NUM_YIELD_TYPES, "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
 	return m_piArtifactYieldChanges ? m_piArtifactYieldChanges[i] : 0;
 }
 
@@ -3473,8 +3430,8 @@ int* CvPolicyEntry::GetArtifactYieldChangesArray() const
 
 int CvPolicyEntry::GetArtYieldChanges(int i) const
 {
-	CvAssertMsg(i < NUM_YIELD_TYPES, "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < NUM_YIELD_TYPES, "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
 	return m_piArtYieldChanges ? m_piArtYieldChanges[i] : 0;
 }
 
@@ -3485,8 +3442,8 @@ int* CvPolicyEntry::GetArtYieldChangesArray() const
 
 int CvPolicyEntry::GetLitYieldChanges(int i) const
 {
-	CvAssertMsg(i < NUM_YIELD_TYPES, "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < NUM_YIELD_TYPES, "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
 	return m_piLitYieldChanges ? m_piLitYieldChanges[i] : 0;
 }
 
@@ -3497,8 +3454,8 @@ int* CvPolicyEntry::GetLitYieldChangesArray() const
 
 int CvPolicyEntry::GetMusicYieldChanges(int i) const
 {
-	CvAssertMsg(i < NUM_YIELD_TYPES, "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < NUM_YIELD_TYPES, "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
 	return m_piMusicYieldChanges ? m_piMusicYieldChanges[i] : 0;
 }
 
@@ -3509,8 +3466,8 @@ int* CvPolicyEntry::GetMusicYieldChangesArray() const
 
 int CvPolicyEntry::GetRelicYieldChanges(int i) const
 {
-	CvAssertMsg(i < NUM_YIELD_TYPES, "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < NUM_YIELD_TYPES, "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
 	return m_piRelicYieldChanges ? m_piRelicYieldChanges[i] : 0;
 }
 
@@ -3521,8 +3478,8 @@ int* CvPolicyEntry::GetRelicYieldChangesArray() const
 
 int CvPolicyEntry::GetFilmYieldChanges(int i) const
 {
-	CvAssertMsg(i < NUM_YIELD_TYPES, "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < NUM_YIELD_TYPES, "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
 	return m_piFilmYieldChanges ? m_piFilmYieldChanges[i] : 0;
 }
 
@@ -3533,8 +3490,8 @@ int* CvPolicyEntry::GetFilmYieldChangesArray() const
 
 int CvPolicyEntry::GetYieldFromNonSpecialistCitizens(int i) const
 {
-	CvAssertMsg(i < NUM_YIELD_TYPES, "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < NUM_YIELD_TYPES, "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
 	return m_piYieldFromNonSpecialistCitizens ? m_piYieldFromNonSpecialistCitizens[i] : 0;
 }
 
@@ -3544,8 +3501,8 @@ int* CvPolicyEntry::GetYieldFromNonSpecialistCitizensArray() const
 }
 int CvPolicyEntry::GetYieldModifierFromGreatWorks(int i) const
 {
-	CvAssertMsg(i < NUM_YIELD_TYPES, "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < NUM_YIELD_TYPES, "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
 	return m_piYieldModifierFromGreatWorks ? m_piYieldModifierFromGreatWorks[i] : 0;
 }
 
@@ -3556,8 +3513,8 @@ int* CvPolicyEntry::GetYieldModifierFromGreatWorksArray() const
 
 int CvPolicyEntry::GetYieldModifierFromActiveSpies(int i) const
 {
-	CvAssertMsg(i < NUM_YIELD_TYPES, "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < NUM_YIELD_TYPES, "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
 	return m_piYieldModifierFromActiveSpies ? m_piYieldModifierFromActiveSpies[i] : 0;
 }
 
@@ -3568,14 +3525,38 @@ int* CvPolicyEntry::GetYieldModifierFromActiveSpiesArray() const
 
 int CvPolicyEntry::GetYieldFromDelegateCount(int i) const
 {
-	CvAssertMsg(i < NUM_YIELD_TYPES, "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < NUM_YIELD_TYPES, "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
 	return m_piYieldFromDelegateCount ? m_piYieldFromDelegateCount[i] : 0;
 }
 
 int* CvPolicyEntry::GetYieldFromDelegateCountArray() const
 {
 	return m_piYieldFromDelegateCount;
+}
+
+int CvPolicyEntry::GetYieldFromXMilitaryUnits(int i) const
+{
+	ASSERT_DEBUG(i < NUM_YIELD_TYPES, "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
+	return m_piYieldFromXMilitaryUnits ? m_piYieldFromXMilitaryUnits[i] : 0;
+}
+
+int* CvPolicyEntry::GetYieldFromXMilitaryUnitsArray() const
+{
+	return m_piYieldFromXMilitaryUnits;
+}
+
+int CvPolicyEntry::GetYieldPerCityOverStrengthThreshold(int i) const
+{
+	ASSERT_DEBUG(i < NUM_YIELD_TYPES, "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
+	return m_piYieldPerCityOverStrengthThreshold ? m_piYieldPerCityOverStrengthThreshold[i] : 0;
+}
+
+int* CvPolicyEntry::GetYieldPerCityOverStrengthThresholdArray() const
+{
+	return m_piYieldPerCityOverStrengthThreshold;
 }
 
 int CvPolicyEntry::GetMissionInfluenceModifier() const
@@ -3617,59 +3598,59 @@ bool CvPolicyEntry::IsCSResourcesForMonopolies() const
 /// Yield modifier for a specific BuildingClass by yield type
 int CvPolicyEntry::GetBuildingClassYieldModifiers(int i, int j) const
 {
-	CvAssertMsg(i < GC.getNumBuildingClassInfos(), "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
-	CvAssertMsg(j < NUM_YIELD_TYPES, "Index out of bounds");
-	CvAssertMsg(j > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < GC.getNumBuildingClassInfos(), "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(j < NUM_YIELD_TYPES, "Index out of bounds");
+	ASSERT_DEBUG(j > -1, "Index out of bounds");
 	return m_ppiBuildingClassYieldModifiers[i][j];
 }
 
 /// Yield change for a specific BuildingClass by yield type
 int CvPolicyEntry::GetBuildingClassYieldChanges(int i, int j) const
 {
-	CvAssertMsg(i < GC.getNumBuildingClassInfos(), "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
-	CvAssertMsg(j < NUM_YIELD_TYPES, "Index out of bounds");
-	CvAssertMsg(j > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < GC.getNumBuildingClassInfos(), "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(j < NUM_YIELD_TYPES, "Index out of bounds");
+	ASSERT_DEBUG(j > -1, "Index out of bounds");
 	return m_ppiBuildingClassYieldChanges[i][j];
 }
 
 /// Production modifier for a specific BuildingClass
 int CvPolicyEntry::GetBuildingClassProductionModifier(int i) const
 {
-	CvAssertMsg(i < GC.getNumBuildingClassInfos(), "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < GC.getNumBuildingClassInfos(), "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
 	return m_paiBuildingClassProductionModifiers[i];
 }
 /// Production modifier for a specific UnitClass
 int CvPolicyEntry::GetUnitClassProductionModifiers(int i) const
 {
-	CvAssertMsg(i < GC.getNumUnitClassInfos(), "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < GC.getNumUnitClassInfos(), "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
 	return m_paiUnitClassProductionModifiers[i];
 }
 
 /// Tourism modifier for a specific BuildingClass
 int CvPolicyEntry::GetBuildingClassTourismModifier(int i) const
 {
-	CvAssertMsg(i < GC.getNumBuildingClassInfos(), "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < GC.getNumBuildingClassInfos(), "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
 	return m_paiBuildingClassTourismModifiers[i];
 }
 
 /// Find value of flavors associated with this policy
 int CvPolicyEntry::GetFlavorValue(int i) const
 {
-	CvAssertMsg(i < GC.getNumFlavorTypes(), "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < GC.getNumFlavorTypes(), "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
 	return m_piFlavorValue ? m_piFlavorValue[i] : 0;
 }
 
 /// Culture modifier for a specific improvement
 int CvPolicyEntry::GetImprovementCultureChanges(int i) const
 {
-	CvAssertMsg(i < GC.getNumImprovementInfos(), "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < GC.getNumImprovementInfos(), "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
 	return m_piImprovementCultureChange[i];
 }
 
@@ -3677,16 +3658,16 @@ int CvPolicyEntry::GetImprovementCultureChanges(int i) const
 /// Yields whenever you identify a foreign spy
 int CvPolicyEntry::GetYieldForSpyID(int i) const
 {
-	CvAssertMsg(i < NUM_YIELD_TYPES, "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < NUM_YIELD_TYPES, "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
 	return m_piYieldForSpyID[i];
 }
 
 /// Yields whenever you liberate a city
 int CvPolicyEntry::GetYieldForLiberation(int i) const
 {
-	CvAssertMsg(i < NUM_YIELD_TYPES, "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < NUM_YIELD_TYPES, "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
 	return m_piYieldForLiberation[i];
 }
 /// Influence in all CS whenever you liberate a city 
@@ -3702,8 +3683,8 @@ int CvPolicyEntry::GetExperienceForLiberation() const
 /// Building in the liberated city whenever you liberate a city
 int CvPolicyEntry::GetBuildingClassInLiberatedCities(int i) const
 {
-	CvAssertMsg(i < GC.getNumBuildingClassInfos(), "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < GC.getNumBuildingClassInfos(), "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
 	return m_piBuildingClassInLiberatedCities[i];
 }
 /// Units in the liberated city whenever you liberate a city
@@ -3714,8 +3695,8 @@ int CvPolicyEntry::GetUnitsInLiberatedCities() const
 ///Gives your corp an extra franchise for every improvement of this type
 int CvPolicyEntry::getFranchisesPerImprovement(int i) const
 {
-	CvAssertMsg(i < GC.getNumImprovementInfos(), "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < GC.getNumImprovementInfos(), "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
 	return m_piFranchisesPerImprovement[i];
 }
 ///Gives extra air slots to every city
@@ -3753,9 +3734,7 @@ CvPolicyBranchEntry::CvPolicyBranchEntry(void):
 	m_iFreeFinishingPolicy(NO_POLICY),
 	m_iFirstAdopterFreePolicies(0),
 	m_iSecondAdopterFreePolicies(0),
-#if defined(MOD_BALANCE_CORE)
 	m_iNumPolicyRequirement(0),
-#endif
 	m_piPolicyBranchDisables(NULL)
 {
 }
@@ -4002,7 +3981,6 @@ CvPlayerPolicies::CvPlayerPolicies():
 	m_pabPolicyBranchUnlocked(NULL),
 	m_pabPolicyBranchBlocked(NULL),
 	m_pabPolicyBranchFinished(NULL),
-	m_paePolicyBranchesChosen(NULL),
 	m_paePolicyBlockedBranchCheck(NULL),
 	m_pPolicyAI(NULL),
 	m_pPolicies(NULL),
@@ -4031,31 +4009,28 @@ void CvPlayerPolicies::Init(CvPolicyXMLEntries* pPolicies, CvPlayer* pPlayer, bo
 	m_pPlayer = pPlayer;
 
 	// Initialize policy status array
-	CvAssertMsg(m_pabFreePolicy==NULL, "about to leak memory, CvPlayerPolicies::m_pabFreePolicy");
+	ASSERT_DEBUG(m_pabFreePolicy==NULL, "about to leak memory, CvPlayerPolicies::m_pabFreePolicy");
 	m_pabFreePolicy = FNEW(bool[m_pPolicies->GetNumPolicies()], c_eCiv5GameplayDLL, 0);
-	CvAssertMsg(m_pabHasPolicy==NULL, "about to leak memory, CvPlayerPolicies::m_pabHasPolicy");
+	ASSERT_DEBUG(m_pabHasPolicy==NULL, "about to leak memory, CvPlayerPolicies::m_pabHasPolicy");
 	m_pabHasPolicy = FNEW(bool[m_pPolicies->GetNumPolicies()], c_eCiv5GameplayDLL, 0);
-	CvAssertMsg(m_pabHasOneShotPolicyFired==NULL, "about to leak memory, CvPlayerPolicies::m_pabHasOneShotPolicyFired");
+	ASSERT_DEBUG(m_pabHasOneShotPolicyFired==NULL, "about to leak memory, CvPlayerPolicies::m_pabHasOneShotPolicyFired");
 	m_pabHasOneShotPolicyFired = FNEW(bool[m_pPolicies->GetNumPolicies()], c_eCiv5GameplayDLL, 0);
-	CvAssertMsg(m_pabHaveOneShotFreeUnitsFired==NULL, "about to leak memory, CvPlayerPolicies::m_pabHaveOneShotFreeUnitsFired");
+	ASSERT_DEBUG(m_pabHaveOneShotFreeUnitsFired==NULL, "about to leak memory, CvPlayerPolicies::m_pabHaveOneShotFreeUnitsFired");
 	m_pabHaveOneShotFreeUnitsFired = FNEW(bool[m_pPolicies->GetNumPolicies()], c_eCiv5GameplayDLL, 0);
 
 	// Policy Branches Chosen
-	CvAssertMsg(m_pabPolicyBranchUnlocked==NULL, "about to leak memory, CvPlayerPolicies::m_pabPolicyBranchUnlocked");
+	ASSERT_DEBUG(m_pabPolicyBranchUnlocked==NULL, "about to leak memory, CvPlayerPolicies::m_pabPolicyBranchUnlocked");
 	m_pabPolicyBranchUnlocked = FNEW(bool[m_pPolicies->GetNumPolicyBranches()], c_eCiv5GameplayDLL, 0);
 
 	// Policy Branches Blocked by choices
-	CvAssertMsg(m_pabPolicyBranchBlocked==NULL, "about to leak memory, CvPlayerPolicies::m_pabPolicyBranchBlocked");
+	ASSERT_DEBUG(m_pabPolicyBranchBlocked==NULL, "about to leak memory, CvPlayerPolicies::m_pabPolicyBranchBlocked");
 	m_pabPolicyBranchBlocked = FNEW(bool[m_pPolicies->GetNumPolicyBranches()], c_eCiv5GameplayDLL, 0);
 
 	// Policy Branches finished
-	CvAssertMsg(m_pabPolicyBranchFinished==NULL, "about to leak memory, CvPlayerPolicies::m_pabPolicyBranchFinished");
+	ASSERT_DEBUG(m_pabPolicyBranchFinished==NULL, "about to leak memory, CvPlayerPolicies::m_pabPolicyBranchFinished");
 	m_pabPolicyBranchFinished = FNEW(bool[m_pPolicies->GetNumPolicyBranches()], c_eCiv5GameplayDLL, 0);
 
-	CvAssertMsg(m_paePolicyBranchesChosen==NULL, "about to leak memory, CvPlayerPolicies::m_paePolicyBranchesChosen");
-	m_paePolicyBranchesChosen = FNEW(PolicyBranchTypes[m_pPolicies->GetNumPolicyBranches()], c_eCiv5GameplayDLL, 0);
-
-	CvAssertMsg(m_paePolicyBlockedBranchCheck==NULL, "about to leak memory, CvPlayerPolicies::m_paePolicyBlockedBranchCheck");
+	ASSERT_DEBUG(m_paePolicyBlockedBranchCheck==NULL, "about to leak memory, CvPlayerPolicies::m_paePolicyBlockedBranchCheck");
 	m_paePolicyBlockedBranchCheck = FNEW(PolicyBranchTypes[m_pPolicies->GetNumPolicies()], c_eCiv5GameplayDLL, 0);
 	
 	// Create AI object
@@ -4077,7 +4052,6 @@ void CvPlayerPolicies::Uninit()
 	SAFE_DELETE_ARRAY(m_pabPolicyBranchUnlocked);
 	SAFE_DELETE_ARRAY(m_pabPolicyBranchBlocked);
 	SAFE_DELETE_ARRAY(m_pabPolicyBranchFinished);
-	SAFE_DELETE_ARRAY(m_paePolicyBranchesChosen);
 	SAFE_DELETE(m_pPolicyAI);
 	SAFE_DELETE_ARRAY(m_paePolicyBlockedBranchCheck);
 }
@@ -4101,10 +4075,7 @@ void CvPlayerPolicies::Reset()
 		m_pabPolicyBranchUnlocked[iI] = false;
 		m_pabPolicyBranchBlocked[iI] = false;
 		m_pabPolicyBranchFinished[iI] = false;
-		m_paePolicyBranchesChosen[iI] = NO_POLICY_BRANCH_TYPE;
 	}
-
-	m_iNumExtraBranches = 0;
 
 	m_eBranchPicked1 = NO_POLICY_BRANCH_TYPE;
 	m_eBranchPicked2 = NO_POLICY_BRANCH_TYPE;
@@ -4114,7 +4085,7 @@ void CvPlayerPolicies::Reset()
 	m_pPolicyAI->Reset();
 
 
-	CvAssert( m_pPolicies->GetNumPolicies() == m_pPolicies->GetNumPolicies());
+	ASSERT_DEBUG( m_pPolicies->GetNumPolicies() == m_pPolicies->GetNumPolicies());
 	//  Pre-calculate a policy to branch table so we don't do this over and over again.
 	for (iI = 0; iI < m_pPolicies->GetNumPolicies(); ++iI)
 	{
@@ -4158,7 +4129,7 @@ void CvPlayerPolicies::Reset()
 template<typename PlayerPolicies, typename Visitor>
 void CvPlayerPolicies::Serialize(PlayerPolicies& playerPolicies, Visitor& visitor)
 {
-	CvAssertMsg(playerPolicies.m_pPolicies != NULL && playerPolicies.m_pPolicies->GetNumPolicies() > 0, "Number of policies to serialize is expected to greater than 0");
+	ASSERT_DEBUG(playerPolicies.m_pPolicies != NULL && playerPolicies.m_pPolicies->GetNumPolicies() > 0, "Number of policies to serialize is expected to greater than 0");
 	const int iPolicyCount = playerPolicies.m_pPolicies->GetNumPolicies();
 	const int iPolicyBranchCount = playerPolicies.m_pPolicies->GetNumPolicyBranches();
 
@@ -4170,9 +4141,6 @@ void CvPlayerPolicies::Serialize(PlayerPolicies& playerPolicies, Visitor& visito
 	visitor(MakeConstSpan(playerPolicies.m_pabPolicyBranchUnlocked, iPolicyBranchCount));
 	visitor(MakeConstSpan(playerPolicies.m_pabPolicyBranchBlocked, iPolicyBranchCount));
 	visitor(MakeConstSpan(playerPolicies.m_pabPolicyBranchFinished, iPolicyBranchCount));
-	visitor(MakeConstSpan(playerPolicies.m_paePolicyBranchesChosen, iPolicyBranchCount));
-
-	visitor(playerPolicies.m_iNumExtraBranches);
 
 	visitor(playerPolicies.m_eBranchPicked1);
 	visitor(playerPolicies.m_eBranchPicked2);
@@ -4258,22 +4226,22 @@ void CvPlayerPolicies::UpdateModifierCache()
 /// Accessor: does a player have a policy
 bool CvPlayerPolicies::HasPolicy(PolicyTypes eIndex) const
 {
-	CvAssertMsg(eIndex >= 0, "eIndex is expected to be non-negative (invalid Index)");
-	CvAssertMsg(eIndex < GC.getNumPolicyInfos(), "eIndex is expected to be within maximum bounds (invalid Index)");
+	ASSERT_DEBUG(eIndex >= 0, "eIndex is expected to be non-negative (invalid Index)");
+	ASSERT_DEBUG(eIndex < GC.getNumPolicyInfos(), "eIndex is expected to be within maximum bounds (invalid Index)");
 	return m_pabHasPolicy[eIndex];
 }
 /// Accessor: was this policy given for free
 bool CvPlayerPolicies::IsFreePolicy(PolicyTypes eIndex) const
 {
-	CvAssertMsg(eIndex >= 0, "eIndex is expected to be non-negative (invalid Index)");
-	CvAssertMsg(eIndex < GC.getNumPolicyInfos(), "eIndex is expected to be within maximum bounds (invalid Index)");
+	ASSERT_DEBUG(eIndex >= 0, "eIndex is expected to be non-negative (invalid Index)");
+	ASSERT_DEBUG(eIndex < GC.getNumPolicyInfos(), "eIndex is expected to be within maximum bounds (invalid Index)");
 	return m_pabFreePolicy[eIndex];
 }
 /// Accessor: set whether player has a policy
 void CvPlayerPolicies::SetPolicy(PolicyTypes eIndex, bool bNewValue, bool bFree)
 {
-	CvAssertMsg(eIndex >= 0, "eIndex is expected to be non-negative (invalid Index)");
-	CvAssertMsg(eIndex < m_pPolicies->GetNumPolicies(), "eIndex is expected to be within maximum bounds (invalid Index)");
+	ASSERT_DEBUG(eIndex >= 0, "eIndex is expected to be non-negative (invalid Index)");
+	ASSERT_DEBUG(eIndex < m_pPolicies->GetNumPolicies(), "eIndex is expected to be within maximum bounds (invalid Index)");
 
 	CvPolicyEntry* pkPolicyInfo = GC.getPolicyInfo(eIndex);
 	if (pkPolicyInfo == NULL)
@@ -4373,31 +4341,31 @@ void CvPlayerPolicies::SetPolicy(PolicyTypes eIndex, bool bNewValue, bool bFree)
 /// Accessor: is a one-shot policy spent?
 bool CvPlayerPolicies::HasOneShotPolicyFired(PolicyTypes eIndex) const
 {
-	CvAssertMsg(eIndex >= 0, "eIndex is expected to be non-negative (invalid Index)");
-	CvAssertMsg(eIndex < GC.getNumPolicyInfos(), "eIndex is expected to be within maximum bounds (invalid Index)");
+	ASSERT_DEBUG(eIndex >= 0, "eIndex is expected to be non-negative (invalid Index)");
+	ASSERT_DEBUG(eIndex < GC.getNumPolicyInfos(), "eIndex is expected to be within maximum bounds (invalid Index)");
 	return m_pabHasOneShotPolicyFired[eIndex];
 }
 
 /// mark a one shot policy as spent
 void CvPlayerPolicies::SetOneShotPolicyFired(PolicyTypes eIndex, bool bFired)
 {
-	CvAssertMsg(eIndex >= 0, "eIndex is expected to be non-negative (invalid Index)");
-	CvAssertMsg(eIndex < GC.getNumPolicyInfos(), "eIndex is expected to be within maximum bounds (invalid Index)");
+	ASSERT_DEBUG(eIndex >= 0, "eIndex is expected to be non-negative (invalid Index)");
+	ASSERT_DEBUG(eIndex < GC.getNumPolicyInfos(), "eIndex is expected to be within maximum bounds (invalid Index)");
 	m_pabHasOneShotPolicyFired[eIndex] = bFired;
 }
 
 bool CvPlayerPolicies::HaveOneShotFreeUnitsFired(PolicyTypes eIndex) const
 {
-	CvAssertMsg(eIndex >= 0, "eIndex is expected to be non-negative (invalid Index)");
-	CvAssertMsg(eIndex < GC.getNumPolicyInfos(), "eIndex is expected to be within maximum bounds (invalid Index)");
+	ASSERT_DEBUG(eIndex >= 0, "eIndex is expected to be non-negative (invalid Index)");
+	ASSERT_DEBUG(eIndex < GC.getNumPolicyInfos(), "eIndex is expected to be within maximum bounds (invalid Index)");
 	return m_pabHaveOneShotFreeUnitsFired[eIndex];
 }
 
 /// mark a one shot policy as spent
 void CvPlayerPolicies::SetOneShotFreeUnitsFired(PolicyTypes eIndex, bool bFired)
 {
-	CvAssertMsg(eIndex >= 0, "eIndex is expected to be non-negative (invalid Index)");
-	CvAssertMsg(eIndex < GC.getNumPolicyInfos(), "eIndex is expected to be within maximum bounds (invalid Index)");
+	ASSERT_DEBUG(eIndex >= 0, "eIndex is expected to be non-negative (invalid Index)");
+	ASSERT_DEBUG(eIndex < GC.getNumPolicyInfos(), "eIndex is expected to be within maximum bounds (invalid Index)");
 	m_pabHaveOneShotFreeUnitsFired[eIndex] = bFired;
 }
 
@@ -4676,6 +4644,9 @@ int CvPlayerPolicies::GetNumericModifier(PolicyModifierType eType)
 				break;
 			case POLICYMOD_RIG_ELECTION_INFLUENCE_MODIFIER:
 				rtnValue += m_pPolicies->GetPolicyEntry(i)->GetRigElectionInfluenceModifier();
+				break;
+			case POLICYMOD_PASSIVE_ESPIONAGE_MODIFIER:
+				rtnValue += m_pPolicies->GetPolicyEntry(i)->GetPassiveEspionageBonusModifier();
 				break;
 			case POLICYMOD_MILITARY_UNIT_GIFT_INFLUENCE:
 				rtnValue += m_pPolicies->GetPolicyEntry(i)->GetMilitaryUnitGiftExtraInfluence();
@@ -4989,7 +4960,7 @@ std::vector<BuildingTypes> CvPlayerPolicies::GetFreeBuildingsOnConquest()
 		{
 			CvPolicyEntry *pPolicy = m_pPolicies->GetPolicyEntry(i);
 			BuildingTypes eFreeBuilding = pPolicy->GetFreeBuildingOnConquest();
-			if (eFreeBuilding)
+			if (eFreeBuilding != NO_BUILDING)
 			{
 				freeBuildings.push_back(eFreeBuilding);
 			}
@@ -5143,8 +5114,8 @@ int CvPlayerPolicies::GetNextPolicyCost()
 /// Can we adopt this policy?
 bool CvPlayerPolicies::CanAdoptPolicy(PolicyTypes eIndex, bool bIgnoreCost) const
 {
-	CvAssertMsg(eIndex >= 0, "eIndex is expected to be non-negative (invalid Index)");
-	CvAssertMsg(eIndex < GC.getNumPolicyInfos(), "eIndex is expected to be within maximum bounds (invalid Index)");
+	ASSERT_DEBUG(eIndex >= 0, "eIndex is expected to be non-negative (invalid Index)");
+	ASSERT_DEBUG(eIndex < GC.getNumPolicyInfos(), "eIndex is expected to be within maximum bounds (invalid Index)");
 
 	CvPolicyEntry* pkPolicyEntry = GC.getPolicyInfo(eIndex);
 	if(pkPolicyEntry == NULL)
@@ -5195,16 +5166,36 @@ bool CvPlayerPolicies::CanAdoptPolicy(PolicyTypes eIndex, bool bIgnoreCost) cons
 	{
 		if (pkPolicyBranchInfo->IsPurchaseByLevel())
 		{
-			// If below level 1, can't have as many of this level as of the previous one
+			// If above level 1, can't have as many of this level as of the previous one
 			int iLevel = pkPolicyEntry->GetLevel();
+			int iPoliciesOfThisLevel = GetNumTenetsOfLevel(eBranch, iLevel) + 1 /* For the policy we're adding here */;
 			if (iLevel > 1)
 			{
-				int iPoliciesOfThisLevel = GetNumTenetsOfLevel(eBranch, iLevel) + 1 /* For the policy we're adding here */;
 				int iPoliciesOfPreviousLevel = GetNumTenetsOfLevel(eBranch, iLevel - 1);
 				if (iPoliciesOfThisLevel >= iPoliciesOfPreviousLevel)
 				{
 					return false;
 				}
+			}
+			// Number of policies of each level is limited by the UI for human players, so to make it fair it's also limited for the AI
+			int iMaxNumPolicies = 0;
+			switch (iLevel)
+			{
+			case 1:
+				iMaxNumPolicies = GD_INT_GET(MAX_NUM_TENETS_LEVEL_1);
+				break;
+			case 2:
+				iMaxNumPolicies = GD_INT_GET(MAX_NUM_TENETS_LEVEL_2);
+				break;
+			case 3:
+				iMaxNumPolicies = GD_INT_GET(MAX_NUM_TENETS_LEVEL_3);
+				break;
+			default:
+				iMaxNumPolicies = 999;
+			}
+			if (iPoliciesOfThisLevel > iMaxNumPolicies)
+			{
+				return false;
 			}
 		}
 	}
@@ -5252,23 +5243,18 @@ bool CvPlayerPolicies::CanAdoptPolicy(PolicyTypes eIndex, bool bIgnoreCost) cons
 	}
 
 	// Disabled by another Policy?
-	for(int iPolicyLoop = 0; iPolicyLoop < GetPolicies()->GetNumPolicies(); iPolicyLoop++)
+	for (int iI = 0; iI < GC.getNumPolicyInfos(); iI++)
 	{
-		const PolicyTypes eDisablePolicy =static_cast<PolicyTypes>(iPolicyLoop);
+		const PolicyTypes ePolicy = static_cast<PolicyTypes>(iI);
+		CvPolicyEntry* pkPolicyInfo = GC.getPolicyInfo(ePolicy);
+		if (!pkPolicyInfo)
+			continue;
 
-		CvPolicyEntry* pkDisablePolicyInfo = GC.getPolicyInfo(eDisablePolicy);
-		if(pkDisablePolicyInfo)
+		if (HasPolicy(ePolicy))
 		{
-			if(HasPolicy(eDisablePolicy))
-			{
-				for(int iI = 0; iI < /*6*/ GD_INT_GET(NUM_AND_TECH_PREREQS); iI++)
-				{
-					if(pkDisablePolicyInfo->GetPolicyDisables(iI) == eIndex)
-					{
-						return false;
-					}
-				}
-			}
+			set<int> siPolicyDisables = pkPolicyInfo->GetPolicyDisables();
+			if (siPolicyDisables.find(eIndex) != siPolicyDisables.end())
+				return false;
 		}
 	}
 
@@ -5300,14 +5286,14 @@ bool CvPlayerPolicies::CanAdoptPolicy(PolicyTypes eIndex, bool bIgnoreCost) cons
 			}
 		}
 	}
-	
-#if defined(MOD_EVENTS_IDEOLOGIES)
-	if (MOD_EVENTS_IDEOLOGIES && pkPolicyEntry->GetLevel() > 0) {
-		if (GAMEEVENTINVOKE_TESTALL(GAMEEVENT_PlayerCanAdoptTenet, m_pPlayer->GetID(), eIndex) == GAMEEVENTRETURN_FALSE) {
+
+	if (MOD_EVENTS_IDEOLOGIES && pkPolicyEntry->GetLevel() > 0)
+	{
+		if (GAMEEVENTINVOKE_TESTALL(GAMEEVENT_PlayerCanAdoptTenet, m_pPlayer->GetID(), eIndex) == GAMEEVENTRETURN_FALSE)
+		{
 			return false;
 		}
 	}
-#endif
 
 	return true;
 }
@@ -5417,7 +5403,6 @@ bool CvPlayerPolicies::CanUnlockPolicyBranch(PolicyBranchTypes eBranchType)
 		// Must be in the proper Era
 		if(ePrereqEra != NO_ERA)
 		{
-#if defined(MOD_BALANCE_CORE_POLICIES)
 			//If we've finished a policy branch, unlock the next set.
 			// Set Policies in this branch as blocked
 			bool bCanUnlockEarly = false;
@@ -5436,7 +5421,7 @@ bool CvPlayerPolicies::CanUnlockPolicyBranch(PolicyBranchTypes eBranchType)
 			}
 			//Using a system of numbers instead? Okay.
 			int iNumPolicies = GetPlayer()->GetPlayerPolicies()->GetNumPoliciesOwned(true, true);
-			if(iNumPolicies >= pkBranchEntry->GetNumPolicyRequirement())
+			if(pkBranchEntry->GetNumPolicyRequirement() >= 0 && iNumPolicies >= pkBranchEntry->GetNumPolicyRequirement())
 			{
 				bCanUnlockEarly = true;
 			}
@@ -5445,12 +5430,6 @@ bool CvPlayerPolicies::CanUnlockPolicyBranch(PolicyBranchTypes eBranchType)
 			{
 				return false;
 			}
-#else
-			if(GET_TEAM(GetPlayer()->getTeam()).GetCurrentEra() < ePrereqEra)
-			{
-				return false;
-			}
-#endif
 		}
 	}
 
@@ -5480,16 +5459,16 @@ bool CvPlayerPolicies::CanUnlockPolicyBranch(PolicyBranchTypes eBranchType)
 /// Accessor: has a player unlocked eBranchType to pick Policies from?
 bool CvPlayerPolicies::IsPolicyBranchUnlocked(PolicyBranchTypes eBranchType) const
 {
-	CvAssertMsg(eBranchType >= 0, "eIndex is expected to be non-negative (invalid Index)");
-	CvAssertMsg(eBranchType < m_pPolicies->GetNumPolicyBranches(), "eIndex is expected to be within maximum bounds (invalid Index)");
+	ASSERT_DEBUG(eBranchType >= 0, "eIndex is expected to be non-negative (invalid Index)");
+	ASSERT_DEBUG(eBranchType < m_pPolicies->GetNumPolicyBranches(), "eIndex is expected to be within maximum bounds (invalid Index)");
 	return m_pabPolicyBranchUnlocked[eBranchType];
 }
 
 /// Accessor: sets that a player has (or hasn't) unlocked eBranchType to pick Policies from
 void CvPlayerPolicies::SetPolicyBranchUnlocked(PolicyBranchTypes eBranchType, bool bNewValue, bool bRevolution)
 {
-	CvAssertMsg(eBranchType >= 0, "eIndex is expected to be non-negative (invalid Index)");
-	CvAssertMsg(eBranchType < m_pPolicies->GetNumPolicyBranches(), "eIndex is expected to be within maximum bounds (invalid Index)");
+	ASSERT_DEBUG(eBranchType >= 0, "eIndex is expected to be non-negative (invalid Index)");
+	ASSERT_DEBUG(eBranchType < m_pPolicies->GetNumPolicyBranches(), "eIndex is expected to be within maximum bounds (invalid Index)");
 
 	if (IsPolicyBranchUnlocked(eBranchType) != bNewValue)
 	{
@@ -5569,12 +5548,11 @@ void CvPlayerPolicies::SetPolicyBranchUnlocked(PolicyBranchTypes eBranchType, bo
 		}
 
 		m_pabPolicyBranchUnlocked[eBranchType] = bNewValue;
-#if defined(MOD_BALANCE_CORE)
+
 		if (!bRevolution)
 		{
 			GAMEEVENTINVOKE_HOOK(GAMEEVENT_IdeologyAdopted, m_pPlayer->GetID(), eBranchType);
 		}
-#endif
 	}
 
 	//if it's an ideology, remember the turn we first chose one
@@ -5584,7 +5562,10 @@ void CvPlayerPolicies::SetPolicyBranchUnlocked(PolicyBranchTypes eBranchType, bo
 		PolicyBranchTypes eAutocracyBranch = (PolicyBranchTypes)GD_INT_GET(POLICY_BRANCH_AUTOCRACY);
 		PolicyBranchTypes eOrderBranch = (PolicyBranchTypes)GD_INT_GET(POLICY_BRANCH_ORDER);
 		if (eFreedomBranch == eBranchType || eAutocracyBranch == eBranchType || eOrderBranch == eBranchType)
+		{
 			m_pPlayer->GetCulture()->SetTurnIdeologyAdopted(GC.getGame().getGameTurn());
+			m_pPlayer->CompleteAccomplishment(ACCOMPLISHMENT_CHOOSE_IDEOLOGY);
+		}
 	}
 }
 
@@ -5725,8 +5706,8 @@ void CvPlayerPolicies::DoSwitchToPolicyBranch(PolicyBranchTypes eBranchType)
 /// Accessor: is eBranchType blocked because of branch choices?
 void CvPlayerPolicies::SetPolicyBranchBlocked(PolicyBranchTypes eBranchType, bool bValue)
 {
-	CvAssertMsg(eBranchType >= 0, "eIndex is expected to be non-negative (invalid Index)");
-	CvAssertMsg(eBranchType < m_pPolicies->GetNumPolicyBranches(), "eIndex is expected to be within maximum bounds (invalid Index)");
+	ASSERT_DEBUG(eBranchType >= 0, "eIndex is expected to be non-negative (invalid Index)");
+	ASSERT_DEBUG(eBranchType < m_pPolicies->GetNumPolicyBranches(), "eIndex is expected to be within maximum bounds (invalid Index)");
 
 	CvPolicyBranchEntry* pkPolicyBranchEntry = GC.getPolicyBranchInfo(eBranchType);
 	if(pkPolicyBranchEntry)
@@ -5735,32 +5716,27 @@ void CvPlayerPolicies::SetPolicyBranchBlocked(PolicyBranchTypes eBranchType, boo
 		{
 			m_pabPolicyBranchBlocked[eBranchType] = bValue;
 
-#if defined(MOD_BALANCE_CORE)
 			UpdateModifierCache();
-#endif
 
 			int iPolicyEffectChange = bValue ? -1 : 1;
 
-			if(iPolicyEffectChange != 0)
+			// Set Policies in this branch as blocked
+			for (int iPolicyLoop = 0; iPolicyLoop < GetPolicies()->GetNumPolicies(); iPolicyLoop++)
 			{
-				// Set Policies in this branch as blocked
-				for(int iPolicyLoop = 0; iPolicyLoop < GetPolicies()->GetNumPolicies(); iPolicyLoop++)
+				const PolicyTypes ePolicy = static_cast<PolicyTypes>(iPolicyLoop);
+				CvPolicyEntry* pkPolicyInfo = GC.getPolicyInfo(ePolicy);
+				if (pkPolicyInfo)
 				{
-					const PolicyTypes ePolicy = static_cast<PolicyTypes>(iPolicyLoop);
-					CvPolicyEntry* pkPolicyInfo = GC.getPolicyInfo(ePolicy);
-					if(pkPolicyInfo)
+					if (eBranchType == (PolicyBranchTypes) pkPolicyInfo->GetPolicyBranchType() || // Branch type matches
+							pkPolicyBranchEntry->GetFreePolicy() == ePolicy || // Free Policy with this branch
+							pkPolicyBranchEntry->GetFreeFinishingPolicy() == ePolicy)
 					{
-						if(eBranchType == (PolicyBranchTypes) pkPolicyInfo->GetPolicyBranchType() ||	// Branch type matches
-						        pkPolicyBranchEntry->GetFreePolicy() == ePolicy ||		// Free Policy with this branch
-						        pkPolicyBranchEntry->GetFreeFinishingPolicy() == ePolicy)
-						{
-							//ChangePolicyBlockedCount(ePolicy, iPolicyEffectChange);
+						// ChangePolicyBlockedCount(ePolicy, iPolicyEffectChange);
 
-							// Activate/Deactivate Policies
-							if(HasPolicy(ePolicy))
-							{
-								GetPlayer()->processPolicies(ePolicy, iPolicyEffectChange);
-							}
+						// Activate/Deactivate Policies
+						if (HasPolicy(ePolicy))
+						{
+							GetPlayer()->processPolicies(ePolicy, iPolicyEffectChange);
 						}
 					}
 				}
@@ -5772,21 +5748,21 @@ void CvPlayerPolicies::SetPolicyBranchBlocked(PolicyBranchTypes eBranchType, boo
 /// Accessor: is eBranchType blocked because of branch choices?
 bool CvPlayerPolicies::IsPolicyBranchBlocked(PolicyBranchTypes eBranchType) const
 {
-	CvAssertMsg(eBranchType >= 0, "eIndex is expected to be non-negative (invalid Index)");
-	CvAssertMsg(eBranchType < m_pPolicies->GetNumPolicyBranches(), "eIndex is expected to be within maximum bounds (invalid Index)");
+	ASSERT_DEBUG(eBranchType >= 0, "eIndex is expected to be non-negative (invalid Index)");
+	ASSERT_DEBUG(eBranchType < m_pPolicies->GetNumPolicyBranches(), "eIndex is expected to be within maximum bounds (invalid Index)");
 	return m_pabPolicyBranchBlocked[eBranchType];
 }
 
-/// Accessor: is eType blocked because of  choices?
+/// Accessor: is eType blocked because of choices?
 bool CvPlayerPolicies::IsPolicyBlocked(PolicyTypes eType) const
 {
-	CvAssertMsg(eType >= 0, "eIndex is expected to be non-negative (invalid Index)");
-	CvAssertMsg(eType < m_pPolicies->GetNumPolicies(), "eIndex is expected to be within maximum bounds (invalid Index)");
+	ASSERT_DEBUG(eType >= 0, "eIndex is expected to be non-negative (invalid Index)");
+	ASSERT_DEBUG(eType < m_pPolicies->GetNumPolicies(), "eIndex is expected to be within maximum bounds (invalid Index)");
 
 	// Get the policy branch we have to check.
 	PolicyBranchTypes eBranch = m_paePolicyBlockedBranchCheck[eType];
 	if (eBranch == NO_POLICY_BRANCH_TYPE)
-		return false;	// Policy has no branch
+		return false; // Policy has no branch
 
 	return IsPolicyBranchBlocked(eBranch);
 }
@@ -5814,95 +5790,79 @@ bool CvPlayerPolicies::HasAdoptedIdeology(PolicyBranchTypes eIdeology) const
 void CvPlayerPolicies::DoSwitchIdeologies(PolicyBranchTypes eNewBranchType)
 {
 	PolicyBranchTypes eOldBranchType = GetLateGamePolicyTree();
-	CvAssertMsg (eOldBranchType != eNewBranchType && eNewBranchType != NO_POLICY_BRANCH_TYPE && eOldBranchType != NO_POLICY_BRANCH_TYPE, "Illegal time for Ideology change");
+	ASSERT_DEBUG(eOldBranchType != eNewBranchType && eNewBranchType != NO_POLICY_BRANCH_TYPE && eOldBranchType != NO_POLICY_BRANCH_TYPE, "Illegal time for Ideology change");
 
-#if defined(MOD_BALANCE_CORE)
-	GAMEEVENTINVOKE_HOOK(GAMEEVENT_IdeologySwitched, m_pPlayer->GetID(), eOldBranchType, eNewBranchType);
-#endif
+	GAMEEVENTINVOKE_HOOK(GAMEEVENT_IdeologySwitched, GetPlayer()->GetID(), eOldBranchType, eNewBranchType);
 
 	int iOldBranchTenets = GetNumPoliciesOwnedInBranch(eOldBranchType);
 	int iNewBranchTenets = max(0, iOldBranchTenets - /*2 in CP, 5 in VP*/ GD_INT_GET(SWITCH_POLICY_BRANCHES_TENETS_LOST));
 
 	ClearPolicyBranch(eOldBranchType);
 	SetPolicyBranchUnlocked(eOldBranchType, false, false);
-
 	SetPolicyBranchUnlocked(eNewBranchType, true, true /*bRevolution*/);
-	m_pPlayer->GetCulture()->DoPublicOpinion();
-	m_pPlayer->GetCulture()->SetTurnIdeologySwitch(GC.getGame().getGameTurn());
-	m_pPlayer->setJONSCulture(0);
-	m_pPlayer->ChangeNumFreeTenets(iNewBranchTenets, false /*bCountAsFreePolicies*/);
+	GetPlayer()->GetCulture()->DoPublicOpinion();
+	GetPlayer()->GetCulture()->SetTurnIdeologySwitch(GC.getGame().getGameTurn());
+	GetPlayer()->setJONSCulture(0);
+	GetPlayer()->ChangeNumFreeTenets(iNewBranchTenets, false /*bCountAsFreePolicies*/);
 
 	ICvEngineScriptSystem1* pkScriptSystem = gDLL->GetScriptSystem();
-	if(pkScriptSystem)
+	if (pkScriptSystem)
 	{
 		CvLuaArgsHandle args;
-		args->Push(m_pPlayer->GetID());
+		args->Push(GetPlayer()->GetID());
 		args->Push(eNewBranchType);
 
 		bool bResult = false;
 		LuaSupport::CallHook(pkScriptSystem, "PlayerAdoptPolicyBranch", args.get(), bResult);
 	}
 
-	//Buildings enabled by the old policy branch should be destroyed.
+	// Buildings enabled by the old policy branch should be destroyed.
 	int iLoop = 0;
-	for (CvCity* pLoopCity = m_pPlayer->firstCity(&iLoop); pLoopCity != NULL; pLoopCity = m_pPlayer->nextCity(&iLoop))
+	for (CvCity* pLoopCity = GetPlayer()->firstCity(&iLoop); pLoopCity != NULL; pLoopCity = GetPlayer()->nextCity(&iLoop))
 	{
-		if (pLoopCity != NULL)
+		for (int iI = 0; iI < GC.getNumBuildingClassInfos(); iI++)
 		{
-			CvPlayer &kCityPlayer = GET_PLAYER(pLoopCity->getOwner());
-			for (int iBuildingClassLoop = 0; iBuildingClassLoop < GC.getNumBuildingClassInfos(); iBuildingClassLoop++)
-			{
-				const CvCivilizationInfo& playerCivilizationInfo = kCityPlayer.getCivilizationInfo();
-				BuildingTypes eBuilding = NO_BUILDING;
+			BuildingClassTypes eBuildingClass = static_cast<BuildingClassTypes>(iI);
+			BuildingTypes eBuilding = pLoopCity->GetBuildingTypeFromClass(eBuildingClass);
+			if (eBuilding == NO_BUILDING)
+				continue;
 
-				if (MOD_BUILDINGS_THOROUGH_PREREQUISITES)
+			CvBuildingEntry* pkBuildingInfo = GC.getBuildingInfo(eBuilding);
+			if (pkBuildingInfo)
+			{
+				bool bApplies = false;
+				if (pkBuildingInfo->GetPolicyBranchType() == eOldBranchType)
 				{
-					eBuilding = pLoopCity->GetCityBuildings()->GetBuildingTypeFromClass((BuildingClassTypes)iBuildingClassLoop);
+					bApplies = true;
 				}
-				else
+				else if (pkBuildingInfo->GetPolicyType() != NO_POLICY)
 				{
-					eBuilding = (BuildingTypes)playerCivilizationInfo.getCivilizationBuildings((BuildingClassTypes)iBuildingClassLoop);
-				}
-				if (eBuilding != NO_BUILDING)
-				{
-					CvBuildingEntry *pkBuilding = GC.getBuildingInfo(eBuilding);
-					if (pkBuilding)
+					CvPolicyEntry* pkPolicyInfo = GC.getPolicyInfo(pkBuildingInfo->GetPolicyType());
+					if (pkPolicyInfo)
 					{
-						bool bApplies = false;
-						if (pkBuilding->GetPolicyBranchType() == eOldBranchType)
+						// This policy belongs to our branch
+						if (pkPolicyInfo->GetPolicyBranchType() == eOldBranchType)
 						{
 							bApplies = true;
 						}
-						else if (pkBuilding->GetPolicyType() != NO_POLICY)
-						{
-							CvPolicyEntry* pkLoopPolicyInfo = GC.getPolicyInfo(pkBuilding->GetPolicyType());
-							if (pkLoopPolicyInfo)
-							{
-								// This policy belongs to our branch
-								if (pkLoopPolicyInfo->GetPolicyBranchType() == eOldBranchType)
-								{
-									bApplies = true;
-								}
-							}
-						}
-						if (bApplies && pLoopCity->GetCityBuildings()->GetNumBuilding(eBuilding) > 0)
-						{
-							pLoopCity->GetCityBuildings()->SetNumRealBuilding(eBuilding, 0);
+					}
+				}
 
-							//release the WW back into the wild.
-							if (pkBuilding->GetBuildingClassInfo().getMaxGlobalInstances() != -1)
-							{
-								GC.getGame().decrementBuildingClassCreatedCount((BuildingClassTypes)iBuildingClassLoop);
-							}
-						}
+				if (bApplies && pLoopCity->GetCityBuildings()->GetNumRealBuilding(eBuilding) > 0)
+				{
+					pLoopCity->GetCityBuildings()->SetNumRealBuilding(eBuilding, 0);
+
+					// Release the WW back into the wild.
+					if (isWorldWonderClass(pkBuildingInfo->GetBuildingClassInfo()))
+					{
+						GC.getGame().decrementBuildingClassCreatedCount(eBuildingClass);
 					}
 				}
 			}
 		}
 	}
 
-
-	if (GC.getGame().getActivePlayer() == m_pPlayer->GetID())
+	if (GC.getGame().getActivePlayer() == GetPlayer()->GetID())
 	{
 		DLLUI->setDirty(Policies_DIRTY_BIT, true);
 	}
@@ -5949,59 +5909,75 @@ int CvPlayerPolicies::GetNumPolicyBranchesFinished() const
 /// Accessor: is eBranchType finished?
 void CvPlayerPolicies::SetPolicyBranchFinished(PolicyBranchTypes eBranchType, bool bValue)
 {
-	CvAssertMsg(eBranchType >= 0, "eIndex is expected to be non-negative (invalid Index)");
-	CvAssertMsg(eBranchType < m_pPolicies->GetNumPolicyBranches(), "eIndex is expected to be within maximum bounds (invalid Index)");
+	ASSERT_DEBUG(eBranchType >= 0, "eIndex is expected to be non-negative (invalid Index)");
+	ASSERT_DEBUG(eBranchType < m_pPolicies->GetNumPolicyBranches(), "eIndex is expected to be within maximum bounds (invalid Index)");
 
 	if (bValue != IsPolicyBranchFinished(eBranchType))
 	{
 		m_pabPolicyBranchFinished[eBranchType] = bValue;
 
-		if (MOD_API_ACHIEVEMENTS)
+		if (bValue)
 		{
-			bool bUsingXP1Scenario3 = gDLL->IsModActivated(CIV5_XP1_SCENARIO3_MODID);
+			// Award an accomplishment for completing a Policy Branch.
+			CvPolicyBranchEntry* pkPolicyBranchInfo = GC.getPolicyBranchInfo(eBranchType);
+			EraTypes ePrereqEra = (EraTypes)pkPolicyBranchInfo->GetEraPrereq();
+			EraTypes eAncientEra = (EraTypes)GD_INT_GET(ANCIENT_ERA);
+			EraTypes eMedievalEra = (EraTypes)GD_INT_GET(MEDIEVAL_ERA);
+			EraTypes eIndustrialEra = (EraTypes)GD_INT_GET(INDUSTRIAL_ERA);
+			if (ePrereqEra == NO_ERA || ePrereqEra == eAncientEra)
+				m_pPlayer->CompleteAccomplishment(ACCOMPLISHMENT_POLICY_BRANCH_ANCIENT);
+			else if (ePrereqEra == eMedievalEra)
+				m_pPlayer->CompleteAccomplishment(ACCOMPLISHMENT_POLICY_BRANCH_MEDIEVAL);
+			else if (ePrereqEra == eIndustrialEra)
+				m_pPlayer->CompleteAccomplishment(ACCOMPLISHMENT_POLICY_BRANCH_INDUSTRIAL);
 
-			//Achievements for fulfilling branches
-			if (!GC.getGame().isGameMultiPlayer() && GET_PLAYER(GC.getGame().getActivePlayer()).isHuman())
+			if (MOD_API_ACHIEVEMENTS)
 			{
-				//Must not be playing smokey skies scenario.
-				if (m_pPlayer->GetID() == GC.getGame().getActivePlayer() && !bUsingXP1Scenario3)
+				bool bUsingXP1Scenario3 = gDLL->IsModActivated(CIV5_XP1_SCENARIO3_MODID);
+
+				//Achievements for fulfilling branches
+				if (!GC.getGame().isGameMultiPlayer() && GET_PLAYER(GC.getGame().getActivePlayer()).isHuman())
 				{
-					switch (eBranchType)
+					//Must not be playing smokey skies scenario.
+					if (m_pPlayer->GetID() == GC.getGame().getActivePlayer() && !bUsingXP1Scenario3)
 					{
-					case NO_POLICY_BRANCH_TYPE:
-						UNREACHABLE(); // It would be a logic error to complete `NO_POLICY_BRANCH_TYPE`.
-					case 0:
-						gDLL->UnlockAchievement(ACHIEVEMENT_POLICY_TRADITION);
-						break;
-					case 1:
-						gDLL->UnlockAchievement(ACHIEVEMENT_POLICY_LIBERTY);
-						break;
-					case 2:
-						gDLL->UnlockAchievement(ACHIEVEMENT_POLICY_HONOR);
-						break;
-					case 3:
-						gDLL->UnlockAchievement(ACHIEVEMENT_POLICY_PIETY);
-						break;
-					case 4:
-						gDLL->UnlockAchievement(ACHIEVEMENT_POLICY_PATRONAGE);
-						break;
-					case 5:	//Aesthetics
-						gDLL->UnlockAchievement(ACHIEVEMENT_XP2_48);
-						break;
-					case 6:
-						gDLL->UnlockAchievement(ACHIEVEMENT_POLICY_COMMERCE);
-						break;
-					case 7: //Exploration
-						gDLL->UnlockAchievement(ACHIEVEMENT_XP2_47);
-						break;
-					case 8:
-						gDLL->UnlockAchievement(ACHIEVEMENT_POLICY_RATIONALISM);
-						break;
+						switch (eBranchType)
+						{
+						case NO_POLICY_BRANCH_TYPE:
+							UNREACHABLE(); // It would be a logic error to complete `NO_POLICY_BRANCH_TYPE`.
+						case 0:
+							gDLL->UnlockAchievement(ACHIEVEMENT_POLICY_TRADITION);
+							break;
+						case 1:
+							gDLL->UnlockAchievement(ACHIEVEMENT_POLICY_LIBERTY);
+							break;
+						case 2:
+							gDLL->UnlockAchievement(ACHIEVEMENT_POLICY_HONOR);
+							break;
+						case 3:
+							gDLL->UnlockAchievement(ACHIEVEMENT_POLICY_PIETY);
+							break;
+						case 4:
+							gDLL->UnlockAchievement(ACHIEVEMENT_POLICY_PATRONAGE);
+							break;
+						case 5:	//Aesthetics
+							gDLL->UnlockAchievement(ACHIEVEMENT_XP2_48);
+							break;
+						case 6:
+							gDLL->UnlockAchievement(ACHIEVEMENT_POLICY_COMMERCE);
+							break;
+						case 7: //Exploration
+							gDLL->UnlockAchievement(ACHIEVEMENT_XP2_47);
+							break;
+						case 8:
+							gDLL->UnlockAchievement(ACHIEVEMENT_POLICY_RATIONALISM);
+							break;
+						}
 					}
-				}
-				if (gDLL->IsAchievementUnlocked(ACHIEVEMENT_POLICY_TRADITION) && gDLL->IsAchievementUnlocked(ACHIEVEMENT_POLICY_HONOR) && gDLL->IsAchievementUnlocked(ACHIEVEMENT_POLICY_LIBERTY) && gDLL->IsAchievementUnlocked(ACHIEVEMENT_POLICY_PIETY) && gDLL->IsAchievementUnlocked(ACHIEVEMENT_POLICY_PATRONAGE) && gDLL->IsAchievementUnlocked(ACHIEVEMENT_POLICY_ORDER) && gDLL->IsAchievementUnlocked(ACHIEVEMENT_POLICY_AUTOCRACY)&& gDLL->IsAchievementUnlocked(ACHIEVEMENT_POLICY_FREEDOM)&& gDLL->IsAchievementUnlocked(ACHIEVEMENT_POLICY_COMMERCE)&& gDLL->IsAchievementUnlocked(ACHIEVEMENT_POLICY_RATIONALISM))
-				{
-					gDLL->UnlockAchievement(ACHIEVEMENT_ALL_SOCIAL_POLICIES);
+					if (gDLL->IsAchievementUnlocked(ACHIEVEMENT_POLICY_TRADITION) && gDLL->IsAchievementUnlocked(ACHIEVEMENT_POLICY_HONOR) && gDLL->IsAchievementUnlocked(ACHIEVEMENT_POLICY_LIBERTY) && gDLL->IsAchievementUnlocked(ACHIEVEMENT_POLICY_PIETY) && gDLL->IsAchievementUnlocked(ACHIEVEMENT_POLICY_PATRONAGE) && gDLL->IsAchievementUnlocked(ACHIEVEMENT_POLICY_ORDER) && gDLL->IsAchievementUnlocked(ACHIEVEMENT_POLICY_AUTOCRACY)&& gDLL->IsAchievementUnlocked(ACHIEVEMENT_POLICY_FREEDOM)&& gDLL->IsAchievementUnlocked(ACHIEVEMENT_POLICY_COMMERCE)&& gDLL->IsAchievementUnlocked(ACHIEVEMENT_POLICY_RATIONALISM))
+					{
+						gDLL->UnlockAchievement(ACHIEVEMENT_ALL_SOCIAL_POLICIES);
+					}
 				}
 			}
 		}
@@ -6011,8 +5987,8 @@ void CvPlayerPolicies::SetPolicyBranchFinished(PolicyBranchTypes eBranchType, bo
 /// Accessor: is eBranchType finished?
 bool CvPlayerPolicies::IsPolicyBranchFinished(PolicyBranchTypes eBranchType) const
 {
-	CvAssertMsg(eBranchType >= 0, "eIndex is expected to be non-negative (invalid Index)");
-	CvAssertMsg(eBranchType < m_pPolicies->GetNumPolicyBranches(), "eIndex is expected to be within maximum bounds (invalid Index)");
+	ASSERT_DEBUG(eBranchType >= 0, "eIndex is expected to be non-negative (invalid Index)");
+	ASSERT_DEBUG(eBranchType < m_pPolicies->GetNumPolicyBranches(), "eIndex is expected to be within maximum bounds (invalid Index)");
 	return m_pabPolicyBranchFinished[eBranchType];
 }
 
@@ -6053,53 +6029,6 @@ bool CvPlayerPolicies::WillFinishBranchIfAdopted(PolicyTypes eType) const
 	}
 
 	return false;
-}
-
-/// What Policy Branches has the player chosen to adopt?
-PolicyBranchTypes CvPlayerPolicies::GetPolicyBranchChosen(int iID) const
-{
-	if(iID < GetNumPolicyBranchesAllowed())
-	{
-		return m_paePolicyBranchesChosen[iID];
-	}
-
-	FAssert(false);
-
-	return NO_POLICY_BRANCH_TYPE;
-}
-
-/// Assign Policy Branch adopted
-void CvPlayerPolicies::SetPolicyBranchChosen(int iID, PolicyBranchTypes eBranchType)
-{
-	FAssert(eBranchType > -1);
-	FAssert(eBranchType < m_pPolicies->GetNumPolicyBranches());
-
-	if(iID < GetNumPolicyBranchesAllowed())
-	{
-		m_paePolicyBranchesChosen[iID] = eBranchType;
-	}
-	else
-	{
-		FAssert(false);
-	}
-}
-
-/// How many Branches is the player allowed to pick from right now?
-int CvPlayerPolicies::GetNumPolicyBranchesAllowed() const
-{
-	return GetNumExtraBranches() + /*2*/ GD_INT_GET(NUM_POLICY_BRANCHES_ALLOWED);
-}
-
-/// Number of extra branches we're allowed to pick from
-int CvPlayerPolicies::GetNumExtraBranches() const
-{
-	return m_iNumExtraBranches;
-}
-
-/// Changes number of extra branches we're allowed to pick from
-void CvPlayerPolicies::ChangeNumExtraBranches(int iChange)
-{
-	m_iNumExtraBranches += iChange;
 }
 
 /// How many policies can we purchase at present?
@@ -6343,17 +6272,17 @@ bool CvPlayerPolicies::IsTimeToChooseIdeology() const
 	PolicyBranchTypes eFreedomBranch = (PolicyBranchTypes)GD_INT_GET(POLICY_BRANCH_FREEDOM);
 	PolicyBranchTypes eAutocracyBranch = (PolicyBranchTypes)GD_INT_GET(POLICY_BRANCH_AUTOCRACY);
 	PolicyBranchTypes eOrderBranch = (PolicyBranchTypes)GD_INT_GET(POLICY_BRANCH_ORDER);
-#if defined(MOD_BALANCE_CORE)
+
 	if(m_pPlayer->isMinorCiv() || m_pPlayer->isBarbarian())
 	{
 		return false;
 	}
-#endif
+
 	if (eFreedomBranch == NO_POLICY_BRANCH_TYPE || eAutocracyBranch == NO_POLICY_BRANCH_TYPE || eOrderBranch == NO_POLICY_BRANCH_TYPE)
 	{
 		return false;
 	}
-#if defined(MOD_BALANCE_CORE_IDEOLOGY_START)
+
 	if(MOD_BALANCE_CORE_IDEOLOGY_START && m_pPlayer->GetIdeologyPoint() >= /*3*/ GD_INT_GET(BALANCE_MOD_POLICY_BRANCHES_NEEDED_IDEOLOGY))
 	{
 		if (m_pPlayer->GetCurrentEra() >= /*INDUSTRIAL*/ GD_INT_GET(IDEOLOGY_PREREQ_ERA))
@@ -6361,6 +6290,7 @@ bool CvPlayerPolicies::IsTimeToChooseIdeology() const
 			return true;
 		}
 	}
+
 	if(MOD_BALANCE_CORE_IDEOLOGY_START && m_pPlayer->GetPlayerPolicies()->GetNumPoliciesOwned(true, true) >= /*18*/ GD_INT_GET(BALANCE_MOD_POLICIES_NEEDED_IDEOLOGY))
 	{
 		if (m_pPlayer->GetCurrentEra() >= /*INDUSTRIAL*/ GD_INT_GET(IDEOLOGY_PREREQ_ERA))
@@ -6368,7 +6298,7 @@ bool CvPlayerPolicies::IsTimeToChooseIdeology() const
 			return true;
 		}
 	}
-#endif
+
 	if (m_pPlayer->GetCurrentEra() > /*INDUSTRIAL IN CP, MODERN IN VP*/ GD_INT_GET(IDEOLOGY_START_ERA))
 	{
 		return true;
@@ -6386,19 +6316,15 @@ bool CvPlayerPolicies::IsTimeToChooseIdeology() const
 			for(int iI = 0; iI < GC.getNumBuildingClassInfos(); iI++)
 			{
 				const BuildingTypes eBuilding = static_cast<BuildingTypes>(pkInfo->getCivilizationBuildings(iI));
-				CvBuildingEntry* pkBuildingInfo = NULL;
-				if(eBuilding != -1)
+				if (eBuilding != NO_BUILDING)
 				{
-					pkBuildingInfo = pkGameBuildings->GetEntry(eBuilding);
-					if (pkBuildingInfo)
+					CvBuildingEntry* pkBuildingInfo = pkGameBuildings->GetEntry(eBuilding);
+					int iIdeologyTriggerCount = pkBuildingInfo->GetXBuiltTriggersIdeologyChoice();
+					if (iIdeologyTriggerCount > 0)
 					{
-						int iIdeologyTriggerCount = pkBuildingInfo->GetXBuiltTriggersIdeologyChoice();
-						if (iIdeologyTriggerCount > 0)
+						if (m_pPlayer->getBuildingClassCount((BuildingClassTypes)iI) >= iIdeologyTriggerCount)
 						{
-							if (m_pPlayer->getBuildingClassCount((BuildingClassTypes)iI) >= iIdeologyTriggerCount)
-							{
-								return true;
-							}
+							return true;
 						}
 					}
 				}
@@ -6512,7 +6438,10 @@ void CvPlayerPolicies::DoPolicyAI()
 {
 	CvString strBuffer;
 
+	// Force an ideology update for human vassals, if applicable
 	m_pPolicyAI->DoConsiderIdeologySwitch(m_pPlayer);
+	if (m_pPlayer->isHuman())
+		return;
 
 	// Do we have enough points to buy a new policy?
 	if (m_pPlayer->getNextPolicyCost() > 0 || m_pPlayer->GetNumFreePolicies() > 0 || m_pPlayer->GetNumFreeTenets() > 0)
@@ -6622,7 +6551,7 @@ void CvPlayerPolicies::AddFlavorAsStrategies(int iPropagatePercent)
 
 void CvPlayerPolicies::LogFlavorChange(FlavorTypes, int, const char*, bool)
 {
-	return; // Now using personality flavors, so this is unnecessary (or is it?)
+	// Now using personality flavors, so this is unnecessary (or is it?)
 }
 
 // HELPER CLASSES

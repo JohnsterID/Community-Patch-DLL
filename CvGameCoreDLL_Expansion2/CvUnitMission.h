@@ -1,5 +1,5 @@
 /*	-------------------------------------------------------------------------------------------------------
-	© 1991-2012 Take-Two Interactive Software and its subsidiaries.  Developed by Firaxis Games.  
+	Â© 1991-2012 Take-Two Interactive Software and its subsidiaries.  Developed by Firaxis Games.  
 	Sid Meier's Civilization V, Civ, Civilization, 2K Games, Firaxis Games, Take-Two Interactive Software 
 	and their respective logos are all trademarks of Take-Two interactive Software, Inc.  
 	All other marks and trademarks are the property of their respective owners.  
@@ -24,7 +24,7 @@ public:
 	static void ContinueMission(CvUnit* hUnit, int iSteps = 0);
 	static void AutoMission(CvUnit* hUnit);
 	static void UpdateMission(CvUnit* hUnit);
-	static CvPlot* LastMissionPlot(CvUnit* hUnit);
+	static CvPlot* LastMissionPlot(const CvUnit* hUnit);
 	static void PushMission(CvUnit* hUnit, MissionTypes eMission, int iData1 = -1, int iData2 = -1, int iFlags = 0, bool bAppend = false, bool bManual = false, MissionAITypes eMissionAI = NO_MISSIONAI, CvPlot* pMissionAIPlot = NULL, CvUnit* pMissionAIUnit = NULL);
 	static void PopMission(CvUnit* hUnit);
 	static void ClearMissionQueue(CvUnit* hUnit, bool bKeepPathCache, int iUnitCycleTimerOverride);

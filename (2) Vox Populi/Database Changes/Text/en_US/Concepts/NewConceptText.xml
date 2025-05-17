@@ -101,7 +101,7 @@
 			<Text>[COLOR_GREEN]Local Happiness in Cities[ENDCOLOR]</Text>
 		</Row>
 		<Row Tag="TXT_KEY_HAPPINESS_LOCAL_HAPPINESS_HEADING3_BODY">
-			<Text>The Local Happiness of a city is determined as follows: [NEWLINE][NEWLINE]Some Happiness is generated locally by the City. This can be through Buildings, Policies, World Wonders or Worked Landmarks. [NEWLINE][NEWLINE]The total amount of Happiness coming from empire-wide sources (like Luxury Resources or allied City States) is distributed deck-of-cards style among all Cities. This is done automatically, prioritizing Cities that have less Local Happiness than Population. After all cities have Local Happiness equal to their Population, any remainder is distributed deck-of-cards style in order of highest to lowest Population.</Text>
+			<Text>The Local Happiness of a city is determined as follows:[NEWLINE][NEWLINE]Some Happiness is generated locally by the City. This can be through Buildings, Policies, World Wonders or Worked Landmarks.[NEWLINE][NEWLINE]The total amount of Happiness coming from empire-wide sources (like Luxury Resources or allied City States) is distributed deck-of-cards style among all Cities. This is done automatically, prioritizing Cities that have less Local Happiness than Population. After all cities have Local Happiness equal to their Population, any remainder is distributed deck-of-cards style in order of highest to lowest Population.</Text>
 		</Row>
 		<Row Tag="TXT_KEY_HAPPINESS_LOCAL_HAPPINESS_ADV_QUEST">
 			<Text>How is Local City Happiness determined?</Text>
@@ -189,6 +189,9 @@
 				[ICON_BULLET][COLOR_CYAN]Insert Bottom All[ENDCOLOR]: [COLOR_YELLOW]SHIFT+ALT+LCLICK[ENDCOLOR] an item to add it to the bottom of every eligible cities construction queues.[NEWLINE]
 				[ICON_BULLET][COLOR_CYAN]Insert Top All[ENDCOLOR]: [COLOR_YELLOW]SHIFT+CTRL+LCLICK[ENDCOLOR] an item to add it to the top of every eligible owned cities construction queues.[NEWLINE]
 				[ICON_BULLET][COLOR_CYAN]Invest All[ENDCOLOR]: [COLOR_YELLOW]SHIFT+LCLICK[ENDCOLOR] a buildings invest button to invest in every copy of this building in any cities active construction queue.[NEWLINE]
+				
+				[NEWLINE][COLOR_POSITIVE_TEXT]Citizen Management Modifiers:[ENDCOLOR][NEWLINE]
+				[ICON_BULLET][COLOR_CYAN]Set Yield Focus All[ENDCOLOR]: [COLOR_YELLOW]SHIFT+LCLICK[ENDCOLOR] a focus type to have all cities emphasize the production of that yield type.
 			</Text>
 		</Row>
 		<Row Tag="TXT_KEY_TOPIC_SHORTCUT_WORLD_VIEW">
@@ -219,7 +222,7 @@
 				[NEWLINE][COLOR_POSITIVE_TEXT]Aircraft Group Commands:[ENDCOLOR] With an aircraft unit selected, modifier keys can be used to issue commands to all aircraft of the same type in the same airbase.[NEWLINE]
 				[ICON_BULLET][COLOR_CYAN]Massed Forward Rebase[ENDCOLOR]: [COLOR_YELLOW]SHIFT+RCLICK[ENDCOLOR] on an airbase will move all aircraft to that airbase until no more slots are available or all aircraft have rebased. Higher HP aircraft are prioritized, with ties broken by unit level.[NEWLINE]
 				[ICON_BULLET][COLOR_CYAN]Massed Fallback Rebase[ENDCOLOR]: [COLOR_YELLOW]ALT+RCLICK[ENDCOLOR] on an airbase will move all damaged aircraft to target airbase until no more slots are available or all aircraft have rebased. Lower HP aircraft are prioritized.[NEWLINE]
-				[ICON_BULLET][COLOR_CYAN]Massed Strike Mode[ENDCOLOR]: [COLOR_YELLOW]SHIFT+RCLICK[ENDCOLOR] on an enemy will air strike the unit on the target hex until all aircraft have attacked or the target is dead. Attack order prioritizes higher HP aircraft, with ties being broken by unit level. Aircraft that can attack twice will do so before the next aircraft begins attacking. [NEWLINE]
+				[ICON_BULLET][COLOR_CYAN]Massed Strike Mode[ENDCOLOR]: [COLOR_YELLOW]SHIFT+RCLICK[ENDCOLOR] on an enemy will air strike the unit on the target hex until all aircraft have attacked or the target is dead. Attack order prioritizes higher HP aircraft, with ties being broken by unit level. Aircraft that can attack twice will do so before the next aircraft begins attacking.[NEWLINE]
 			</Text>
 		</Row>
 

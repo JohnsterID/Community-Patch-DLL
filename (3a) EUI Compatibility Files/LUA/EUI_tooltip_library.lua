@@ -639,9 +639,6 @@ local function GetHelpTextForBuilding( buildingID, bExcludeName, bExcludeHeader,
 	local citySupplyFlatGlobal = tonumber(building.CitySupplyFlatGlobal) or 0
 -- Vox Populi END
 	
-	local enhancedYieldTech = building.EnhancedYieldTech and GameInfo.Technologies[ building.EnhancedYieldTech ]
-	local enhancedYieldTechName = enhancedYieldTech and TechColor( L(enhancedYieldTech.Description) ) or ""
-
 	if activePlayer then
 		activeCivilizationType = (GameInfo.Civilizations[ activePlayer:GetCivilizationType() ] or {}).Type
 		city = city or UI_GetHeadSelectedCity()
@@ -708,6 +705,7 @@ local function GetHelpTextForBuilding( buildingID, bExcludeName, bExcludeHeader,
 
 		if Game and buildingClassID and yieldID < YieldTypes.NUM_YIELD_TYPES then -- weed out strange Communitas yields
 			yieldChange = Game.GetBuildingYieldChange( buildingID, yieldID )
+			yieldChange = yieldChange + activePlayer:GetBuildingTechEnhancedYields(buildingID, yieldID)
 			yieldModifier = Game.GetBuildingYieldModifier( buildingID, yieldID )
 			if activePlayer then
 				if gk_mode then
@@ -731,8 +729,8 @@ local function GetHelpTextForBuilding( buildingID, bExcludeName, bExcludeHeader,
 				if bnw_mode then
 					yieldChange = yieldChange + city:GetLeagueBuildingClassYieldChange( buildingClassID, yieldID )
 				end
--- CBP
-				
+-- CBP	
+
 				yieldChange = yieldChange + city:GetLocalBuildingClassYield(buildingClassID, yieldID)
 					
 				yieldChange = yieldChange + city:GetReligionBuildingYieldRateModifier(buildingClassID, yieldID)
@@ -745,12 +743,6 @@ local function GetHelpTextForBuilding( buildingID, bExcludeName, bExcludeHeader,
 				end
 				-- Events
 				yieldChange = yieldChange + city:GetEventBuildingClassYield(buildingClassID, yieldID);
-				-- Tech Enhanced Yield
-				for row in GameInfo.Building_TechEnhancedYieldChanges( thisBuildingType ) do
-					if (Teams[city:GetTeam()]:IsHasTech(GameInfoTypes[ building.EnhancedYieldTech ])) and (row.YieldType == yield.Type) then
-						yieldChange = yieldChange + (row.Yield or 0)
-					end
-				end
 				-- End
 -- END CBP
 			end
@@ -1075,10 +1067,6 @@ local function GetHelpTextForBuilding( buildingID, bExcludeName, bExcludeHeader,
 			end
 		end
 -- END
-		if enhancedYieldTechName and (building.TechEnhancedTourism or 0) ~= 0 then
-			tip = S("%s %s %+i[ICON_TOURISM]", tip, enhancedYieldTechName, building.TechEnhancedTourism )
-		end
-		tips:insertIf( #tip > 0 and L"TXT_KEY_CITYVIEW_TOURISM_TEXT" .. ":" .. tip )
 	end
 -- TODO GetInternationalTradeRouteYourBuildingBonus
 	if gk_mode then
@@ -1232,12 +1220,6 @@ local function GetHelpTextForBuilding( buildingID, bExcludeName, bExcludeHeader,
 	for row in GameInfo.Building_UnitCombatFreeExperiences( thisBuildingType ) do
 		item = GameInfo.UnitCombatInfos[ row.UnitCombatType ]
 		tips:insertIf( item and (row.Experience or 0)>0 and L(item.Description).." "..L( "TXT_KEY_EXPERIENCE_POPUP", row.Experience ) )
-	end
-
-	-- Yields enhanced by Technology
-	if techFilter( enhancedYieldTech ) then
-		tip = GetYieldString( GameInfo.Building_TechEnhancedYieldChanges( thisBuildingType ) )
-		tips:insertIf( #tip > 0 and "[ICON_BULLET]" .. enhancedYieldTechName .. tip )
 	end
 
 	items = {}
@@ -1672,6 +1654,8 @@ local function GetHelpTextForImprovement( improvementID )
 	-- Defense Modifier
 	tips:insertIf( (improvement.DefenseModifier or 0)~=0 and S( "%s %+i%%[ICON_STRENGTH]", L"TXT_KEY_PEDIA_DEFENSE_LABEL", improvement.DefenseModifier ) )
 
+	tips:insertIf( (improvement.GreatPersonRateModifier or 0)~=0 and S( "GPP Rate: %+i%%[ICON_GREAT_PEOPLE]", improvement.GreatPersonRateModifier ) )
+
 	-- Tech yield changes
 	items = {}
 	condition = { ImprovementType = improvement.Type }
@@ -1918,6 +1902,10 @@ local function GetYieldTooltip( city, yieldID, baseYield, totalYield, yieldIconS
 	if gk_mode then
 		tips:insertLocalizedBulletIfNonZero( "TXT_KEY_YIELD_FROM_RELIGION", city:GetBaseYieldRateFromReligion( yieldID ), yieldIconString )
 	end
+	
+	if(yieldID == YieldTypes.YIELD_PRODUCTION and city:IsIndustrialConnectedToCapital()) then
+		tips:insertLocalizedBulletIfNonZero("TXT_KEY_YIELD_FROM_INDUSTRIAL_CITY_CONNECTION", city:GetConnectionGoldTimes100() / 100, yieldIconString )
+	end
 
 -- CBP
 	-- Yield Increase from City Yields
@@ -2014,8 +2002,25 @@ end
 
 -- Yield Tooltip Helper
 local function GetYieldTooltipHelper( city, yieldID, yieldIconString )
-
-	return GetYieldTooltip( city, yieldID, city:GetBaseYieldRate( yieldID ) + city:GetYieldPerPopTimes100( yieldID ) * city:GetPopulation() / 100, yieldID == YieldTypes.YIELD_FOOD and city:FoodDifferenceTimes100()/100 or city:GetYieldRateTimes100( yieldID )/100, yieldIconString, city:GetYieldModifierTooltip( yieldID ) )
+	local iBaseYield = city:GetBaseYieldRate( yieldID )
+	local iYieldPerPop = city:GetYieldPerPopTimes100(yieldID);
+	if (iYieldPerPop ~= 0) then
+		iYieldPerPop = iYieldPerPop * city:GetPopulation();
+		iYieldPerPop = iYieldPerPop / 100;
+		
+		iBaseYield = iBaseYield + iYieldPerPop;
+	end
+	local iYieldPerPopInEmpire = city:GetYieldPerPopInEmpireTimes100(yieldID);
+	if (iYieldPerPopInEmpire ~= 0) then
+		iYieldPerPopInEmpire = iYieldPerPopInEmpire * Players[city:GetOwner()]:GetTotalPopulation();
+		iYieldPerPopInEmpire = iYieldPerPopInEmpire / 100;
+		
+		iBaseYield = iBaseYield + iYieldPerPopInEmpire;
+	end
+	if yieldID == YieldTypes.YIELD_PRODUCTION and city:IsIndustrialConnectedToCapital() then
+		iBaseYield = iBaseYield + city:GetConnectionGoldTimes100() / 100
+	end
+	return GetYieldTooltip( city, yieldID, iBaseYield, yieldID == YieldTypes.YIELD_FOOD and city:FoodDifferenceTimes100()/100 or city:GetYieldRateTimes100( yieldID )/100, yieldIconString, city:GetYieldModifierTooltip( yieldID ) )
 end
 
 -- FOOD
@@ -2185,7 +2190,25 @@ local function GetProductionTooltip( city )
 			strModifiersString = strModifiersString .. L( "TXT_KEY_PRODMOD_FOOD_CONVERSION", productionFromFood / 100 )
 		end
 	end
-	tipText = GetYieldTooltip( city, YieldTypes.YIELD_PRODUCTION, city:GetBaseYieldRate( YieldTypes.YIELD_PRODUCTION ) + city:GetYieldPerPopTimes100( YieldTypes.YIELD_PRODUCTION ) * city:GetPopulation() / 100, productionPerTurn100 / 100, "[ICON_PRODUCTION]", strModifiersString ) .. "[NEWLINE][NEWLINE]" .. tipText
+	local iBaseProductionPT = city:GetBaseYieldRate(YieldTypes.YIELD_PRODUCTION)
+	local iYieldPerPop = city:GetYieldPerPopTimes100(YieldTypes.YIELD_PRODUCTION);
+	if (iYieldPerPop ~= 0) then
+		iYieldPerPop = iYieldPerPop * city:GetPopulation();
+		iYieldPerPop = iYieldPerPop / 100;
+		
+		iBaseProductionPT = iBaseProductionPT + iYieldPerPop;
+	end
+	local iYieldPerPopInEmpire = city:GetYieldPerPopInEmpireTimes100(YieldTypes.YIELD_PRODUCTION);
+	if (iYieldPerPopInEmpire ~= 0) then
+		iYieldPerPopInEmpire = iYieldPerPopInEmpire * Players[city:GetOwner()]:GetTotalPopulation();
+		iYieldPerPopInEmpire = iYieldPerPopInEmpire / 100;
+		
+		iBaseProductionPT = iBaseProductionPT + iYieldPerPopInEmpire;
+	end
+	if city:IsIndustrialConnectedToCapital() then
+		iBaseProductionPT = iBaseProductionPT + city:GetConnectionGoldTimes100() / 100
+	end
+	tipText = GetYieldTooltip( city, YieldTypes.YIELD_PRODUCTION, iBaseProductionPT, productionPerTurn100 / 100, "[ICON_PRODUCTION]", strModifiersString ) .. "[NEWLINE][NEWLINE]" .. tipText
 
 	-- Basic explanation of production
 	if isNoob then

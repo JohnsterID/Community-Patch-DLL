@@ -1,5 +1,5 @@
 /*	-------------------------------------------------------------------------------------------------------
-	� 1991-2012 Take-Two Interactive Software and its subsidiaries.  Developed by Firaxis Games.  
+	© 1991-2012 Take-Two Interactive Software and its subsidiaries.  Developed by Firaxis Games.  
 	Sid Meier's Civilization V, Civ, Civilization, 2K Games, Firaxis Games, Take-Two Interactive Software 
 	and their respective logos are all trademarks of Take-Two interactive Software, Inc.  
 	All other marks and trademarks are the property of their respective owners.  
@@ -158,7 +158,7 @@ FDataStream& operator<<(FDataStream& kStream, const BuildingGreatWork& readFrom)
 void checkBattleUnitType(BattleUnitTypes unitType)
 {
 	DEBUG_VARIABLE(unitType);
-	CvAssertMsg((unitType >= 0) && (unitType < BATTLE_UNIT_COUNT), "Invalid battle unit type.");
+	ASSERT_DEBUG((unitType >= 0) && (unitType < BATTLE_UNIT_COUNT), "Invalid battle unit type.");
 }
 
 //------------------------------------------------------------------------------------------------
@@ -345,47 +345,48 @@ bool CvCombatInfo::getDefenderCaptured() const
 int CvCombatInfo::getDamageInflicted(BattleUnitTypes unitType) const
 {
 	checkBattleUnitType(unitType);
-#if defined(MOD_EVENTS_BATTLES)
 	int iDamage = m_iDamageInflicted[unitType];
 
-	if (MOD_EVENTS_BATTLES_DAMAGE) {
+	if (MOD_EVENTS_BATTLES_DAMAGE)
+	{
 		int iValue = 0;
-		if (GAMEEVENTINVOKE_VALUE(iValue, GAMEEVENT_BattleDamageDelta, unitType, iDamage) == GAMEEVENTRETURN_VALUE) {
-			if (iValue != 0) {
-				if (iValue < 0) {
-					// Decreasing the amount of damage, in which case it can't be more than the amount inflicted (as that's called 'healing'!)
-					if (iDamage + iValue < 0) {
-						iValue = -iDamage;
-					}
-				} else {
-					// Increasing the amount of damage, in which case we can't exceed unit/city hit points
-					CvCity* pCity = m_pCities[unitType];
-					if (pCity)
+		if (GAMEEVENTINVOKE_VALUE(iValue, GAMEEVENT_BattleDamageDelta, unitType, iDamage) == GAMEEVENTRETURN_VALUE)
+		{
+			if (iValue < 0)
+			{
+				// Decreasing the amount of damage, in which case it can't be more than the amount inflicted (as that's called 'healing'!)
+				if (iDamage + iValue < 0)
+				{
+					iValue = -iDamage;
+				}
+			}
+			else if (iValue > 0)
+			{
+				// Increasing the amount of damage, in which case we can't exceed unit/city hit points
+				CvCity* pCity = m_pCities[unitType];
+				if (pCity)
+				{
+					if (iDamage + iValue + pCity->getDamage() > pCity->GetMaxHitPoints())
 					{
-						if (iDamage + iValue + pCity->getDamage() > pCity->GetMaxHitPoints())
-						{
-							iValue = pCity->GetMaxHitPoints() - pCity->getDamage() - iDamage;
-						}
-					}
-					else
-					{
-						if (iDamage + iValue > m_pUnits[unitType]->GetCurrHitPoints())
-						{
-							iValue = m_pUnits[unitType]->GetCurrHitPoints() - iDamage;
-						}
+						iValue = pCity->GetMaxHitPoints() - pCity->getDamage() - iDamage;
 					}
 				}
-				
-				iDamage += iValue;
+				else
+				{
+					if (iDamage + iValue > m_pUnits[unitType]->GetCurrHitPoints())
+					{
+						iValue = m_pUnits[unitType]->GetCurrHitPoints() - iDamage;
+					}
+				}
 			}
+
+			iDamage += iValue;
 		}
 	}
 
 	return iDamage;
-#else
-	return m_iDamageInflicted[unitType];
-#endif
 }
+
 void CvCombatInfo::setDamageInflicted(BattleUnitTypes unitType, int iDamage)
 {
 	checkBattleUnitType(unitType);
@@ -523,7 +524,7 @@ int CvCombatInfo::getMaxDamageMemberCount()
 
 void CvCombatInfo::setDamageMemberCount(int iDamageMemberCount)
 {
-	CvAssertMsg(iDamageMemberCount >=0 && iDamageMemberCount <= MAX_DAMAGE_MEMBER_COUNT, "Invalid damage member count!");
+	ASSERT_DEBUG(iDamageMemberCount >=0 && iDamageMemberCount <= MAX_DAMAGE_MEMBER_COUNT, "Invalid damage member count!");
 	m_iDamageMemberCount = std::min(iDamageMemberCount, (int)MAX_DAMAGE_MEMBER_COUNT);
 }
 
@@ -637,7 +638,7 @@ void CvAirMissionDefinition::setDamage(BattleUnitTypes unitType, int damage)
 bool CvAirMissionDefinition::isDead(BattleUnitTypes unitType) const
 {
 	checkBattleUnitType(unitType);
-	CvAssertMsg(getUnit(unitType) != NULL, "[Jason] Invalid battle unit type.");
+	ASSERT_DEBUG(getUnit(unitType) != NULL, "[Jason] Invalid battle unit type.");
 	return getDamage(unitType) >= getUnit(unitType)->GetMaxHitPoints();
 }
 
@@ -649,7 +650,6 @@ bool CvAirMissionDefinition::isDead(BattleUnitTypes unitType) const
 //, iEra(0)
 //, iMaxTurns(0)
 //, iCityElimination(0)
-//, iAdvancedStartPoints(0)
 //, iTurnTime(0)
 //, iNumCustomMapOptions(0)
 //, aiCustomMapOptions(0)

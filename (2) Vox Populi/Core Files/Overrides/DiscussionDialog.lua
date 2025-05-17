@@ -352,7 +352,7 @@ function LeaderMessageHandler( iPlayer, iDiploUIState, szLeaderMessage, iAnimati
 				---------------------
 
 				-- Ask the AI player not to send missionaries or prophets
-				if (activePlayer:GetNegativeReligiousConversionPoints(g_iAIPlayer) > 0 or activePlayer:HasCreatedReligion() or pAIPlayer:HasCreatedReligion()) then
+				if (activePlayer:GetNegativeReligiousConversionPoints(g_iAIPlayer) > 0 or activePlayer:OwnsReligion() or pAIPlayer:OwnsReligion()) then
 					if (not pAIPlayer:IsAskedToStopConverting(iActivePlayer)) then
 						strButton4Text = Locale.ConvertTextKey("TXT_KEY_DIPLO_DISCUSS_MESSAGE_STOP_SPREADING_RELIGION");
 					end
@@ -428,6 +428,11 @@ function LeaderMessageHandler( iPlayer, iDiploUIState, szLeaderMessage, iAnimati
 				--  DECLARE WAR (THIRD PARTY) --
 				--------------------------------
 				strButton10Text = Locale.ConvertTextKey( "TXT_KEY_DIPLO_DISCUSS_MESSAGE_DECLARE_WAR" );
+				if (pAIPlayer:IsDoF(iActivePlayer) or pAIPlayer:GetTeam() == Players[iActivePlayer]:GetTeam()) then
+					strButton10Tooltip = Locale.ConvertTextKey( "TXT_KEY_DIPLO_DISCUSS_MESSAGE_DECLARE_WAR_NO_TARGET_TT" );
+				else
+					strButton10Tooltip = Locale.ConvertTextKey( "TXT_KEY_DIPLO_DISCUSS_MESSAGE_DECLARE_WAR_NOT_FRIENDS_TT" );
+				end
 				Controls.Button10:SetDisabled(true);
 
 				--------------------
@@ -440,11 +445,9 @@ function LeaderMessageHandler( iPlayer, iDiploUIState, szLeaderMessage, iAnimati
 				for iPlayerLoop = 0, GameDefines.MAX_MAJOR_CIVS-1, 1 do
 
 					-- War button: Button 10
-					if (pAIPlayer:IsDoF(iActivePlayer) or pAIPlayer:GetTeam() == Players[iActivePlayer]:GetTeam()) then
-						if (IsWarAgainstThirdPartyPlayerValid(iPlayerLoop) and not pActiveTeam:IsAtWar(g_iAITeam)) then
-							strButton10Tooltip = Locale.ConvertTextKey( "TXT_KEY_DIPLO_DISCUSS_MESSAGE_DECLARE_WAR_TT" );
-							Controls.Button10:SetDisabled(false);
-						end
+					if (IsWarAgainstThirdPartyPlayerValid(iPlayerLoop)) then
+						strButton10Tooltip = Locale.ConvertTextKey( "TXT_KEY_DIPLO_DISCUSS_MESSAGE_DECLARE_WAR_TT" );
+						Controls.Button10:SetDisabled(false);
 					end
 
 					-- Share Opinion button: Button 11
@@ -483,6 +486,10 @@ function LeaderMessageHandler( iPlayer, iDiploUIState, szLeaderMessage, iAnimati
 		elseif (g_DiploUIState == DiploUIStateTypes.DIPLO_UI_STATE_DISCUSS_AGGRESSIVE_MILITARY_WARNING) then
 			strButton1Text = Locale.ConvertTextKey( "TXT_KEY_DIPLO_DISCUSS_WE_MEAN_NO_HARM" );
 			strButton2Text = Locale.ConvertTextKey( "TXT_KEY_DIPLO_DISCUSS_TIME_TO_DIE" );
+-- CBP
+			local iTimeOutTurns = Game:GetMilitaryPromiseDuration();
+			strButton1Tooltip = Locale.ConvertTextKey("TXT_KEY_DIPLO_DURATION_MILITARY_PROMISE", iTimeOutTurns);
+-- END
 			bHideBackButton = true;
 		-- AI attacked a Minor the Human is friends with
 		elseif (g_DiploUIState == DiploUIStateTypes.DIPLO_UI_STATE_DISCUSS_I_ATTACKED_YOUR_MINOR_CIV) then
@@ -510,6 +517,7 @@ function LeaderMessageHandler( iPlayer, iDiploUIState, szLeaderMessage, iAnimati
 		elseif (g_DiploUIState == DiploUIStateTypes.DIPLO_UI_STATE_DISCUSS_YOU_ATTACKED_MINOR_CIV) then
 			strButton1Text = Locale.ConvertTextKey( "TXT_KEY_DIPLO_DISCUSS_NOT_YOUR_BUSINESS" );
 			strButton2Text = Locale.ConvertTextKey( "TXT_KEY_DIPLO_DISCUSS_WILL_WITHDRAW" );
+			strButton2Tooltip = Locale.ConvertTextKey( "TXT_KEY_DIPLO_DURATION_ATTACK_MINOR_PROMISE" );
 			bHideBackButton = true;
 		-- Human killed a Protected Minor
 		--elseif (g_DiploUIState == DiploUIStateTypes.DIPLO_UI_STATE_DISCUSS_YOU_KILLED_MINOR_CIV) then
@@ -531,7 +539,7 @@ function LeaderMessageHandler( iPlayer, iDiploUIState, szLeaderMessage, iAnimati
 			strButton1Text = Locale.ConvertTextKey( "TXT_KEY_DIPLO_DISCUSS_SETTLE_WHAT_WE_PLEASE") ;
 			strButton2Text = Locale.ConvertTextKey( "TXT_KEY_DIPLO_DISCUSS_SORRY_FOR_SETTLING") ;
 -- CBP
-			local iTimeOutTurns = Game:GetPromiseDuration();
+			local iTimeOutTurns = Game:GetExpansionPromiseDuration();
 			strButton2Tooltip = Locale.ConvertTextKey("TXT_KEY_DIPLO_DURATION_PROMISE", iTimeOutTurns);
 -- END
 			bHideBackButton = true;
@@ -545,7 +553,7 @@ function LeaderMessageHandler( iPlayer, iDiploUIState, szLeaderMessage, iAnimati
 			strButton1Text = Locale.ConvertTextKey( "TXT_KEY_DIPLO_DISCUSS_NOT_YOUR_BUSINESS" );
 			strButton2Text = Locale.ConvertTextKey( "TXT_KEY_DIPLO_DISCUSS_SORRY_FOR_CLAIMING" );
 -- CBP
-			local iTimeOutTurns = Game:GetPromiseDuration();
+			local iTimeOutTurns = Game:GetBorderPromiseDuration();
 			strButton2Tooltip = Locale.ConvertTextKey("TXT_KEY_DIPLO_DURATION_PROMISE", iTimeOutTurns);
 -- END
 			bHideBackButton = true;
@@ -1626,10 +1634,9 @@ function OnCloseLeaderPanelButton()
 	-- Buttons 10 and 11 are a special case - only enabled if valid
 	for iPlayerLoop = 0, GameDefines.MAX_MAJOR_CIVS-1, 1 do
 
-		if (pAIPlayer:IsDoF(iActivePlayer) or pAIPlayer:GetTeam() == Players[iActivePlayer]:GetTeam()) then
-			if (IsWarAgainstThirdPartyPlayerValid(iPlayerLoop) and not pActiveTeam:IsAtWar(g_iAITeam)) then
-				Controls.Button10:SetDisabled(false);
-			end
+		-- War button: Button 10
+		if (IsWarAgainstThirdPartyPlayerValid(iPlayerLoop)) then
+			Controls.Button10:SetDisabled(false);
 		end
 
 		-- Share Opinion button: Button 11

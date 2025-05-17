@@ -1,5 +1,5 @@
 /*	-------------------------------------------------------------------------------------------------------
-	© 1991-2012 Take-Two Interactive Software and its subsidiaries.  Developed by Firaxis Games.  
+	Â© 1991-2012 Take-Two Interactive Software and its subsidiaries.  Developed by Firaxis Games.  
 	Sid Meier's Civilization V, Civ, Civilization, 2K Games, Firaxis Games, Take-Two Interactive Software 
 	and their respective logos are all trademarks of Take-Two interactive Software, Inc.  
 	All other marks and trademarks are the property of their respective owners.  
@@ -8,12 +8,11 @@
 #include "CvGameCoreDLLPCH.h"
 #include "CvGameCoreUtils.h"
 #include "CvPreGame.h"
-#include "FIGameIniParser.h"
-#include "FLua/include/FLua.h"
 #include "FStlContainerSerialization.h"
 #include "FFileStream.h"
 #include "ICvDLLDatabaseUtility.h"
 #include "CvInfosSerializationHelper.h"
+#include "FIGameIniParser.h"
 
 #include <unordered_map>
 
@@ -156,7 +155,7 @@ int CustomOption::GetValue() const
 //------------------------------------------------------------------------------
 FDataStream& operator>>(FDataStream& stream, CustomOption& option)
 {
-	FString optionName;
+	CvString optionName;
 
 	stream >> optionName;
 	stream >> option.m_iValue;
@@ -168,7 +167,7 @@ FDataStream& operator>>(FDataStream& stream, CustomOption& option)
 //------------------------------------------------------------------------------
 FDataStream& operator<<(FDataStream& stream, const CustomOption& option)
 {
-	FString optionName(option.m_szOptionName, strlen(option.m_szOptionName));
+	const CvString optionName(option.m_szOptionName);
 	stream << optionName;
 	stream << option.m_iValue;
 
@@ -180,7 +179,6 @@ void StringToBools(const char* szString, int* iNumBools, bool** ppBools);
 
 PlayerTypes s_activePlayer(NO_PLAYER);
 CvString s_adminPassword;
-int s_advancedStartPoints(0);
 CvString s_alias;
 std::vector<ArtStyleTypes> s_artStyles(MAX_PLAYERS);
 bool s_autorun(false);
@@ -301,15 +299,13 @@ GameStartTypes	s_gameStartType;
 
 StorageLocation	s_loadFileStorage;
 
-#if defined(MOD_KEEP_CIVS_UNKNOWN_PREGAME)
 // only needed in this file, no need to be public since they are quite specific and kinda nasty
 void updateKnownPlayersTable();
 bool isKnownPlayerReq(PlayerTypes ePlayer);
 bool handleKnownPlayerReq(PlayerTypes ePlayer);
 bool isKnownPlayer(PlayerTypes eA, PlayerTypes eB); // only accurate if game option enabled, (indirectly) used in Staging Room to determine if other player details should be shown
-													
+
 std::vector<KnownPlayersBitArray> s_knownPlayersTable;
-#endif
 
 
 //	-----------------------------------------------------------------------
@@ -466,14 +462,12 @@ void saveSlotHints(FDataStream& saveTo)
 	saveTo << s_civilizationKeys;
 	saveTo << s_leaderKeys;
 
-#if defined(MOD_KEEP_CIVS_UNKNOWN_PREGAME)
 	// didn't update version number as I am not sure what it means to update it when all the relevant code is stripped out by the preprocessor
 	int iKeepUnmet = 0;
 	GetGameOption(GAMEOPTION_KEEP_UNMET_PLAYERS_UNKNOWN, iKeepUnmet);
 	if(iKeepUnmet)
 		updateKnownPlayersTable();
 	saveTo << s_knownPlayersTable;
-#endif
 }
 
 void ReseatConnectedPlayers()
@@ -496,7 +490,8 @@ int calcActiveSlotCount(const std::vector<SlotStatus>& slotStatus, const std::ve
 {
 	int iCount = 0;
 	int i = 0;
-	for(i = 0; i < MAX_PLAYERS; ++i)
+	int maxPlayers = std::min(slotStatus.size(), slotClaims.size());
+	for(i = 0; i < maxPlayers; ++i)
 	{
 		SlotStatus eStatus = slotStatus[i];
 		SlotClaim eClaim = slotClaims[i];
@@ -523,10 +518,8 @@ static void loadSlotsHelper(
     std::vector<TeamTypes>& teamTypes,
     std::vector<HandicapTypes>& handicapTypes,
 	std::vector<CvString>& civilizationKeys,
-	std::vector<CvString>& leaderKeys
-#if defined(MOD_KEEP_CIVS_UNKNOWN_PREGAME)
-	, std::vector<KnownPlayersBitArray>& metCivs
-#endif
+	std::vector<CvString>& leaderKeys, 
+	std::vector<KnownPlayersBitArray>& metCivs
 	)
 {
 	loadFrom >> gameSpeed;
@@ -555,9 +548,8 @@ static void loadSlotsHelper(
 		civilizationKeys.clear();
 		leaderKeys.clear();
 	}
-#if defined(MOD_KEEP_CIVS_UNKNOWN_PREGAME)
+
 	loadFrom >> metCivs;
-#endif
 }
 
 int readActiveSlotCountFromSaveGame(FDataStream& loadFrom, bool bReadVersion)
@@ -572,17 +564,13 @@ int readActiveSlotCountFromSaveGame(FDataStream& loadFrom, bool bReadVersion)
 	std::vector<CivilizationTypes>	dummyCivilizations;
 	std::vector<CvString> dummyNicknames;
 	std::vector<TeamTypes> dummyTeamTypes;
-	std::vector<SlotStatus> slotStatus;
-	std::vector<SlotClaim> slotClaims;
+	std::vector<SlotStatus> slotStatus(MAX_PLAYERS);
+	std::vector<SlotClaim> slotClaims(MAX_PLAYERS);
 	std::vector<HandicapTypes> dummyHandicapTypes;
 	std::vector<CvString> civilizationKeys;
 	std::vector<CvString> leaderKeys;
-#if defined(MOD_KEEP_CIVS_UNKNOWN_PREGAME)
 	std::vector<KnownPlayersBitArray> dummyKnownPlayersTable;
 	loadSlotsHelper(loadFrom, uiVersion, dummyGameSpeed, dummyWorldSize, dummyMapScriptName, dummyCivilizations, dummyNicknames, slotStatus, slotClaims, dummyTeamTypes, dummyHandicapTypes, civilizationKeys, leaderKeys, dummyKnownPlayersTable);
-#else
-	loadSlotsHelper(loadFrom, uiVersion, dummyGameSpeed, dummyWorldSize, dummyMapScriptName, dummyCivilizations, dummyNicknames, slotStatus, slotClaims, dummyTeamTypes, dummyHandicapTypes, civilizationKeys, leaderKeys);
-#endif
 	return calcActiveSlotCount(slotStatus, slotClaims);
 }
 
@@ -603,12 +591,9 @@ void loadSlotHints(FDataStream& loadFrom, bool bReadVersion)
 	std::vector<HandicapTypes> handicapTypes;
 	std::vector<CvString> civilizationKeys;
 	std::vector<CvString> leaderKeys;
-#if defined(MOD_KEEP_CIVS_UNKNOWN_PREGAME)
 	std::vector<KnownPlayersBitArray> knownPlayersTable;
 	loadSlotsHelper(loadFrom, uiVersion, gameSpeed, worldSize, mapScriptName, civilizations, nicknames, slotStatus, slotClaims, teamTypes, handicapTypes, civilizationKeys, leaderKeys, knownPlayersTable);
-#else
-	loadSlotsHelper(loadFrom, uiVersion, gameSpeed, worldSize, mapScriptName, civilizations, nicknames, slotStatus, slotClaims, teamTypes, handicapTypes, civilizationKeys, leaderKeys);
-#endif
+
 	s_gameSpeed = gameSpeed;
 	s_worldSize = worldSize;
 	s_mapScriptName = mapScriptName;
@@ -651,9 +636,8 @@ void loadSlotHints(FDataStream& loadFrom, bool bReadVersion)
 		PlayerTypes p = static_cast<PlayerTypes>(i);
 		setNickname(p, s_nicknames[i]); // fix display names
 	}
-#if defined(MOD_KEEP_CIVS_UNKNOWN_PREGAME)
+
 	s_knownPlayersTable = knownPlayersTable;
-#endif
 	ReseatConnectedPlayers();
 }
 
@@ -665,11 +649,6 @@ PlayerTypes activePlayer()
 const CvString& adminPassword()
 {
 	return s_adminPassword;
-}
-
-int advancedStartPoints()
-{
-	return s_advancedStartPoints;
 }
 
 const CvString& alias()
@@ -987,7 +966,7 @@ bool GetGameOption(GameOptionTypes eOption, int& iValue)
 		HashToOptionMap::const_iterator itr = s_GameOptionsHash.find((uint)eOption);
 		if(itr != s_GameOptionsHash.end())
 		{
-			if(itr->second <= s_GameOptions.size())
+			if(itr->second < s_GameOptions.size())
 			{
 				iValue = s_GameOptions[itr->second].GetValue();
 				return true;
@@ -1048,7 +1027,7 @@ bool SetGameOption(const char* szOptionName, int iValue)
 
 	//Didn't find the option, push it.
 	s_GameOptions.push_back(CustomOption(szOptionName, iValue));
-	s_GameOptionsHash[FString::Hash(szOptionName)] = s_GameOptions.size() - 1;
+	s_GameOptionsHash[FStringHash(szOptionName)] = s_GameOptions.size() - 1;
 	SyncGameOptionsWithEnumList();
 
 	return true;
@@ -1072,7 +1051,7 @@ bool SetGameOptions(const std::vector<CustomOption>& gameOptions)
 	for(size_t i = 0; i < s_GameOptions.size(); i++)
 	{
 		const CustomOption& kOption = s_GameOptions[i];
-		s_GameOptionsHash[FString::Hash(kOption.GetName())] = i;
+		s_GameOptionsHash[FStringHash(kOption.GetName())] = i;
 	}
 
 	SyncGameOptionsWithEnumList();
@@ -1388,7 +1367,7 @@ void loadFromIni(FIGameIniParser& iniParser)
 	setQuickCombatDefault(iHolder != 0);
 	setQuickCombat(quickCombatDefault());
 
-	FString szGameDefault = "";//FString(GC.getSetupData().getAlias().GetCString());
+	CvString szGameDefault = "";//FString(GC.getSetupData().getAlias().GetCString());
 	if (szGameDefault.IsEmpty())
 	{
 		Localization::String strGameName = Localization::Lookup("TXT_KEY_DEFAULT_GAMENAME");
@@ -1750,7 +1729,6 @@ void readArchive(FDataStream& loadFrom, bool bReadVersion)
 
 	loadFrom >> s_activePlayer;
 	loadFrom >> s_adminPassword;
-	loadFrom >> s_advancedStartPoints;
 	loadFrom >> s_alias;
 	loadFrom >> s_artStyles;
 	loadFrom >> s_autorun;
@@ -1926,7 +1904,7 @@ void readArchive(FDataStream& loadFrom, bool bReadVersion)
 	for(size_t i = 0; i < s_GameOptions.size(); i++)
 	{
 		const CustomOption& kOption = s_GameOptions[i];
-		s_GameOptionsHash[FString::Hash(kOption.GetName())] = i;
+		s_GameOptionsHash[FStringHash(kOption.GetName())] = i;
 	}
 }
 
@@ -1986,8 +1964,6 @@ void resetGame()
 
 	s_numMinorCivs = -1;
 
-	s_advancedStartPoints = 0;
-
 	// Unsaved game data
 	s_syncRandomSeed = 0;
 	s_mapRandomSeed = 0;
@@ -2016,9 +1992,8 @@ void resetGame()
 
 	s_privateGame = false;
 	s_isInternetGame = false;
-#if defined(MOD_KEEP_CIVS_UNKNOWN_PREGAME)
 	s_knownPlayersTable.clear();
-#endif
+
 	ResetMapOptions();
 	ResetGameOptions();
 }
@@ -2030,7 +2005,7 @@ void ResetGameOptions()
 	for(size_t i = 0; i < s_GameOptions.size(); i++)
 	{
 		const CustomOption& kOption = s_GameOptions[i];
-		s_GameOptionsHash[FString::Hash(kOption.GetName())] = i;
+		s_GameOptionsHash[FStringHash(kOption.GetName())] = i;
 	}
 	SyncGameOptionsWithEnumList();
 }
@@ -2191,9 +2166,7 @@ std::vector<GUID> s_savedLeaderPackageID(MAX_PLAYERS);
 std::vector<bool> s_savedLeaderKeysAvailable(MAX_PLAYERS);
 std::vector<PackageIDList> s_savedDLCPackagesAvailable(MAX_PLAYERS);
 
-#if defined(MOD_KEEP_CIVS_UNKNOWN_PREGAME)
 std::vector<KnownPlayersBitArray> s_savedKnownPlayersTable;
-#endif
 
 //	------------------------------------------------------------------------------------
 void restoreSlots()
@@ -2213,11 +2186,9 @@ void restoreSlots()
 	s_leaderKeysAvailable =  s_savedLeaderKeysAvailable;
 	s_DLCPackagesAvailable = s_savedDLCPackagesAvailable;
 
-#if defined(MOD_KEEP_CIVS_UNKNOWN_PREGAME)
 	//not sure if this is necessary but won't hurt
 	s_knownPlayersTable = s_savedKnownPlayersTable;
 	setActivePlayer(s_savedLocalPlayer);
-#endif
 }
 
 //	------------------------------------------------------------------------------------
@@ -2241,10 +2212,8 @@ void saveSlots()
 	s_savedLeaderKeysAvailable = s_leaderKeysAvailable;
 	s_savedDLCPackagesAvailable = s_DLCPackagesAvailable;
 
-#if defined(MOD_KEEP_CIVS_UNKNOWN_PREGAME)
 	//not sure if this is necessary but won't hurt
 	s_savedKnownPlayersTable = s_knownPlayersTable;
-#endif
 }
 
 SeaLevelTypes seaLevel()
@@ -2271,11 +2240,6 @@ void setActivePlayer(PlayerTypes p)
 void setAdminPassword(const CvString& p)
 {
 	s_adminPassword = p;
-}
-
-void setAdvancedStartPoints(int a)
-{
-	s_advancedStartPoints = a;
 }
 
 void setAlias(const CvString& a)
@@ -2335,7 +2299,7 @@ void setCalendar(const CvString& c)
 	Database::SingleResult kResult;
 	if(!DB.SelectAt(kResult, "Calendars", "Type", c.c_str()))
 	{
-		CvAssertMsg(false, "Cannot find calendar info.");
+		ASSERT_DEBUG(false, "Cannot find calendar info.");
 	}
 	s_calendarInfo.CacheResult(kResult);
 
@@ -2402,7 +2366,7 @@ void setClimate(const CvString& c)
 
 void setCustomWorldSize(int iWidth, int iHeight, int iPlayers, int iMinorCivs)
 {
-	FAssertMsg(iWidth >= 20 && iHeight >= 20, "Cannot have a map that small!");
+	ASSERT_DEBUG(iWidth >= 20 && iHeight >= 20, "Cannot have a map that small!");
 
 	const int iArea = iWidth * iHeight;
 
@@ -2991,7 +2955,7 @@ void setGameType(const CvString& g)
 	}
 	else
 	{
-		//CvAssertMsg(false, "Invalid game type in ini file!");
+		//ASSERT_DEBUG(false, "Invalid game type in ini file!");
 		setGameType(GAME_TYPE_NONE);
 	}
 }
@@ -3399,7 +3363,7 @@ void setTurnTimer(TurnTimerTypes t)
 	Database::SingleResult kResult;
 	if(!DB.SelectAt(kResult, "TurnTimers", "ID", static_cast<int>(t)))
 	{
-		CvAssertMsg(false, "Cannot find turn timer info.");
+		ASSERT_DEBUG(false, "Cannot find turn timer info.");
 	}
 	s_turnTimer.CacheResult(kResult);
 }
@@ -3409,7 +3373,7 @@ void setTurnTimer(const CvString& t)
 	Database::SingleResult kResult;
 	if(!DB.SelectAt(kResult, "TurnTimers", "Type", t.c_str()))
 	{
-		CvAssertMsg(false, "Cannot find turn timer info.");
+		ASSERT_DEBUG(false, "Cannot find turn timer info.");
 	}
 	s_turnTimer.CacheResult(kResult);
 
@@ -3434,7 +3398,7 @@ void setVictory(VictoryTypes v, bool isValid)
 
 void setVictories(const std::vector<bool>& v)
 {
-	CvAssert(v.size() <= std::size_t(s_numVictoryInfos));
+	ASSERT_DEBUG(v.size() <= std::size_t(s_numVictoryInfos));
 	for (std::size_t i = 0; i < v.size(); i++)
 		s_victories[i] = v[i];
 }
@@ -3463,28 +3427,47 @@ void setTurnNotifyEmailAddress(PlayerTypes p, const CvString& emailAddress)
 		s_turnNotifyEmailAddress[p] = emailAddress;
 }
 
-void VerifyHandicap(PlayerTypes p)
+void VerifyHandicap(PlayerTypes p, bool bHumanPlayerSwap)
 {//Verifies that the current handicap is valid for the current player.
 	//non-ai players can't use the default ai handicap and ai players MUST use it.
 	if(slotStatus(p) == SS_COMPUTER){
 		setHandicap(p, (HandicapTypes)GD_INT_GET(AI_HANDICAP));
 	}
-	else if(handicap(p) == GD_INT_GET(AI_HANDICAP)){
-		if(lastHumanHandicap(p) != NO_HANDICAP){
+	else if(handicap(p) == GD_INT_GET(AI_HANDICAP))
+	{
+		if (lastHumanHandicap(p) != NO_HANDICAP)
+		{
 			setHandicap(p, lastHumanHandicap(p));
 		}
-		else if(GC.getGame().isNetworkMultiPlayer()){
+		else if (GC.getGame().isNetworkMultiPlayer())
+		{
 			setHandicap(p, (HandicapTypes)GD_INT_GET(MULTIPLAYER_HANDICAP));
 		}
-		else{
-			setHandicap(p, (HandicapTypes)GD_INT_GET(STANDARD_HANDICAP));
+		else
+		{
+			if (bHumanPlayerSwap)
+			{
+				// loop through the player to find the handicap the human player had
+				for (int i = 0; i < MAX_MAJOR_CIVS; i++)
+				{
+					if (lastHumanHandicap((PlayerTypes)i) > NO_HANDICAP)
+					{
+						setHandicap(p, lastHumanHandicap((PlayerTypes)i));
+						break;
+					}
+				}
+			}
+			else
+			{
+				setHandicap(p, (HandicapTypes)GD_INT_GET(STANDARD_HANDICAP));
+			}
 		}
 	}
 }
 
 void setWorldSize(WorldSizeTypes w, bool bResetSlots)
 {
-	CvAssert(!gameStarted() || isNetworkMultiplayerGame() || isHotSeatGame());
+	ASSERT_DEBUG(!gameStarted() || isNetworkMultiplayerGame() || isHotSeatGame());
 
 	//Query
 	Database::Results kQuery;
@@ -3500,13 +3483,13 @@ void setWorldSize(WorldSizeTypes w, bool bResetSlots)
 	}
 	else
 	{
-		CvAssertMsg(false, "Could not find world size entry.")
+		ASSERT_DEBUG(false, "Could not find world size entry.")
 	}
 }
 
 void setWorldSize(const CvString& w)
 {
-	CvAssert(!gameStarted() || isNetworkMultiplayerGame() || isHotSeatGame());
+	ASSERT_DEBUG(!gameStarted() || isNetworkMultiplayerGame() || isHotSeatGame());
 
 	Database::Results kQuery;
 
@@ -3521,7 +3504,7 @@ void setWorldSize(const CvString& w)
 	}
 	else
 	{
-		CvAssertMsg(false, "Could not find world size entry.")
+		ASSERT_DEBUG(false, "Could not find world size entry.")
 	}
 }
 
@@ -3546,7 +3529,7 @@ const std::vector<SlotStatus>& GetSlotStatus()
 
 void StringToBools(const char* szString, int* iNumBools, bool** ppBools)
 {
-	FAssertMsg(szString, "null string");
+	ASSERT_DEBUG(szString, "null string");
 	if(szString)
 	{
 		*iNumBools = strlen(szString);
@@ -3616,7 +3599,6 @@ void writeArchive(FDataStream& saveTo)
 
 	saveTo << s_activePlayer;
 	saveTo << s_adminPassword;
-	saveTo << s_advancedStartPoints;
 	saveTo << s_alias;
 	saveTo << s_artStyles;
 	saveTo << s_autorun;
@@ -3857,7 +3839,6 @@ void setCivilizationKey(PlayerTypes p, const CvString& szKey)
 // ***ALSO*** hijacked to allow checking if a player is known to the local human player. Seems difficult to expose stuff to the pregame Lua stuff (like the StagingRoom), sorry. This function was being used in exactly one place and has limited utility at least. 
 bool civilizationKeyAvailable(PlayerTypes p)
 {
-#if defined(MOD_KEEP_CIVS_UNKNOWN_PREGAME)
 	///////////////////////////////////////
 	/////////////// HIJACKED //////////////
 	///////////////////////////////////////
@@ -3868,7 +3849,6 @@ bool civilizationKeyAvailable(PlayerTypes p)
 	///////////////////////////////////////
 	//////////////////END//////////////////
 	///////////////////////////////////////
-#endif
 
 	if(p >= 0 && p < MAX_PLAYERS)
 	{
@@ -3916,7 +3896,6 @@ bool canReadyLocalPlayer()
 	return true;
 }
 
-#if defined(MOD_KEEP_CIVS_UNKNOWN_PREGAME)
 const std::vector<KnownPlayersBitArray>& GetKnownPlayersTable() {
 	return s_knownPlayersTable;
 }
@@ -3952,7 +3931,7 @@ bool isKnownPlayerReq(PlayerTypes ePlayer)
 bool handleKnownPlayerReq(PlayerTypes ePlayer)
 {
 	// Only makes sense for Network MP
-	CvAssertMsg(isNetworkMultiplayerGame(), "Checking known players table does not make sense outside of Network MP games!");
+	ASSERT_DEBUG(isNetworkMultiplayerGame(), "Checking known players table does not make sense outside of Network MP games!");
 	
 	// decode actual player ID - it was encoded as -(ePlayer+2), probably in StagingRoom.lua
 	ePlayer = static_cast<PlayerTypes>(-ePlayer - 2);
@@ -3960,7 +3939,8 @@ bool handleKnownPlayerReq(PlayerTypes ePlayer)
 	return isKnownPlayer(ePlayer, activePlayer());
 }
 
-bool isKnownPlayer(PlayerTypes eA, PlayerTypes eB) {
+bool isKnownPlayer(PlayerTypes eA, PlayerTypes eB)
+{
 	// table will be empty if GAMEOPTION_KEEP_UNMET_PLAYERS_UNKNOWN, i.e. not keeping track of unmet players and consider all to be met for the purposes of PreGame UI.
 	if (s_knownPlayersTable.empty()) return true;
 	if (eA < 0 || eB < 0) return true; // erring on the side of caution
@@ -3968,5 +3948,4 @@ bool isKnownPlayer(PlayerTypes eA, PlayerTypes eB) {
 
 	return (s_knownPlayersTable[eA] & (KnownPlayersBitArray(1) << eB)) != 0;
 }
-#endif
 }

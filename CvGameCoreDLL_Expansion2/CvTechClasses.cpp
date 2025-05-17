@@ -1,5 +1,5 @@
 /*	-------------------------------------------------------------------------------------------------------
-	© 1991-2012 Take-Two Interactive Software and its subsidiaries.  Developed by Firaxis Games.  
+	Â© 1991-2012 Take-Two Interactive Software and its subsidiaries.  Developed by Firaxis Games.  
 	Sid Meier's Civilization V, Civ, Civilization, 2K Games, Firaxis Games, Take-Two Interactive Software 
 	and their respective logos are all trademarks of Take-Two interactive Software, Inc.  
 	All other marks and trademarks are the property of their respective owners.  
@@ -21,10 +21,7 @@
 
 /// Constructor
 CvTechEntry::CvTechEntry(void):
-	m_iAIWeight(0),
-	m_iAITradeModifier(0),
 	m_iResearchCost(0),
-	m_iAdvancedStartCost(0),
 	m_iEra(NO_ERA),
 	m_iFeatureProductionModifier(0),
 	m_iUnitFortificationModifier(0),
@@ -109,10 +106,7 @@ bool CvTechEntry::CacheResults(Database::Results& kResults, CvDatabaseUtility& k
 		return false;
 
 	//Basic Properties
-	m_iAIWeight = kResults.GetInt("AIWeight");
-	m_iAITradeModifier = kResults.GetInt("AITradeModifier");
 	m_iResearchCost = kResults.GetInt("Cost");
-	m_iAdvancedStartCost = kResults.GetInt("AdvancedStartCost");
 	m_iFeatureProductionModifier = kResults.GetInt("FeatureProductionModifier");
 	m_iUnitFortificationModifier = kResults.GetInt("UnitFortificationModifier");
 	m_iUnitBaseHealModifier = kResults.GetInt("UnitBaseHealModifier");
@@ -266,28 +260,10 @@ bool CvTechEntry::CacheResults(Database::Results& kResults, CvDatabaseUtility& k
 	return true;
 }
 
-/// Additional weight to having AI purchase this
-int CvTechEntry::GetAIWeight() const
-{
-	return m_iAIWeight;
-}
-
-/// Additional weight to having AI trade for this
-int CvTechEntry::GetAITradeModifier() const
-{
-	return m_iAITradeModifier;
-}
-
 /// Research/science points required to obtain tech
 int CvTechEntry::GetResearchCost() const
 {
 	return m_iResearchCost;
-}
-
-/// Cost if starting midway through game
-int CvTechEntry::GetAdvancedStartCost() const
-{
-	return m_iAdvancedStartCost;
 }
 
 /// Historical era within tech tree
@@ -596,8 +572,8 @@ int CvTechEntry::GetTradeRouteDomainExtraRange(int i) const
 /// Find value of flavors associated with this tech
 int CvTechEntry::GetFlavorValue(int i) const
 {
-	CvAssertMsg(i < GC.getNumFlavorTypes(), "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < GC.getNumFlavorTypes(), "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
 	return m_piFlavorValue ? m_piFlavorValue[i] : -1;
 }
 
@@ -616,10 +592,10 @@ int CvTechEntry::GetPrereqAndTechs(int i) const
 //------------------------------------------------------------------------------
 int CvTechEntry::GetTechYieldChanges(int i, int j) const
 {
-	CvAssertMsg(i < GC.getNumSpecialistInfos(), "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
-	CvAssertMsg(j < NUM_YIELD_TYPES, "Index out of bounds");
-	CvAssertMsg(j > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < GC.getNumSpecialistInfos(), "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(j < NUM_YIELD_TYPES, "Index out of bounds");
+	ASSERT_DEBUG(j > -1, "Index out of bounds");
 	return m_ppiTechYieldChanges[i][j];
 }
 int CvTechEntry::GetHappiness() const
@@ -730,23 +706,23 @@ void CvPlayerTechs::Init(CvTechXMLEntries* pTechs, CvPlayer* pPlayer, bool bIsCi
 	// Initialize arrays
 	const int iNumTechs = m_pTechs->GetNumTechs();
 
-	CvAssertMsg(m_pabResearchingTech==NULL, "about to leak memory, CvPlayerTechs::m_pabResearchingTech");
+	ASSERT_DEBUG(m_pabResearchingTech==NULL, "about to leak memory, CvPlayerTechs::m_pabResearchingTech");
 	m_pabResearchingTech = FNEW(bool[iNumTechs], c_eCiv5GameplayDLL, 0);
-	CvAssertMsg(m_piCivTechPriority==NULL, "about to leak memory, CvPlayerTechs::m_piCivTechPriority");
+	ASSERT_DEBUG(m_piCivTechPriority==NULL, "about to leak memory, CvPlayerTechs::m_piCivTechPriority");
 	m_piCivTechPriority = FNEW(int[iNumTechs], c_eCiv5GameplayDLL, 0);
-	CvAssertMsg(m_piLocaleTechPriority==NULL, "about to leak memory, CvPlayerTechs::m_piLocaleTechPriority");
+	ASSERT_DEBUG(m_piLocaleTechPriority==NULL, "about to leak memory, CvPlayerTechs::m_piLocaleTechPriority");
 	m_piLocaleTechPriority = FNEW(int[iNumTechs], c_eCiv5GameplayDLL, 0);
 #if defined(MOD_BALANCE_CORE)
-	CvAssertMsg(m_piGSTechPriority==NULL, "about to leak memory, CvPlayerTechs::m_piGSTechPriority");
+	ASSERT_DEBUG(m_piGSTechPriority==NULL, "about to leak memory, CvPlayerTechs::m_piGSTechPriority");
 	m_piGSTechPriority = FNEW(int[iNumTechs], c_eCiv5GameplayDLL, 0);
 #endif
-	CvAssertMsg(m_peLocaleTechResources==NULL, "about to leak memory, CvPlayerTechs::m_peLocaleTechResources");
+	ASSERT_DEBUG(m_peLocaleTechResources==NULL, "about to leak memory, CvPlayerTechs::m_peLocaleTechResources");
 	m_peLocaleTechResources = FNEW(ResourceTypes[iNumTechs], c_eCiv5GameplayDLL, 0);
-	CvAssertMsg(m_peCivTechUniqueUnits==NULL, "about to leak memory, CvPlayerTechs::m_peCivTechUniqueUnits");
+	ASSERT_DEBUG(m_peCivTechUniqueUnits==NULL, "about to leak memory, CvPlayerTechs::m_peCivTechUniqueUnits");
 	m_peCivTechUniqueUnits = FNEW(UnitTypes[iNumTechs], c_eCiv5GameplayDLL, 0);
-	CvAssertMsg(m_peCivTechUniqueBuildings==NULL, "about to leak memory, CvPlayerTechs::m_peCivTechUniqueBuildings");
+	ASSERT_DEBUG(m_peCivTechUniqueBuildings==NULL, "about to leak memory, CvPlayerTechs::m_peCivTechUniqueBuildings");
 	m_peCivTechUniqueBuildings = FNEW(BuildingTypes[iNumTechs], c_eCiv5GameplayDLL, 0);
-	CvAssertMsg(m_peCivTechUniqueImprovements==NULL, "about to leak memory, CvPlayerTechs::m_peCivTechUniqueImprovements");
+	ASSERT_DEBUG(m_peCivTechUniqueImprovements==NULL, "about to leak memory, CvPlayerTechs::m_peCivTechUniqueImprovements");
 	m_peCivTechUniqueImprovements = FNEW(ImprovementTypes[iNumTechs], c_eCiv5GameplayDLL, 0);
 
 	// Create AI object
@@ -797,7 +773,7 @@ void CvPlayerTechs::Reset()
 	m_bWillHaveUUTechSoon = false;
 
 	// Tweak tech priorities to recognize unique properties of this civ
-	if(!m_pPlayer->isMinorCiv() && !m_pPlayer->isBarbarian() && m_pPlayer->getCivilizationType() != NO_CIVILIZATION)
+	if(m_pPlayer->GetID() != NO_PLAYER && !m_pPlayer->isMinorCiv() && !m_pPlayer->isBarbarian() && m_pPlayer->getCivilizationType() != NO_CIVILIZATION)
 	{
 		CvCivilizationInfo* pkInfo = GC.getCivilizationInfo(m_pPlayer->getCivilizationType());
 		if(pkInfo)
@@ -806,13 +782,10 @@ void CvPlayerTechs::Reset()
 			for(int iI = 0; iI < GC.getNumBuildingClassInfos(); iI++)
 			{
 				const BuildingTypes eBuilding = static_cast<BuildingTypes>(pkInfo->getCivilizationBuildings(iI));
-				CvBuildingEntry* pkBuildingInfo = NULL;
-
-				if(eBuilding != -1)
-					pkBuildingInfo = pkGameBuildings->GetEntry(eBuilding);
-
-				if(pkBuildingInfo)
+				if (eBuilding != NO_BUILDING)
 				{
+					CvBuildingEntry* pkBuildingInfo = pkGameBuildings->GetEntry(eBuilding);
+
 					// Is this one overridden for our civ?
 					if(pkInfo->isCivilizationBuildingOverridden(iI))
 					{
@@ -987,7 +960,7 @@ void CvPlayerTechs::Reset()
 template<typename PlayerTechs, typename Visitor>
 void CvPlayerTechs::Serialize(PlayerTechs& playerTechs, Visitor& visitor)
 {
-	CvAssertMsg(playerTechs.m_pTechs != NULL && playerTechs.m_pTechs->GetNumTechs() > 0, "Number of techs to serialize is expected to greater than 0");
+	ASSERT_DEBUG(playerTechs.m_pTechs != NULL && playerTechs.m_pTechs->GetNumTechs() > 0, "Number of techs to serialize is expected to greater than 0");
 	const int iNumTechs = playerTechs.m_pTechs->GetNumTechs();
 	visitor(MakeConstSpan(playerTechs.m_pabResearchingTech, iNumTechs));
 	visitor(MakeConstSpan(playerTechs.m_piCivTechPriority, iNumTechs));
@@ -1059,16 +1032,16 @@ CvTechAI* CvPlayerTechs::GetTechAI()
 /// Accessor: is a player researching a tech?
 bool CvPlayerTechs::IsResearchingTech(TechTypes eIndex) const
 {
-	CvAssertMsg(eIndex >= 0, "eIndex is expected to be non-negative (invalid Index)");
-	CvAssertMsg(eIndex < GC.getNumTechInfos(), "eIndex is expected to be within maximum bounds (invalid Index)");
+	ASSERT_DEBUG(eIndex >= 0, "eIndex is expected to be non-negative (invalid Index)");
+	ASSERT_DEBUG(eIndex < GC.getNumTechInfos(), "eIndex is expected to be within maximum bounds (invalid Index)");
 	return m_pabResearchingTech[eIndex];
 }
 
 /// Accessor: set whether player is researching a tech
 void CvPlayerTechs::SetResearchingTech(TechTypes eIndex, bool bNewValue)
 {
-	CvAssertMsg(eIndex >= 0, "eIndex is expected to be non-negative (invalid Index)");
-	CvAssertMsg(eIndex < GC.getNumTechInfos(), "eIndex is expected to be within maximum bounds (invalid Index)");
+	ASSERT_DEBUG(eIndex >= 0, "eIndex is expected to be non-negative (invalid Index)");
+	ASSERT_DEBUG(eIndex < GC.getNumTechInfos(), "eIndex is expected to be within maximum bounds (invalid Index)");
 
 	if(m_pabResearchingTech[eIndex] != bNewValue)
 	{
@@ -1079,8 +1052,8 @@ void CvPlayerTechs::SetResearchingTech(TechTypes eIndex, bool bNewValue)
 /// Accessor: set Civ's priority multiplier for researching techs (for instance techs that unlock civ unique bonuses)
 void CvPlayerTechs::SetCivTechPriority(TechTypes eIndex, int iNewValue)
 {
-	CvAssertMsg(eIndex >= 0, "eIndex is expected to be non-negative (invalid Index)");
-	CvAssertMsg(eIndex < GC.getNumTechInfos(), "eIndex is expected to be within maximum bounds (invalid Index)");
+	ASSERT_DEBUG(eIndex >= 0, "eIndex is expected to be non-negative (invalid Index)");
+	ASSERT_DEBUG(eIndex < GC.getNumTechInfos(), "eIndex is expected to be within maximum bounds (invalid Index)");
 
 	m_piCivTechPriority[eIndex] = iNewValue;
 }
@@ -1088,16 +1061,16 @@ void CvPlayerTechs::SetCivTechPriority(TechTypes eIndex, int iNewValue)
 /// Accessor: get Civ's priority multiplier for researching techs (for instance techs that unlock civ unique bonuses)
 int CvPlayerTechs::GetCivTechPriority(TechTypes eIndex) const
 {
-	CvAssertMsg(eIndex >= 0, "eIndex is expected to be non-negative (invalid Index)");
-	CvAssertMsg(eIndex < GC.getNumTechInfos(), "eIndex is expected to be within maximum bounds (invalid Index)");
+	ASSERT_DEBUG(eIndex >= 0, "eIndex is expected to be non-negative (invalid Index)");
+	ASSERT_DEBUG(eIndex < GC.getNumTechInfos(), "eIndex is expected to be within maximum bounds (invalid Index)");
 	return m_piCivTechPriority[eIndex];
 }
 
 /// Accessor: set locale priority multiplier for researching techs (for instance techs that unlock nearby resources)
 void CvPlayerTechs::SetLocaleTechPriority(TechTypes eIndex, int iNewValue)
 {
-	CvAssertMsg(eIndex >= 0, "eIndex is expected to be non-negative (invalid Index)");
-	CvAssertMsg(eIndex < GC.getNumTechInfos(), "eIndex is expected to be within maximum bounds (invalid Index)");
+	ASSERT_DEBUG(eIndex >= 0, "eIndex is expected to be non-negative (invalid Index)");
+	ASSERT_DEBUG(eIndex < GC.getNumTechInfos(), "eIndex is expected to be within maximum bounds (invalid Index)");
 
 	m_piLocaleTechPriority[eIndex] = iNewValue;
 }
@@ -1105,55 +1078,55 @@ void CvPlayerTechs::SetLocaleTechPriority(TechTypes eIndex, int iNewValue)
 /// Accessor: get locale priority multiplier for researching techs (for instance techs that unlock nearby resources)
 int CvPlayerTechs::GetLocaleTechPriority(TechTypes eIndex) const
 {
-	CvAssertMsg(eIndex >= 0, "eIndex is expected to be non-negative (invalid Index)");
-	CvAssertMsg(eIndex < GC.getNumTechInfos(), "eIndex is expected to be within maximum bounds (invalid Index)");
+	ASSERT_DEBUG(eIndex >= 0, "eIndex is expected to be non-negative (invalid Index)");
+	ASSERT_DEBUG(eIndex < GC.getNumTechInfos(), "eIndex is expected to be within maximum bounds (invalid Index)");
 	return m_piLocaleTechPriority[eIndex];
 }
 #if defined(MOD_BALANCE_CORE)
 /// Accessor: get GC priority multiplier for researching techs
 int CvPlayerTechs::GetGSTechPriority(TechTypes eIndex) const
 {
-	CvAssertMsg(eIndex >= 0, "eIndex is expected to be non-negative (invalid Index)");
-	CvAssertMsg(eIndex < GC.getNumTechInfos(), "eIndex is expected to be within maximum bounds (invalid Index)");
+	ASSERT_DEBUG(eIndex >= 0, "eIndex is expected to be non-negative (invalid Index)");
+	ASSERT_DEBUG(eIndex < GC.getNumTechInfos(), "eIndex is expected to be within maximum bounds (invalid Index)");
 	return m_piGSTechPriority[eIndex];
 }
 /// Accessor: set locale priority multiplier for researching techs
 void CvPlayerTechs::SetGSTechPriority(TechTypes eIndex, int iNewValue)
 {
-	CvAssertMsg(eIndex >= 0, "eIndex is expected to be non-negative (invalid Index)");
-	CvAssertMsg(eIndex < GC.getNumTechInfos(), "eIndex is expected to be within maximum bounds (invalid Index)");
+	ASSERT_DEBUG(eIndex >= 0, "eIndex is expected to be non-negative (invalid Index)");
+	ASSERT_DEBUG(eIndex < GC.getNumTechInfos(), "eIndex is expected to be within maximum bounds (invalid Index)");
 
 	m_piGSTechPriority[eIndex] = iNewValue;
 }
 #endif
 ResourceTypes CvPlayerTechs::GetLocaleTechResource(TechTypes eIndex) const
 {
-	CvAssertMsg(eIndex >= 0, "eIndex is expected to be non-negative (invalid Index)");
-	CvAssertMsg(eIndex < GC.getNumTechInfos(), "eIndex is expected to be within maximum bounds (invalid Index)");
+	ASSERT_DEBUG(eIndex >= 0, "eIndex is expected to be non-negative (invalid Index)");
+	ASSERT_DEBUG(eIndex < GC.getNumTechInfos(), "eIndex is expected to be within maximum bounds (invalid Index)");
 
 	return m_peLocaleTechResources[eIndex];
 }
 
 UnitTypes CvPlayerTechs::GetCivTechUniqueUnit(TechTypes eIndex) const
 {
-	CvAssertMsg(eIndex >= 0, "eIndex is expected to be non-negative (invalid Index)");
-	CvAssertMsg(eIndex < GC.getNumTechInfos(), "eIndex is expected to be within maximum bounds (invalid Index)");
+	ASSERT_DEBUG(eIndex >= 0, "eIndex is expected to be non-negative (invalid Index)");
+	ASSERT_DEBUG(eIndex < GC.getNumTechInfos(), "eIndex is expected to be within maximum bounds (invalid Index)");
 
 	return m_peCivTechUniqueUnits[eIndex];
 }
 
 BuildingTypes CvPlayerTechs::GetCivTechUniqueBuilding(TechTypes eIndex) const
 {
-	CvAssertMsg(eIndex >= 0, "eIndex is expected to be non-negative (invalid Index)");
-	CvAssertMsg(eIndex < GC.getNumTechInfos(), "eIndex is expected to be within maximum bounds (invalid Index)");
+	ASSERT_DEBUG(eIndex >= 0, "eIndex is expected to be non-negative (invalid Index)");
+	ASSERT_DEBUG(eIndex < GC.getNumTechInfos(), "eIndex is expected to be within maximum bounds (invalid Index)");
 
 	return m_peCivTechUniqueBuildings[eIndex];
 }
 
 ImprovementTypes CvPlayerTechs::GetCivTechUniqueImprovement(TechTypes eIndex) const
 {
-	CvAssertMsg(eIndex >= 0, "eIndex is expected to be non-negative (invalid Index)");
-	CvAssertMsg(eIndex < GC.getNumTechInfos(), "eIndex is expected to be within maximum bounds (invalid Index)");
+	ASSERT_DEBUG(eIndex >= 0, "eIndex is expected to be non-negative (invalid Index)");
+	ASSERT_DEBUG(eIndex < GC.getNumTechInfos(), "eIndex is expected to be within maximum bounds (invalid Index)");
 
 	return m_peCivTechUniqueImprovements[eIndex];
 }
@@ -1411,7 +1384,7 @@ void CvPlayerTechs::SetGSPriorities()
 				{
 					m_piGSTechPriority[iTechLoop]++;
 				}
-				if (bDiploFocus && pkUnitInfo->IsTrade() || pkUnitInfo->GetBaseGold() > 0 || pkUnitInfo->GetDefaultUnitAIType() == UNITAI_MESSENGER)
+				if ((bDiploFocus && pkUnitInfo->IsTrade()) || pkUnitInfo->GetBaseGold() > 0 || pkUnitInfo->GetDefaultUnitAIType() == UNITAI_MESSENGER)
 				{
 					m_piGSTechPriority[iTechLoop]++;
 				}
@@ -1429,7 +1402,7 @@ void CvPlayerTechs::SetGSPriorities()
 bool CvPlayerTechs::IsResearch() const
 {
 	// Have we founded a city?
-	return m_pPlayer->isFoundedFirstCity();
+	return m_pPlayer->GetNumCitiesFounded() > 0;
 }
 
 /// Accessor: Is this tech disabled?
@@ -1499,7 +1472,7 @@ bool CvPlayerTechs::CanResearch(TechTypes eTech, bool bTrade) const
 	if(pkTechEntry == NULL)
 		return false;
 
-	if(!IsResearch() && m_pPlayer->getAdvancedStartPoints() < 0)
+	if(!IsResearch())
 	{
 		return false;
 	}
@@ -1587,8 +1560,8 @@ bool CvPlayerTechs::CanResearch(TechTypes eTech, bool bTrade) const
 /// Can we pick this as a Free Tech (ex. from a Wonder)?
 bool CvPlayerTechs::CanResearchForFree(TechTypes eTech) const
 {
-	CvAssertMsg(eTech >= 0, "eTech is expected to be non-negative (invalid Index)");
-	CvAssertMsg(eTech < GC.getNumTechInfos(), "eTech is expected to be within maximum bounds (invalid Index)");
+	ASSERT_DEBUG(eTech >= 0, "eTech is expected to be non-negative (invalid Index)");
+	ASSERT_DEBUG(eTech < GC.getNumTechInfos(), "eTech is expected to be within maximum bounds (invalid Index)");
 	if(eTech < 0 || eTech >= GC.getNumTechInfos()) return false;
 
 	// We can pick any tech that we are able to research
@@ -1934,7 +1907,7 @@ void CvPlayerTechs::CheckHasUUTech()
 							continue;
 
 						// Must be a combat or combat support unit
-						if (pkUnitEntry->GetCombat() > 0 || pkUnitEntry->GetRangedCombat() > 0 || pkUnitEntry->GetCultureBombRadius() > 0 || pkUnitEntry->IsCanRepairFleet() || pkUnitEntry->IsCityAttackSupport() || pkUnitEntry->GetNukeDamageLevel() != -1)
+						if (pkUnitEntry->GetCombat() > 0 || pkUnitEntry->GetRangedCombat() > 0 || pkUnitEntry->GetCultureBombRadius() > 0 || pkUnitEntry->IsCanRepairFleet() || pkUnitEntry->IsCityAttackSupport() || pkUnitEntry->GetNukeDamageLevel() > 0)
 						{
 							int iTech = pkUnitEntry->GetPrereqAndTech();
 							int iObsoleteTech = pkUnitEntry->GetObsoleteTech();
@@ -2004,7 +1977,7 @@ void CvPlayerTechs::CheckWillHaveUUTechSoon()
 							continue;
 
 						// Must be a combat or combat support unit
-						if (pkUnitEntry->GetCombat() > 0 || pkUnitEntry->GetRangedCombat() > 0 || pkUnitEntry->GetCultureBombRadius() > 0 || pkUnitEntry->IsCanRepairFleet() || pkUnitEntry->IsCityAttackSupport() || pkUnitEntry->GetNukeDamageLevel() != -1)
+						if (pkUnitEntry->GetCombat() > 0 || pkUnitEntry->GetRangedCombat() > 0 || pkUnitEntry->GetCultureBombRadius() > 0 || pkUnitEntry->IsCanRepairFleet() || pkUnitEntry->IsCityAttackSupport() || pkUnitEntry->GetNukeDamageLevel() > 0)
 						{
 							int iTech = pkUnitEntry->GetPrereqAndTech();
 							if (iTech != NO_TECH && !m_pPlayer->HasTech((TechTypes)iTech))
@@ -2240,17 +2213,17 @@ void CvTeamTechs::Init(CvTechXMLEntries* pTechs, CvTeam* pTeam)
 	m_pTeam = pTeam;
 
 	// Initialize status arrays
-	CvAssertMsg(m_pabHasTech==NULL, "about to leak memory, CvTeamTechs::m_pabHasTech");
+	ASSERT_DEBUG(m_pabHasTech==NULL, "about to leak memory, CvTeamTechs::m_pabHasTech");
 	m_pabHasTech = FNEW(bool[m_pTechs->GetNumTechs()], c_eCiv5GameplayDLL, 0);
-	CvAssertMsg(m_pabNoTradeTech==NULL, "about to leak memory, CvTeamTechs::m_pabNoTradeTech");
+	ASSERT_DEBUG(m_pabNoTradeTech==NULL, "about to leak memory, CvTeamTechs::m_pabNoTradeTech");
 	m_pabNoTradeTech = FNEW(bool[m_pTechs->GetNumTechs()], c_eCiv5GameplayDLL, 0);
-	CvAssertMsg(m_paiResearchProgress==NULL, "about to leak memory, CvTeamTechs::m_paiResearchProgress");
+	ASSERT_DEBUG(m_paiResearchProgress==NULL, "about to leak memory, CvTeamTechs::m_paiResearchProgress");
 	m_paiResearchProgress = FNEW(int [m_pTechs->GetNumTechs()], c_eCiv5GameplayDLL, 0);
 #if defined(MOD_CIV6_EUREKA)
-	CvAssertMsg(m_paiEurekaCounter == NULL, "about to leak memory, CvTeamTechs::m_paiEurekaCounter");
+	ASSERT_DEBUG(m_paiEurekaCounter == NULL, "about to leak memory, CvTeamTechs::m_paiEurekaCounter");
 	m_paiEurekaCounter = FNEW(int[m_pTechs->GetNumTechs()], c_eCiv5GameplayDLL, 0);
 #endif
-	CvAssertMsg(m_paiTechCount==NULL, "about to leak memory, CvTeamTechs::m_paiTechCount");
+	ASSERT_DEBUG(m_paiTechCount==NULL, "about to leak memory, CvTeamTechs::m_paiTechCount");
 	m_paiTechCount = FNEW(int [m_pTechs->GetNumTechs()], c_eCiv5GameplayDLL, 0);
 
 	Reset();
@@ -2309,7 +2282,7 @@ void CvTeamTechs::Read(FDataStream& kStream)
 		int iNumActiveTechs = m_pTechs->GetNumTechs();
 
 		// Next is an array of the tech IDs that were available when the save was made.
-		CvAssert(m_pTechs == GC.GetGameTechs());	// The hash to indices conversion will convert the hash to the index in the main game techs array, so these better be the same.
+		ASSERT_DEBUG(m_pTechs == GC.GetGameTechs());	// The hash to indices conversion will convert the hash to the index in the main game techs array, so these better be the same.
 		int* paTechIDs = (int*)_malloca(iNumSavedTechs * sizeof(int));
 		CvInfosSerializationHelper::ReadHashedTypeArray(kStream, iNumSavedTechs, paTechIDs, iNumSavedTechs);
 
@@ -2374,8 +2347,8 @@ FDataStream& operator>>(FDataStream& loadFrom, CvTeamTechs& writeTo)
 /// Accessor: set whether team owns a tech
 void CvTeamTechs::SetHasTech(TechTypes eIndex, bool bNewValue)
 {
-	CvAssertMsg(eIndex >= 0, "eIndex is expected to be non-negative (invalid Index)");
-	CvAssertMsg(eIndex < GC.getNumTechInfos(), "eIndex is expected to be within maximum bounds (invalid Index)");
+	ASSERT_DEBUG(eIndex >= 0, "eIndex is expected to be non-negative (invalid Index)");
+	ASSERT_DEBUG(eIndex < GC.getNumTechInfos(), "eIndex is expected to be within maximum bounds (invalid Index)");
 
 	if(m_pabHasTech[eIndex] != bNewValue)
 	{
@@ -2408,9 +2381,9 @@ bool CvTeamTechs::HasTech(TechTypes eIndex) const
 		return true;
 	}
 
-	CvAssertMsg(eIndex >= 0, "eIndex is expected to be non-negative (invalid Index)");
-	CvAssertMsg(eIndex < GC.getNumTechInfos(), "eIndex is expected to be within maximum bounds (invalid Index)");
-	CvAssertMsg(m_pabHasTech != NULL, "m_pabHasTech is not expected to be equal with NULL");
+	ASSERT_DEBUG(eIndex >= 0, "eIndex is expected to be non-negative (invalid Index)");
+	ASSERT_DEBUG(eIndex < GC.getNumTechInfos(), "eIndex is expected to be within maximum bounds (invalid Index)");
+	ASSERT_DEBUG(m_pabHasTech != NULL, "m_pabHasTech is not expected to be equal with NULL");
 	if(m_pabHasTech != NULL)
 		return m_pabHasTech[eIndex];
 	else
@@ -2426,8 +2399,8 @@ TechTypes CvTeamTechs::GetLastTechAcquired() const
 /// What was the most recent tech acquired?
 void CvTeamTechs::SetLastTechAcquired(TechTypes eTech)
 {
-	CvAssertMsg(eTech >= 0, "eIndex is expected to be non-negative (invalid Index)");
-	CvAssertMsg(eTech < GC.getNumTechInfos(), "eIndex is expected to be within maximum bounds (invalid Index)");
+	ASSERT_DEBUG(eTech >= 0, "eIndex is expected to be non-negative (invalid Index)");
+	ASSERT_DEBUG(eTech < GC.getNumTechInfos(), "eIndex is expected to be within maximum bounds (invalid Index)");
 
 	m_eLastTechAcquired = eTech;
 }
@@ -2452,8 +2425,8 @@ bool CvTeamTechs::HasResearchedAllTechs() const
 /// Accessor: set whether team owns a tech
 void CvTeamTechs::SetNoTradeTech(TechTypes eIndex, bool bNewValue)
 {
-	CvAssertMsg(eIndex >= 0, "eIndex is expected to be non-negative (invalid Index)");
-	CvAssertMsg(eIndex < GC.getNumTechInfos(), "eIndex is expected to be within maximum bounds (invalid Index)");
+	ASSERT_DEBUG(eIndex >= 0, "eIndex is expected to be non-negative (invalid Index)");
+	ASSERT_DEBUG(eIndex < GC.getNumTechInfos(), "eIndex is expected to be within maximum bounds (invalid Index)");
 
 	if(m_pabNoTradeTech[eIndex] != bNewValue)
 	{
@@ -2464,8 +2437,8 @@ void CvTeamTechs::SetNoTradeTech(TechTypes eIndex, bool bNewValue)
 /// Accessor: does team have a tech?
 bool CvTeamTechs::IsNoTradeTech(TechTypes eIndex) const
 {
-	CvAssertMsg(eIndex >= 0, "eIndex is expected to be non-negative (invalid Index)");
-	CvAssertMsg(eIndex < GC.getNumTechInfos(), "eIndex is expected to be within maximum bounds (invalid Index)");
+	ASSERT_DEBUG(eIndex >= 0, "eIndex is expected to be non-negative (invalid Index)");
+	ASSERT_DEBUG(eIndex < GC.getNumTechInfos(), "eIndex is expected to be within maximum bounds (invalid Index)");
 	return m_pabNoTradeTech[eIndex];
 }
 
@@ -2490,10 +2463,10 @@ void CvTeamTechs::SetResearchProgress(TechTypes eIndex, int iNewValue, PlayerTyp
 /// Accessor: set research done on one tech (in hundredths)
 void CvTeamTechs::SetResearchProgressTimes100(TechTypes eIndex, int iNewValue, PlayerTypes ePlayer, int iPlayerOverflow, int iPlayerOverflowDivisorTimes100)
 {
-	CvAssertMsg(eIndex >= 0, "eIndex is expected to be non-negative (invalid Index)");
-	CvAssertMsg(eIndex < GC.getNumTechInfos(), "eIndex is expected to be within maximum bounds (invalid Index)");
-	CvAssertMsg(ePlayer >= 0, "eIndex is expected to be non-negative (invalid Index)");
-	CvAssertMsg(ePlayer < MAX_PLAYERS, "ePlayer is expected to be within maximum bounds (invalid Index)");
+	ASSERT_DEBUG(eIndex >= 0, "eIndex is expected to be non-negative (invalid Index)");
+	ASSERT_DEBUG(eIndex < GC.getNumTechInfos(), "eIndex is expected to be within maximum bounds (invalid Index)");
+	ASSERT_DEBUG(ePlayer >= 0, "eIndex is expected to be non-negative (invalid Index)");
+	ASSERT_DEBUG(ePlayer < MAX_PLAYERS, "ePlayer is expected to be within maximum bounds (invalid Index)");
 
 	//Crash failsafe.
 	if(ePlayer == NO_PLAYER || eIndex == -1)
@@ -2599,7 +2572,7 @@ int CvTeamTechs::GetResearchProgressTimes100(TechTypes eIndex) const
 /// Accessor: what is the cost of researching this tech (taking all modifiers into account)
 int CvTeamTechs::GetResearchCost(TechTypes eTech) const
 {
-	CvAssertMsg(eTech != NO_TECH, "Tech is not assigned a valid value");
+	ASSERT_DEBUG(eTech != NO_TECH, "Tech is not assigned a valid value");
 	CvTechEntry* pkTechInfo = GC.getTechInfo(eTech);
 	if(pkTechInfo == NULL)
 	{
@@ -2649,7 +2622,7 @@ int CvTeamTechs::GetResearchCost(TechTypes eTech) const
 #if defined(MOD_CIV6_EUREKA)
 int CvTeamTechs::GetEurekaDiscount(TechTypes eTech) const
 {
-	CvAssertMsg(eTech != NO_TECH, "Tech is not assigned a valid value");
+	ASSERT_DEBUG(eTech != NO_TECH, "Tech is not assigned a valid value");
 	CvTechEntry* pkTechInfo = GC.getTechInfo(eTech);
 	if (pkTechInfo == NULL)
 	{

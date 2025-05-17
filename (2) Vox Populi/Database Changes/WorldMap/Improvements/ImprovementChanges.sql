@@ -13,10 +13,11 @@ DELETE FROM Improvement_ValidTerrains
 WHERE ImprovementType = 'IMPROVEMENT_FARM' AND TerrainType = 'TERRAIN_DESERT';
 
 -- +1 Food per 2 adjacent farms
-INSERT INTO Improvement_YieldAdjacentTwoSameType
-	(ImprovementType, YieldType, Yield)
+INSERT INTO Improvement_YieldPerXAdjacentImprovement
+	(ImprovementType, OtherImprovementType, YieldType, Yield, NumRequired)
 VALUES
-	('IMPROVEMENT_FARM', 'YIELD_FOOD', 1);
+	('IMPROVEMENT_FARM', 'IMPROVEMENT_FARM', 'YIELD_FOOD', 1, 2),
+	('IMPROVEMENT_FARM', 'IMPROVEMENT_MANUFACTORY', 'YIELD_FOOD', 1, 2);
 
 -- +1 Food on fresh water
 INSERT INTO Improvement_FreshWaterYields
@@ -49,11 +50,13 @@ VALUES
 
 -- Lumber Mill
 -- +1 Prod/Gold per 2 adjacent lumber mills
-INSERT INTO Improvement_YieldAdjacentTwoSameType
-	(ImprovementType, YieldType, Yield)
+INSERT INTO Improvement_YieldPerXAdjacentImprovement
+	(ImprovementType, OtherImprovementType, YieldType, Yield, NumRequired)
 VALUES
-	('IMPROVEMENT_LUMBERMILL', 'YIELD_GOLD', 1),
-	('IMPROVEMENT_LUMBERMILL', 'YIELD_PRODUCTION', 1);
+	('IMPROVEMENT_LUMBERMILL', 'IMPROVEMENT_LUMBERMILL', 'YIELD_GOLD', 1, 2),
+	('IMPROVEMENT_LUMBERMILL', 'IMPROVEMENT_LUMBERMILL', 'YIELD_PRODUCTION', 1, 2),
+	('IMPROVEMENT_LUMBERMILL', 'IMPROVEMENT_MANUFACTORY', 'YIELD_GOLD', 1, 2),
+	('IMPROVEMENT_LUMBERMILL', 'IMPROVEMENT_MANUFACTORY', 'YIELD_PRODUCTION', 1, 2);
 
 INSERT INTO Improvement_ValidFeatures
 	(ImprovementType, FeatureType)
@@ -73,7 +76,12 @@ VALUES
 	('IMPROVEMENT_FORT', 'YIELD_CULTURE_LOCAL', 1);
 
 UPDATE Improvements
-SET NoTwoAdjacent = 1, OutsideBorders = 0, BuildableOnResources = 0, MakesPassable = 1
+SET
+	NoTwoAdjacent = 1,
+	OutsideBorders = 0,
+	BuildableOnResources = 0,
+	MakesPassable = 1,
+	DestroyedWhenPillaged = 0
 WHERE Type = 'IMPROVEMENT_FORT';
 
 -- Citadel
@@ -108,6 +116,7 @@ INSERT INTO Improvement_Yields
 	(ImprovementType, YieldType, Yield)
 VALUES
 	('IMPROVEMENT_CUSTOMS_HOUSE', 'YIELD_FOOD', 2),
+	('IMPROVEMENT_CUSTOMS_HOUSE', 'YIELD_CULTURE', 1),
 	('IMPROVEMENT_HOLY_SITE', 'YIELD_CULTURE', 5),
 	('IMPROVEMENT_HOLY_SITE', 'YIELD_TOURISM', 3),
 	('IMPROVEMENT_EMBASSY', 'YIELD_GOLD', 2),
@@ -212,6 +221,7 @@ VALUES
 	('IMPROVEMENT_ACADEMY', 'TECH_NUCLEAR_FISSION', 'YIELD_SCIENCE', 3),
 	('IMPROVEMENT_CUSTOMS_HOUSE', 'TECH_BANKING', 'YIELD_GOLD', 3),
 	('IMPROVEMENT_CUSTOMS_HOUSE', 'TECH_RAILROAD', 'YIELD_FOOD', 3),
+	('IMPROVEMENT_CUSTOMS_HOUSE', 'TECH_RAILROAD', 'YIELD_CULTURE', 1),
 	('IMPROVEMENT_CUSTOMS_HOUSE', 'TECH_ARCHITECTURE', 'YIELD_FOOD', 3),
 	('IMPROVEMENT_CUSTOMS_HOUSE', 'TECH_REFRIGERATION', 'YIELD_GOLD', 3),
 	('IMPROVEMENT_CITADEL', 'TECH_CHEMISTRY', 'YIELD_SCIENCE', 2),

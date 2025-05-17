@@ -33,13 +33,13 @@
 
 /// Constructor
 CvAIOperation::CvAIOperation(int iID, PlayerTypes eOwner, PlayerTypes eEnemy, AIOperationTypes eType, ArmyType eMoveType)
+    : m_iID(iID),
+      m_eOwner(eOwner),
+      m_eType(eType),
+      m_eEnemy(eEnemy),
+      m_eArmyType(eMoveType)
 {
-	m_iID = iID;
-	m_eOwner = eOwner;
-	m_eEnemy = eEnemy;
-	m_eType = eType;
-	m_eArmyType = eMoveType;
-	Reset();
+    Reset();
 }
 
 /// Destructor
@@ -879,6 +879,7 @@ void CvAIOperation::UnitWasRemoved(int iArmyID, int iSlotID)
 CvPlot* CvAIOperation::ComputeTargetPlotForThisTurn(CvArmyAI* pArmy) const
 {
 	CvPlot* pRtnValue = NULL;
+	CvPlot* pNextWaypoint = NULL;
 
 	switch(m_eCurrentState)
 	{
@@ -890,38 +891,36 @@ CvPlot* CvAIOperation::ComputeTargetPlotForThisTurn(CvArmyAI* pArmy) const
 
 	case AI_OPERATION_STATE_RECRUITING_UNITS:
 	case AI_OPERATION_STATE_GATHERING_FORCES:
-		// Just use the muster point if we're still recruiting/gathering
-		pRtnValue = GetMusterPlot();
+		pNextWaypoint = GetMusterPlot();
 		break;
 
 	case AI_OPERATION_STATE_MOVING_TO_TARGET:
-		{
-			CvPlot *pGoalPlot = pArmy->GetGoalPlot();
-			CvPlot* pCurrent = pArmy->GetCenterOfMass();
-			if (pCurrent && pGoalPlot)
-			{
-				//problem: center of mass may be on a mountain etc ...
-				if (!pCurrent->isValidMovePlot(m_eOwner))
-				{
-					CvUnit* pFirstUnit = pArmy->GetFirstUnit();
-					if (pFirstUnit)
-						pCurrent = pFirstUnit->plot();
-					else
-						return NULL;
-				}
-
-				//get where we want to be next. always put the carrot a little bit further out
-				pRtnValue = GetPlotXInStepPath(pCurrent, pGoalPlot, pArmy->GetMovementRate()+1, true);
-				if (!pRtnValue)
-				{
-					// Can't plot a path, probably due to change of control of hexes.  Will probably abort the operation
-					OutputDebugString(CvString::format("CvAIOperation: cannot find a step path from %d,%d to %d,%d\n",
-						pCurrent->getX(), pCurrent->getY(), pGoalPlot->getX(), pGoalPlot->getY()).c_str());
-					return NULL;
-				}
-			}
-		}
+		pNextWaypoint = pArmy->GetGoalPlot();
 		break;
+	}
+
+	CvPlot* pCurrent = pArmy->GetCenterOfMass();
+	if (pCurrent && pNextWaypoint)
+	{
+		//problem: center of mass may be on a mountain etc ...
+		if (!pCurrent->isValidMovePlot(m_eOwner))
+		{
+			CvUnit* pFirstUnit = pArmy->GetFirstUnit();
+			if (pFirstUnit)
+				pCurrent = pFirstUnit->plot();
+			else
+				return NULL;
+		}
+
+		//get where we want to be next. always put the carrot a little bit further out
+		pRtnValue = GetPlotXInStepPath(pCurrent, pNextWaypoint, pArmy->GetMovementRate() + 1, true);
+		if (!pRtnValue)
+		{
+			// Can't plot a path, probably due to change of control of hexes.  Will probably abort the operation
+			OutputDebugString(CvString::format("CvAIOperation: cannot find a step path from %d,%d to %d,%d\n",
+				pCurrent->getX(), pCurrent->getY(), pNextWaypoint->getX(), pNextWaypoint->getY()).c_str());
+			return NULL;
+		}
 	}
 
 	return pRtnValue;
@@ -2037,7 +2036,7 @@ CvPlot* CvAIOperationCivilianFoundCity::FindBestTargetForUnit(CvUnit* pUnit)
 
 	int iNewScore = GET_PLAYER(m_eOwner).getPlotFoundValue(pNewTarget->getX(), pNewTarget->getY());
 	int iNewQ = GET_PLAYER(m_eOwner).GetSettlePlotQualityMeasure(pNewTarget);
-	if (iNewQ < GET_PLAYER(m_eOwner).GetMinAcceptableSettleQuality())
+	if (iNewQ < GET_PLAYER(m_eOwner).GetMinAcceptableSettleQuality() && GET_PLAYER(m_eOwner).getNumCities() > 0)
 		return NULL;
 
 	if (!GetTargetPlot())
@@ -2649,7 +2648,7 @@ bool CvAIOperationNukeAttack::CheckTransitionToNextStage()
 			if(pNuke && pNuke->canMove() && pNuke->canNukeAt(pNuke->plot(),pTargetPlot->getX(),pTargetPlot->getY()))
 			{
 				//try to save any units we have nearby
-				int iBlastRadius = min(5,max(1,/*2*/ GD_INT_GET(NUKE_BLAST_RADIUS)));
+				int iBlastRadius = /*2*/ range(GD_INT_GET(NUKE_BLAST_RADIUS), 1, 5);
 				for (int i=0; i<RING_PLOTS[iBlastRadius]; i++)
 				{
 					CvPlot* pLoopPlot = iterateRingPlots(pTargetPlot,i);
@@ -2736,7 +2735,7 @@ CvPlot* CvAIOperationNukeAttack::FindBestTarget(CvPlot** ppMuster) const
 			int iThisCityValue = 0;
 
 			// check to see if there is anything good or bad in the radius that we should account for
-			int iBlastRadius = min(5,max(1,/*2*/ GD_INT_GET(NUKE_BLAST_RADIUS)));
+			int iBlastRadius = /*2*/ range(GD_INT_GET(NUKE_BLAST_RADIUS), 1, 5);
 			for (int i=0; i<RING_PLOTS[iBlastRadius]; i++)
 			{
 				CvPlot* pLoopPlot = iterateRingPlots(pCityPlot,i);
@@ -3347,8 +3346,9 @@ CvCity* OperationalAIHelpers::GetClosestFriendlyCoastalCity(PlayerTypes ePlayer,
 	//todo: use a simple water path length lookup once we have it
 	for(CvCity* pLoopCity = GET_PLAYER(ePlayer).firstCity(&iLoop); pLoopCity != NULL; pLoopCity = GET_PLAYER(ePlayer).nextCity(&iLoop))
 	{
-		if(pLoopCity->isCoastal(iMinWaterSize) && pLoopCity->HasAccessToLandmass(pRefPlot->getLandmass()))
+		if(pLoopCity->isCoastal(iMinWaterSize) && pLoopCity->HasAccessToLandmassOrOcean(pRefPlot->getLandmass()))
 		{
+			//dangerous: city might be on the wrong side of a continent! need to create path length distance map per domain!
 			int iDistance = plotDistance(pLoopCity->getX(), pLoopCity->getY(), pRefPlot->getX(), pRefPlot->getY());
 			if(iDistance >= 0 && iDistance < iBestDistance)
 			{

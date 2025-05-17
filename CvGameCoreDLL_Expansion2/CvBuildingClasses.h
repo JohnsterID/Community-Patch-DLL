@@ -1,5 +1,5 @@
 /*	-------------------------------------------------------------------------------------------------------
-	� 1991-2012 Take-Two Interactive Software and its subsidiaries.  Developed by Firaxis Games.  
+	© 1991-2012 Take-Two Interactive Software and its subsidiaries.  Developed by Firaxis Games.  
 	Sid Meier's Civilization V, Civ, Civilization, 2K Games, Firaxis Games, Take-Two Interactive Software 
 	and their respective logos are all trademarks of Take-Two interactive Software, Inc.  
 	All other marks and trademarks are the property of their respective owners.  
@@ -122,8 +122,6 @@ public:
 	int GetFreeStartEra() const;
 	int GetMaxStartEra() const;
 	int GetObsoleteTech() const;
-	int GetEnhancedYieldTech() const;
-	int GetTechEnhancedTourism() const;
 	int GetGoldMaintenance() const;
 	int GetMutuallyExclusiveGroup() const;
 	int GetReplacementBuildingClass() const;
@@ -142,6 +140,7 @@ public:
 	int GrantsRandomResourceTerritory() const;
 	bool IsPuppetPurchaseOverride() const;
 	bool IsAllowsPuppetPurchase() const;
+	bool IsNoStarvationNonSpecialist() const;
 	int GetCooldown() const;
 	bool IsTradeRouteInvulnerable() const;
 	int GetTRSpeedBoost() const;
@@ -149,7 +148,7 @@ public:
 	int GetTRTurnModGlobal() const;
 	int GetTRTurnModLocal() const;
 	int GetVotesPerGPT() const;
-	bool IsRequiresRail() const;
+	bool IsRequiresIndustrialCityConnection() const;
 	bool IsDummy() const;
 	int GetLandmarksTourismPercentGlobal() const;
 	int GetGreatWorksTourismModifierGlobal() const;
@@ -182,12 +181,17 @@ public:
 	int GetGlobalCultureRateModifier() const;
 	int GetGreatPeopleRateModifier() const;
 	int GetGlobalGreatPeopleRateModifier() const;
+	int GetGPRateModifierPerMarriage() const;
+	int GetGPRateModifierPerLocalTheme() const;
+	int GetGPPOnCitizenBirth() const;
 	int GetGreatGeneralRateModifier() const;
 	int GetGreatPersonExpendGold() const;
 	int GetUnitUpgradeCostMod() const;
 	int GetGoldenAgeModifier() const;
 	int GetFreeExperience() const;
 	int GetGlobalFreeExperience() const;
+	int GetGlobalHappinessPerMajorWar() const;
+	int GetGlobalMilitaryProductionModPerMajorWar() const;
 	int GetFoodKept() const;
 	bool IsAirlift() const;
 	int GetAirModifier() const;
@@ -235,7 +239,7 @@ public:
 
 	int GetPurchaseCooldownReduction(bool bCivilian = false) const;
 #endif
-	bool IsVassalLevyEra() const;
+	int GetVassalLevyEra() const;
 #if defined(MOD_BALANCE_CORE_POP_REQ_BUILDINGS)
 	int GetNationalPopulationRequired() const;
 	int GetLocalPopulationRequired() const;
@@ -261,6 +265,7 @@ public:
 	int GetCitySupplyFlatGlobal() const;
 	int CityRangedStrikeRange() const;
 	int CityIndirectFire() const;
+	int GetGarrisonRangedAttackModifier() const;
 	int CityRangedStrikeModifier() const;
 #endif
 	int GetHappinessPerCity() const;
@@ -289,7 +294,7 @@ public:
 	int GetEspionageModifier() const;
 	int GetGlobalEspionageModifier() const;
 	int GetSpySecurityModifier() const;
-	int GetSpySecurityModifierPerPop() const;
+	int GetSpySecurityModifierPerXPop() const;
 	int GetGlobalSpySecurityModifier() const;
 	int GetExtraSpies() const;
 	int GetSpyRankChange() const;
@@ -350,8 +355,6 @@ public:
 	bool IsMountain() const;
 	bool IsHill() const;
 	bool IsFlat() const;
-	bool IsFoundsReligion() const;
-	bool IsReligious() const;
 	bool IsBorderObstacle() const;
 #if defined(MOD_BALANCE_CORE)
 	bool IsAnyBodyOfWater() const;
@@ -382,6 +385,7 @@ public:
 	bool IsExtraLuxuries() const;
 	bool IsDiplomaticVoting() const;
 	bool AllowsWaterRoutes() const;
+	bool AllowsIndustrialWaterRoutes() const;
 	bool AllowsAirRoutes() const;
 	bool IsScienceBuilding() const;
 	bool IsUnlockedByBelief() const;
@@ -416,6 +420,9 @@ public:
 	int GetBoredomFlatReductionGlobal() const;
 	int GetReligiousUnrestFlatReductionGlobal() const;
 
+	int GetExperiencePerGoldenAge() const;
+	int GetExperiencePerGoldenAgeCap() const;
+
 	// Accessor Functions (Arrays)
 	int GetGrowthExtraYield(int i) const;
 	int* GetGrowthExtraYieldArray() const;
@@ -434,7 +441,13 @@ public:
 	int* GetYieldFromVictoryGlobalArray() const;
 
 	int GetYieldFromVictoryGlobalEraScaling(int i) const;
-	int* GetYieldFromVictoryGlobalArrayEraScaling() const;
+	int* GetYieldFromVictoryGlobalEraScalingArray() const;
+
+	int GetYieldFromVictoryGlobalInGoldenAge(int i) const;
+	int* GetYieldFromVictoryGlobalInGoldenAgeArray() const;
+
+	int GetYieldFromVictoryGlobalInGoldenAgeEraScaling(int i) const;
+	int* GetYieldFromVictoryGlobalInGoldenAgeEraScalingArray() const;
 
 	int GetYieldFromVictoryGlobalPlayer(int i) const;
 	int* GetYieldFromVictoryGlobalPlayerArray() const;
@@ -447,6 +460,19 @@ public:
 
 	int GetYieldFromPillageGlobalPlayer(int i) const;
 	int* GetYieldFromPillageGlobalPlayerArray() const;
+
+	int GetYieldFromGoldenAgeStart(int i) const;
+	int* GetYieldFromGoldenAgeStartArray() const;
+
+	int GetYieldChangePerGoldenAge(int i) const;
+	int* GetYieldChangePerGoldenAgeArray() const;
+
+	int GetYieldChangePerGoldenAgeCap(int i) const;
+	int* GetYieldChangePerGoldenAgeCapArray() const;
+
+	int GetYieldChangesPerLocalTheme(int i) const;
+
+	int GetYieldFromUnitGiftGlobal(int i) const;
 
 	int GetGoldenAgeYieldMod(int i) const;
 	int* GetGoldenAgeYieldModArray() const;
@@ -466,6 +492,12 @@ public:
 	int GetYieldFromBirth(int i) const;
 	int* GetYieldFromBirthArray() const;
 
+	int GetYieldFromBirthEraScaling(int i) const;
+	int* GetYieldFromBirthEraScalingArray() const;
+
+	int GetYieldFromBirthRetroactive(int i) const;
+	int* GetYieldFromBirthRetroactiveArray() const;
+
 	int GetYieldFromUnitProduction(int i) const;
 	int* GetYieldFromUnitProductionArray() const;
 
@@ -478,20 +510,33 @@ public:
 	int GetYieldFromUnitLevelUp(int i) const;
 	int* GetYieldFromUnitLevelUpArray() const;
 
-	int GetYieldFromCombatExperience(int i) const;
-	int* GetYieldFromCombatExperienceArray() const;
+	int GetYieldFromCombatExperienceTimes100(int i) const;
+	int* GetYieldFromCombatExperienceTimes100Array() const;
 
 	int GetYieldFromPurchase(int i) const;
 	int* GetYieldFromPurchaseArray() const;
 
+	int GetYieldFromPurchaseGlobal(int i) const;
+	int* GetYieldFromPurchaseGlobalArray() const;
+
 	int GetYieldFromFaithPurchase(int i) const;
 	int* GetYieldFromFaithPurchaseArray() const;
+
+	int GetYieldFromInternationalTREnd(int i) const;
 
 	int GetYieldFromInternalTREnd(int i) const;
 	int* GetYieldFromInternalTREndArray() const;
 
 	int GetYieldFromInternal(int i) const;
 	int* GetYieldFromInternalArray() const;
+
+	int GetYieldFromLongCount(int i) const;
+
+	int GetYieldFromGPBirthScaledWithWriterBulb(int i) const;
+	int GetYieldFromGPBirthScaledWithArtistBulb(int i) const;
+
+	map<GreatPersonTypes, map<std::pair<YieldTypes, YieldTypes>, int>> GetYieldFromGPBirthScaledWithPerTurnYieldMap() const;
+	int GetYieldFromGPBirthScaledWithPerTurnYield(GreatPersonTypes eGreatPerson, YieldTypes eYieldIn, YieldTypes eYieldOut) const;
 
 	int GetYieldFromProcessModifier(int i) const;
 	int* GetYieldFromProcessModifierArray() const;
@@ -511,6 +556,8 @@ public:
 	int GetYieldFromSpyDefenseOrID(int i) const;
 	int* GetYieldFromSpyDefenseOrIDArray() const;
 
+	int GetYieldChangesPerCityStrengthTimes100(int i) const;
+
 	int GetYieldFromSpyRigElection(int i) const;
 	int* GetYieldFromSpyRigElectionArray() const;
 
@@ -524,26 +571,29 @@ public:
 #endif
 	int GetYieldChangePerReligion(int i) const;
 	int* GetYieldChangePerReligionArray() const;
+	set<int> GetUnitClassTrainingAllowed() const;
+	set<std::pair<int, bool>> GetResourceClaim() const;
 	int GetYieldModifier(int i) const;
 	int* GetYieldModifierArray() const;
 	int GetAreaYieldModifier(int i) const;
 	int* GetAreaYieldModifierArray() const;
 	int GetGlobalYieldModifier(int i) const;
 	int* GetGlobalYieldModifierArray() const;
-	int GetTechEnhancedYieldChange(int i) const;
-	int* GetTechEnhancedYieldChangeArray() const;
 	int GetSeaPlotYieldChange(int i) const;
 	int* GetSeaPlotYieldChangeArray() const;
 	int GetRiverPlotYieldChange(int i) const;
 	int* GetRiverPlotYieldChangeArray() const;
 	int GetLakePlotYieldChange(int i) const;
 	int* GetLakePlotYieldChangeArray() const;
+	int GetLakePlotYieldChangeGlobal(int i) const;
+	int* GetLakePlotYieldChangeGlobalArray() const;
 	int GetSeaResourceYieldChange(int i) const;
 	int* GetSeaResourceYieldChangeArray() const;
 	int GetSpecialistCount(int i) const;
 	int GetFreeSpecialistCount(int i) const;
 	int GetUnitCombatFreeExperience(int i) const;
 	int GetUnitCombatProductionModifier(int i) const;
+	int GetUnitCombatProductionModifierGlobal(int i) const;
 	int GetDomainFreeExperience(int i) const;
 	int GetDomainFreeExperiencePerGreatWork(int i) const;
 #if defined(MOD_BALANCE_CORE)
@@ -560,13 +610,17 @@ public:
 	int GetProductionTraits(int i) const;
 	int GetPrereqNumOfBuildingClass(int i) const;
 	int GetFlavorValue(int i) const;
-	int GetLocalResourceAnd(int i) const;
-	int GetLocalResourceOr(int i) const;
+	uint GetLocalResourceAndSize() const;
+	int GetLocalResourceAnd(uint ui) const;
+	uint GetLocalResourceOrSize() const;
+	int GetLocalResourceOr(uint ui) const;
 #if defined(MOD_BALANCE_CORE_RESOURCE_MONOPOLIES)
 	int GetFeatureOr(int i) const;
 	int GetFeatureAnd(int i) const;
-	int GetResourceMonopolyAnd(int i) const;
-	int GetResourceMonopolyOr(int i) const;
+	uint GetResourceMonopolyAndSize() const;
+	int GetResourceMonopolyAnd(uint ui) const;
+	uint GetResourceMonopolyOrSize() const;
+	int GetResourceMonopolyOr(uint ui) const;
 	int GetGPRateModifierPerXFranchises() const;
 	int GetResourceQuantityPerXFranchises(int i) const;
 	int GetYieldPerFranchise(int i) const;
@@ -599,13 +653,15 @@ public:
 
 	int GetInstantReligionPressure() const;
 #endif
-
+	int GetDefensePerXWonder() const;
 	int GetResourceYieldChange(int i, int j) const;
 	int* GetResourceYieldChangeArray(int i) const;
 	int GetFeatureYieldChange(int i, int j) const;
 	int* GetFeatureYieldChangeArray(int i) const;
 #if defined(MOD_BALANCE_CORE)
 	int GetResourceYieldChangeGlobal(int iResource, int iYieldType) const;
+	std::map<int, std::map<int, int>> GetTechEnhancedYields() const;
+	std::map<pair<GreatPersonTypes, EraTypes>, int> GetGreatPersonPointFromConstruction() const;
 	int GetImprovementYieldChange(int i, int j) const;
 	int* GetImprovementYieldChangeArray(int i) const;
 
@@ -661,8 +717,6 @@ private:
 	int m_iFreeStartEra;
 	int m_iMaxStartEra;
 	int m_iObsoleteTech;
-	int m_iEnhancedYieldTech;
-	int m_iTechEnhancedTourism;
 	int m_iGoldMaintenance;
 	int m_iMutuallyExclusiveGroup;
 	int m_iReplacementBuildingClass;
@@ -678,6 +732,7 @@ private:
 	int m_iGrantsRandomResourceTerritory;
 	bool m_bPuppetPurchaseOverride;
 	bool m_bAllowsPuppetPurchase;
+	bool m_bNoStarvationNonSpecialist;
 	int m_iGetCooldown;
 	bool m_bTradeRouteInvulnerable;
 	int m_iTRSpeedBoost;
@@ -685,7 +740,7 @@ private:
 	int m_iTRTurnModLocal;
 	int m_iTRVisionBoost;
 	int m_iVotesPerGPT;
-	bool m_bRequiresRail;
+	bool m_bRequiresIndustrialCityConnection;
 	bool m_bDummy;
 	int m_iLandmarksTourismPercentGlobal;
 	int m_iGreatWorksTourismModifierGlobal;
@@ -716,12 +771,17 @@ private:
 	int m_iGlobalCultureRateModifier;
 	int m_iGreatPeopleRateModifier;
 	int m_iGlobalGreatPeopleRateModifier;
+	int m_iGPRateModifierPerMarriage;
+	int m_iGPRateModifierPerLocalTheme;
+	int m_iGPPOnCitizenBirth;
 	int m_iGreatGeneralRateModifier;
 	int m_iGreatPersonExpendGold;
 	int m_iUnitUpgradeCostMod;
 	int m_iGoldenAgeModifier;
 	int m_iFreeExperience;
 	int m_iGlobalFreeExperience;
+	int m_iGlobalHappinessPerMajorWar;
+	int m_iGlobalMilitaryProductionModPerMajorWar;
 	int m_iFoodKept;
 	bool m_bAirlift;
 	int m_iAirModifier;
@@ -770,6 +830,7 @@ private:
 	int m_iCityRangedStrikeRange;
 	int m_iCityIndirectFire;
 	int m_iRangedStrikeModifier;
+	int m_iGarrisonRangedAttackModifier;
 #endif
 	int m_iHappinessPerCity;
 	int m_iHappinessPerXPolicies;
@@ -798,7 +859,7 @@ private:
 	int m_iEspionageModifier;
 	int m_iGlobalEspionageModifier;
 	int m_iSpySecurityModifier;
-	int m_iSpySecurityModifierPerPop;
+	int m_iSpySecurityModifierPerXPop;
 	int m_iGlobalSpySecurityModifier;
 	int m_iExtraSpies;
 	int m_iSpyRankChange;
@@ -854,6 +915,8 @@ private:
 	int m_iIlliteracyFlatReductionGlobal;
 	int m_iBoredomFlatReductionGlobal;
 	int m_iReligiousUnrestFlatReductionGlobal;
+	int m_iExperiencePerGoldenAge;
+	int m_iExperiencePerGoldenAgeCap;
 	int m_iPreferredDisplayPosition;
 	int m_iPortraitIndex;
 
@@ -888,7 +951,7 @@ private:
 	int m_iEventRequiredActive;
 	int m_iCityEventRequiredActive;
 #endif
-	bool m_bVassalLevyEra;
+	int m_iVassalLevyEra;
 #if defined(MOD_BALANCE_CORE_POP_REQ_BUILDINGS)
 	int m_iNationalPopRequired;
 	int m_iLocalPopRequired;
@@ -900,8 +963,6 @@ private:
 	bool m_bMountain;
 	bool m_bHill;
 	bool m_bFlat;
-	bool m_bFoundsReligion;
-	bool m_bIsReligious;
 	bool m_bBorderObstacle;
 #if defined(MOD_BALANCE_CORE)
 	int m_iCityAirStrikeDefense;
@@ -930,6 +991,7 @@ private:
 	bool m_bExtraLuxuries;
 	bool m_bDiplomaticVoting;
 	bool m_bAllowsWaterRoutes;
+	bool m_bAllowsIndustrialWaterRoutes;
 	bool m_bAllowsAirRoutes;
 	bool m_bCityWall;
 	bool m_bUnlockedByBelief;
@@ -949,6 +1011,7 @@ private:
 
 	int m_iInstantReligionPressure;
 	int m_iBasePressureModGlobal;
+	int m_iDefensePerXWonder;
 
 	CvString m_strArtDefineTag;
 	CvString m_strWonderSplashAudio;
@@ -966,6 +1029,7 @@ private:
 	int* m_piSeaPlotYieldChange;
 	int* m_piRiverPlotYieldChange;
 	int* m_piLakePlotYieldChange;
+	int* m_piLakePlotYieldChangeGlobal;
 	int* m_piSeaResourceYieldChange;
 	int* m_piGrowthExtraYield;
 	int m_iNeedBuildingThisCity;
@@ -976,11 +1040,18 @@ private:
 	int* m_piYieldFromVictory;
 	int* m_piYieldFromVictoryGlobal;
 	int* m_piYieldFromVictoryGlobalEraScaling;
+	int* m_piYieldFromVictoryGlobalInGoldenAge;
+	int* m_piYieldFromVictoryGlobalInGoldenAgeEraScaling;
 	int* m_piYieldFromVictoryGlobalPlayer;
 	int* m_piYieldFromPillage;
 	int* m_piYieldFromPillageGlobal;
 	int* m_piYieldFromPillageGlobalPlayer;
+	int* m_piYieldFromGoldenAgeStart;
+	int* m_piYieldChangePerGoldenAge;
+	int* m_piYieldChangePerGoldenAgeCap;
 	int* m_piGoldenAgeYieldMod;
+	int* m_piYieldChangesPerLocalTheme;
+	int* m_piYieldFromUnitGiftGlobal;
 	int* m_piYieldFromWLTKD;
 	int* m_piYieldFromGPExpend;
 	int* m_piThemingYieldBonus;
@@ -989,32 +1060,43 @@ private:
 	int* m_piYieldFromSpyIdentify;
 	int* m_piYieldFromSpyDefenseOrID;
 	int* m_piYieldFromSpyRigElection;
+	int* m_piYieldChangesPerCityStrengthTimes100;
 	int* m_piYieldFromTech;
 	int* m_piYieldFromConstruction;
 	int* m_piYieldFromBirth;
+	int* m_piYieldFromBirthEraScaling;
+	int* m_piYieldFromBirthRetroactive;
 	int* m_piYieldFromUnitProduction;
 	int* m_piYieldFromBorderGrowth;
 	int* m_piYieldFromPolicyUnlock;
 	int* m_piYieldFromUnitLevelUp;
-	int* m_piYieldFromCombatExperience;
+	int* m_piYieldFromCombatExperienceTimes100;
 	int* m_piYieldFromPurchase;
+	int* m_piYieldFromPurchaseGlobal;
 	int* m_piYieldFromFaithPurchase;
 	int* m_piYieldFromInternalTREnd;
+	int* m_piYieldFromInternationalTREnd;
 	int* m_piYieldFromInternal;
 	int* m_piYieldFromProcessModifier;
+	int* m_piYieldFromLongCount;
+	int* m_piYieldFromGPBirthScaledWithWriterBulb;
+	int* m_piYieldFromGPBirthScaledWithArtistBulb;
+	map<GreatPersonTypes, map<pair<YieldTypes, YieldTypes>, int>> m_miYieldFromGPBirthScaledWithPerTurnYield;
 #endif
 	int* m_piYieldChange;
 	int* m_piYieldChangePerPop;
 #if defined(MOD_BALANCE_CORE)
 	std::map<int, int> m_piYieldChangePerPopInEmpire;
 #endif
+	set<int> m_siUnitClassTrainingAllowed;
+	set<std::pair<int,bool>> m_sibResourceClaim;
 	int* m_piYieldChangePerReligion;
 	int* m_piYieldModifier;
 	int* m_piAreaYieldModifier;
 	int* m_piGlobalYieldModifier;
-	int* m_piTechEnhancedYieldChange;
 	int* m_piUnitCombatFreeExperience;
 	int* m_piUnitCombatProductionModifiers;
+	int* m_piUnitCombatProductionModifiersGlobal;
 	int* m_piDomainFreeExperience;
 	int* m_piDomainFreeExperiencePerGreatWork;
 #if defined(MOD_BALANCE_CORE)
@@ -1024,13 +1106,13 @@ private:
 	int* m_piDomainProductionModifier;
 	int* m_piPrereqNumOfBuildingClass;
 	int* m_piFlavorValue;
-	int* m_piLocalResourceAnds;
-	int* m_piLocalResourceOrs;
+	std::vector<int> m_viLocalResourceAnds;
+	std::vector<int> m_viLocalResourceOrs;
 #if defined(MOD_BALANCE_CORE_RESOURCE_MONOPOLIES)
 	int* m_piLocalFeatureOrs;
 	int* m_piLocalFeatureAnds;
-	int* m_piResourceMonopolyAnds;
-	int* m_piResourceMonopolyOrs;
+	std::vector<int> m_viResourceMonopolyAnds;
+	std::vector<int> m_viResourceMonopolyOrs;
 	int* m_piYieldPerFranchise;
 	int m_iGPRateModifierPerXFranchises;
 	int* m_piResourceQuantityPerXFranchises;
@@ -1056,6 +1138,8 @@ private:
 	int** m_ppaiFeatureYieldChange;
 #if defined(MOD_BALANCE_CORE)
 	std::map<int, std::map<int, int>> m_ppiResourceYieldChangeGlobal;
+	std::map<int, std::map<int, int>> m_miTechEnhancedYields;
+	std::map<pair<GreatPersonTypes, EraTypes>, int> m_miGreatPersonPointFromConstruction;
 	CvDoubleYieldInfo* m_paYieldFromYield;
 	CvDoubleYieldInfo* m_paYieldFromYieldGlobal;
 	int** m_ppaiImprovementYieldChange;
@@ -1181,19 +1265,15 @@ public:
 	void SetBuildingOriginalTime(BuildingTypes eIndex, int iNewValue);
 
 	int GetNumRealBuilding(BuildingTypes eIndex) const;
-#if defined(MOD_BALANCE_CORE)
 	void SetNumRealBuilding(BuildingTypes eIndex, int iNewValue, bool bNoBonus = false);
 	void SetNumRealBuildingTimed(BuildingTypes eIndex, int iNewValue, bool bFirst, PlayerTypes eOriginalOwner, int iOriginalTime, bool bNoBonus = false);
-#else
-	void SetNumRealBuilding(BuildingTypes eIndex, int iNewValue);
-	void SetNumRealBuildingTimed(BuildingTypes eIndex, int iNewValue, bool bFirst, PlayerTypes eOriginalOwner, int iOriginalTime);
-#endif
+
 	int GetNumFreeBuilding(BuildingTypes eIndex) const;
 	void SetNumFreeBuilding(BuildingTypes eIndex, int iNewValue);
-#if defined(MOD_BALANCE_CORE)
+
 	int IsFirstTimeBuilding(BuildingTypes eBuilding);
 	void SetFirstTimeBuilding(BuildingTypes eBuilding, int iValue);
-#endif
+
 	int GetBuildingYieldChange(BuildingClassTypes eBuildingClass, YieldTypes eYield) const;
 	void SetBuildingYieldChange(BuildingClassTypes eBuildingClass, YieldTypes eYield, int iChange);
 	void ChangeBuildingYieldChange(BuildingClassTypes eBuildingClass, YieldTypes eYield, int iChange);
@@ -1207,32 +1287,25 @@ public:
 	bool HasAvailableGreatWorkSlot(GreatWorkSlotType eSlotType) const;
 	int GetNumAvailableGreatWorkSlots(GreatWorkSlotType eSlotType = NO_GREAT_WORK_SLOT) const;
 	int GetNumFilledGreatWorkSlots(GreatWorkSlotType eSlotType = NO_GREAT_WORK_SLOT) const;
-	bool GetNextAvailableGreatWorkSlot(BuildingClassTypes *eBuildingClass, int *iSlot) const;
-	bool GetNextAvailableGreatWorkSlot(GreatWorkSlotType eGreatWorkSlot, BuildingClassTypes *eBuildingClass, int *iSlot) const;
+	bool GetNextAvailableGreatWorkSlot(BuildingClassTypes& eBuildingClass, int& iSlot) const;
+	bool GetNextAvailableGreatWorkSlot(GreatWorkSlotType eGreatWorkSlot, BuildingClassTypes& eBuildingClass, int& iSlot) const;
 
 	int GetYieldFromGreatWorks(YieldTypes eYield) const;
 	int GetCultureFromGreatWorks() const;
-#if defined(MOD_GLOBAL_GREATWORK_YIELDTYPES)
+
 	int GetNumGreatWorks(bool bIgnoreYield = true) const;
-#else
-	int GetNumGreatWorks() const;
-#endif
 	int GetNumGreatWorks(GreatWorkSlotType eGreatWorkSlot, bool bArtifact = false, bool bArt = false) const;
-#if defined(MOD_BALANCE_CORE)
+
 	int GetThemingBonusIndex(BuildingTypes eBuilding) const;
 	void SetThemingBonusIndex(BuildingTypes eBuilding, int iIndex);
-#endif
 
 	int GetLandmarksTourismPercent() const;
 	void ChangeLandmarksTourismPercent(int iChange);
 	int GetGreatWorksTourismModifier() const;
 	void ChangeGreatWorksTourismModifier(int iChange);
 
-#if defined(MOD_GLOBAL_GREATWORK_YIELDTYPES)
 	int GetCurrentThemingBonuses(YieldTypes eYield) const;
-#else
-	int GetCurrentThemingBonuses() const;
-#endif
+
 	int GetTotalNumThemedBuildings() const;
 	int GetNumBuildingsFromFaith() const;
 

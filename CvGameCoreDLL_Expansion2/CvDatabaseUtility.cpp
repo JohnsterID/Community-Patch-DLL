@@ -1,5 +1,5 @@
 /*	-------------------------------------------------------------------------------------------------------
-	© 1991-2012 Take-Two Interactive Software and its subsidiaries.  Developed by Firaxis Games.  
+	Â© 1991-2012 Take-Two Interactive Software and its subsidiaries.  Developed by Firaxis Games.  
 	Sid Meier's Civilization V, Civ, Civilization, 2K Games, Firaxis Games, Take-Two Interactive Software 
 	and their respective logos are all trademarks of Take-Two interactive Software, Inc.  
 	All other marks and trademarks are the property of their respective owners.  
@@ -85,7 +85,7 @@ bool CvDatabaseUtility::Initialize2DArray(int**& ppArray, const char* szTable1Na
 	if(iCount1 <= 0 || iCount2 <= 0)
 	{
 		ppArray = NULL;
-		CvAssertMsg(false, "Cannot initialize array to 0 size.");
+		ASSERT_DEBUG(false, "Cannot initialize array to 0 size.");
 		return false;
 	}
 
@@ -113,7 +113,7 @@ void CvDatabaseUtility::Initialize2DArray(int**& ppArray, const size_t iCount1, 
 {
 	if(iCount1 <= 0 || iCount2 <= 0)
 	{
-		CvAssertMsg(false, "Cannot initialize array to 0 size.");
+		ASSERT_DEBUG(false, "Cannot initialize array to 0 size.");
 		return;
 	}
 
@@ -164,7 +164,7 @@ bool CvDatabaseUtility::PopulateArrayByExistence(bool*& pArray, const char* szTy
 
 	if(!pResults->Bind(1, szFilterValue, false))
 	{
-		CvAssertMsg(false, GetErrorMessage());
+		ASSERT_DEBUG(false, GetErrorMessage());
 		return false;
 	}
 
@@ -200,7 +200,7 @@ bool CvDatabaseUtility::PopulateArrayByExistence(int*& pArray, const char* szTyp
 
 	if(!pResults->Bind(1, szFilterValue, false))
 	{
-		CvAssertMsg(false, GetErrorMessage());
+		ASSERT_DEBUG(false, GetErrorMessage());
 		return false;
 	}
 
@@ -208,6 +208,42 @@ bool CvDatabaseUtility::PopulateArrayByExistence(int*& pArray, const char* szTyp
 	while(pResults->Step())
 	{
 		pArray[idx++] = pResults->GetInt(0);
+	}
+
+	pResults->Reset();
+
+	return true;
+}
+
+//------------------------------------------------------------------------------
+bool CvDatabaseUtility::PopulateVector(std::vector<int>& pVector, const char* szTypeTableName, const char* szDataTableName, const char* szTypeColumn, const char* szFilterColumn, const char* szFilterValue)
+{
+	pVector.clear();
+
+	std::string strKey = "_PV_";
+	strKey.append(szTypeTableName);
+	strKey.append(szDataTableName);
+	strKey.append(szFilterColumn);
+
+	Database::Results* pResults = GetResults(strKey);
+	if (pResults == NULL)
+	{
+		char szSQL[512];
+		sprintf_s(szSQL, "select %s.ID from %s inner join %s on %s = %s.Type where %s = ?", szTypeTableName, szDataTableName, szTypeTableName, szTypeColumn, szTypeTableName, szFilterColumn);
+		pResults = PrepareResults(strKey, szSQL);
+		if (pResults == NULL)
+			return false;
+	}
+
+	if (!pResults->Bind(1, szFilterValue, false))
+	{
+		ASSERT_DEBUG(false, GetErrorMessage());
+		return false;
+	}
+
+	while (pResults->Step())
+	{
+		pVector.push_back(pResults->GetInt(0));
 	}
 
 	pResults->Reset();
@@ -245,7 +281,7 @@ bool CvDatabaseUtility::PopulateArrayByValue(int*& pArray, const char* szTypeTab
 
 	if(!pResults->Bind(1, szFilterValue, false))
 	{
-		CvAssertMsg(false, GetErrorMessage());
+		ASSERT_DEBUG(false, GetErrorMessage());
 		return false;
 	}
 	while(pResults->Step())
@@ -253,6 +289,42 @@ bool CvDatabaseUtility::PopulateArrayByValue(int*& pArray, const char* szTypeTab
 		const int idx = pResults->GetInt(0);
 		const int value = pResults->GetInt(1);
 		pArray[idx] = value;
+	}
+
+	pResults->Reset();
+
+	return true;
+}
+//------------------------------------------------------------------------------
+bool CvDatabaseUtility::PopulateSetByExistence(set<int>& siData, const char* szTypeTableName, const char* szDataTableName,
+	const char* szTypeColumn, const char* szFilterColumn, const char* szFilterValue)
+{
+	siData.clear();
+
+	string strKey = "_PSBE_";
+	strKey.append(szTypeTableName);
+	strKey.append(szDataTableName);
+	strKey.append(szFilterColumn);
+
+	Database::Results* pResults = GetResults(strKey);
+	if (!pResults)
+	{
+		char szSQL[512];
+		sprintf_s(szSQL, "select %s.ID from %s inner join %s on %s = %s.Type where %s = ?", szTypeTableName, szDataTableName, szTypeTableName, szTypeColumn, szTypeTableName, szFilterColumn);
+		pResults = PrepareResults(strKey, szSQL);
+		if (!pResults)
+			return false;
+	}
+
+	if (!pResults->Bind(1, szFilterValue, false))
+	{
+		ASSERT_DEBUG(false, GetErrorMessage());
+		return false;
+	}
+
+	while (pResults->Step())
+	{
+		siData.insert(pResults->GetInt(0));
 	}
 
 	pResults->Reset();

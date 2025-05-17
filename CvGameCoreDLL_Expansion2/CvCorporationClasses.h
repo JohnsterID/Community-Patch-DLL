@@ -30,8 +30,10 @@ public:
 	int GetRandomSpreadChance() const;
 	int GetTourismMod() const;
 
-	int GetResourceMonopolyAnd(int i) const;
-	int GetResourceMonopolyOr(int i) const;
+	uint GetResourceMonopolyAndSize() const;
+	int GetResourceMonopolyAnd(uint ui) const;
+	uint GetResourceMonopolyOrSize() const;
+	int GetResourceMonopolyOr(uint ui) const;
 	int GetNumFreeResource(int i) const;
 	int GetUnitResourceProductionModifier(int i) const;
 
@@ -66,8 +68,8 @@ protected:
 	int m_iBaseSpreadChance;
 	int m_iTourismMod;
 
-	int* m_piResourceMonopolyAnd;
-	int* m_piResourceMonopolyOrs;
+	std::vector<int> m_viResourceMonopolyAnds;
+	std::vector<int> m_viResourceMonopolyOrs;
 	int* m_piNumFreeResource;
 	int* m_piUnitResourceProductionModifier;
 
@@ -251,20 +253,21 @@ public:
 	CorporationTypes GetFoundedCorporation() const;
 	void SetFoundedCorporation(CorporationTypes eCorporation);
 
+	bool IsCorporationOfficesAsFranchises() const;
 	int GetCorporationOfficesAsFranchises() const;
-	void SetCorporationOfficesAsFranchises(int iValue);
+	void ChangeCorporationOfficesAsFranchises(int iValue);
 
 	int GetCorporationRandomForeignFranchiseMod() const;
-	void SetCorporationRandomForeignFranchiseMod(int iValue);
+	void ChangeCorporationRandomForeignFranchiseMod(int iValue);
 
 	int GetCorporationFreeFranchiseAbovePopular() const;
-	void SetCorporationFreeFranchiseAbovePopular(int iValue);
+	void ChangeCorporationFreeFranchiseAbovePopular(int iValue);
 
 	bool IsNoForeignCorpsInCities() const;
-	void SetNoForeignCorpsInCities(bool bValue);
+	void ChangeNoForeignCorpsInCities(int iValue);
 
 	bool IsNoFranchisesInForeignCities() const;
-	void SetNoFranchisesInForeignCities(bool bValue);
+	void ChangeNoFranchisesInForeignCities(int iValue);
 
 	int GetFranchisesPerImprovement(ImprovementTypes eIndex) const;
 	void ChangeFranchisesPerImprovement(ImprovementTypes eIndex, int iValue);
@@ -287,8 +290,8 @@ private:
 
 	std::vector<int> m_aiFranchisesPerImprovement;
 
-	bool m_bIsNoForeignCorpsInCities;
-	bool m_bIsNoFranchisesInForeignCities;
+	int m_iNoForeignCorpsInCities;
+	int m_iNoFranchisesInForeignCities;
 };
 
 FDataStream& operator>>(FDataStream&, CvPlayerCorporations&);

@@ -1,5 +1,5 @@
 /*	-------------------------------------------------------------------------------------------------------
-	© 1991-2012 Take-Two Interactive Software and its subsidiaries.  Developed by Firaxis Games.  
+	Â© 1991-2012 Take-Two Interactive Software and its subsidiaries.  Developed by Firaxis Games.  
 	Sid Meier's Civilization V, Civ, Civilization, 2K Games, Firaxis Games, Take-Two Interactive Software 
 	and their respective logos are all trademarks of Take-Two interactive Software, Inc.  
 	All other marks and trademarks are the property of their respective owners.  
@@ -13,15 +13,12 @@
 #include "CvDiplomacyAI.h"
 #include "CvMilitaryAI.h"
 #include "CvMinorCivAI.h"
-#include "FireWorks/FRemark.h"
 
 // must be included after all other headers
 #include "LintFree.h"
 #ifdef _MSC_VER
 #pragma warning ( disable : 4505 ) // unreferenced local function has been removed.. needed by REMARK below
 #endif//_MSC_VER
-
-REMARK_GROUP("CvDangerPlots");
 
 //this adds up quickly if there multiple invisible tiles around ...
 #define FOG_DEFAULT_DANGER (1)
@@ -30,7 +27,7 @@ REMARK_GROUP("CvDangerPlots");
 CvDangerPlots::CvDangerPlots(void)
 	: m_ePlayer(NO_PLAYER)
 	, m_bDirty(false)
-	, m_iTurnSliceBuilt(0)
+	, m_iTurnBuilt(0)
 	, m_DangerPlots()
 {
 }
@@ -42,21 +39,11 @@ CvDangerPlots::~CvDangerPlots(void)
 }
 
 /// Initialize
-void CvDangerPlots::Init(PlayerTypes ePlayer, bool bAllocate)
+void CvDangerPlots::Init(PlayerTypes ePlayer)
 {
 	Uninit();
 	m_ePlayer = ePlayer;
-
-	if(bAllocate)
-	{
-		int iGridSize = GC.getMap().numPlots();
-		m_DangerPlots = vector<CvDangerPlotContents>(iGridSize);
-		for(int i = 0; i < iGridSize; i++)
-		{
-			CvPlot* pPlot = GC.getMap().plotByIndexUnchecked(i);
-			m_DangerPlots[i].m_pPlot = pPlot;
-		}
-	}
+	//cannot allocate anything yet because the map might not exist yet
 }
 
 /// Uninitialize
@@ -64,9 +51,10 @@ void CvDangerPlots::Uninit()
 {
 	m_ePlayer = NO_PLAYER;
 	m_bDirty = false;
-	m_iTurnSliceBuilt = 0;
+	m_iTurnBuilt = 0;
 	m_DangerPlots.clear();
 	m_knownUnits.clear();
+	m_vanishedUnits.clear();
 }
 
 bool CvDangerPlots::UpdateDangerSingleUnit(const CvUnit* pLoopUnit, bool bIgnoreVisibility, const PlotIndexContainer& plotsToIgnoreForZOC)
@@ -76,11 +64,12 @@ bool CvDangerPlots::UpdateDangerSingleUnit(const CvUnit* pLoopUnit, bool bIgnore
 
 	//the IGNORE_DANGER flag is extremely important here, otherwise we can get into endless loops
 	//(when the pathfinder does a lazy danger update)
-#ifdef MOD_CORE_TWO_PASS_DANGER
-	int iFlags = CvUnit::MOVEFLAG_IGNORE_STACKING_SELF | CvUnit::MOVEFLAG_IGNORE_STACKING_NEUTRAL | CvUnit::MOVEFLAG_IGNORE_ENEMIES | CvUnit::MOVEFLAG_IGNORE_DANGER | CvUnit::MOVEFLAG_SELECTIVE_ZOC;
-#else
-	int iFlags = CvUnit::MOVEFLAG_IGNORE_STACKING_SELF | CvUnit::MOVEFLAG_IGNORE_STACKING_NEUTRAL | CvUnit::MOVEFLAG_IGNORE_ENEMIES | CvUnit::MOVEFLAG_IGNORE_DANGER | CvUnit::MOVEFLAG_IGNORE_ZOC;
-#endif
+	int iFlags = CvUnit::MOVEFLAG_IGNORE_STACKING_SELF | CvUnit::MOVEFLAG_IGNORE_STACKING_NEUTRAL | CvUnit::MOVEFLAG_IGNORE_ENEMIES | CvUnit::MOVEFLAG_IGNORE_DANGER;
+	if (MOD_CORE_TWO_PASS_DANGER)
+		iFlags |= CvUnit::MOVEFLAG_SELECTIVE_ZOC;
+	else
+		iFlags |= CvUnit::MOVEFLAG_IGNORE_ZOC;
+
 	ReachablePlots reachablePlots = TacticalAIHelpers::GetAllPlotsInReachThisTurn(pLoopUnit,pLoopUnit->plot(),iFlags,0,pLoopUnit->maxMoves(),plotsToIgnoreForZOC);
 
 	if (pLoopUnit->IsCanAttackRanged())
@@ -121,34 +110,61 @@ bool CvDangerPlots::UpdateDangerSingleUnit(const CvUnit* pLoopUnit, bool bIgnore
 }
 
 /// Updates the danger plots values to reflect threats across the map
-void CvDangerPlots::UpdateDanger(bool bKeepKnownUnits)
+void CvDangerPlots::UpdateDanger()
 {
-	if (m_DangerPlots.empty()) //nothing to do and causes an endless recursion
+	//we call this function in three situations
+	// * save game loaded (need to reconstruct m_DangerPlots). do not change m_knownUnits / m_vanishedUnits --> called from ui thread!
+	// * new turn (enemy units moved). update both both m_knownUnits / m_vanishedUnits
+	// * dirty flag (war state change, new enemies). update m_knownUnits, keep m_vanishedUnits
+
+	bool bReload = (m_iTurnBuilt == -1);
+	bool bTurnChange = !bReload && (m_iTurnBuilt != GC.getGame().getGameTurn());
+	bool bWarChange = !bReload && !bTurnChange;
+
+	//do not update from the UI thread, might lead to desyncs!
+	if (!bReload && !gDLL->IsGameCoreThread())
 		return;
 
-	//two pass danger is dangerous ... it might happen that a covering unit moves away, leaving other exposed
-#ifdef MOD_CORE_TWO_PASS_DANGER
-	CvPlayer& thisPlayer = GET_PLAYER(m_ePlayer);
-	PlotIndexContainer plotsWithOwnedUnitsLikelyToBeKilled;
+	//note: we do not do a dirty check here, that is done in GetDanger()
 
-	//first pass
-	UpdateDangerInternal(true, plotsWithOwnedUnitsLikelyToBeKilled);
-
-	//find out which units might die and therefore won't have a ZOC
-	int iLoop;
-	for (CvUnit* pLoopUnit = thisPlayer.firstUnit(&iLoop); pLoopUnit != NULL; pLoopUnit = thisPlayer.nextUnit(&iLoop))
+	//allocate on demand
+	if (m_DangerPlots.empty())
 	{
-		if (pLoopUnit->IsCombatUnit() && pLoopUnit->GetDanger() > pLoopUnit->GetCurrHitPoints())
-			plotsWithOwnedUnitsLikelyToBeKilled.push_back(pLoopUnit->plot()->GetPlotIndex());
+		int iGridSize = GC.getMap().numPlots();
+		m_DangerPlots = vector<CvDangerPlotContents>(iGridSize);
+		for (int i = 0; i < iGridSize; i++)
+		{
+			CvPlot* pPlot = GC.getMap().plotByIndexUnchecked(i);
+			m_DangerPlots[i].m_pPlot = pPlot;
+		}
 	}
 
-	//second pass
-	if (!plotsWithOwnedUnitsLikelyToBeKilled.empty() || !bKeepKnownUnits)
-		UpdateDangerInternal(bKeepKnownUnits, plotsWithOwnedUnitsLikelyToBeKilled);
-#else
-	PlotIndexContainer dummy;
-	UpdateDangerInternal(bKeepKnownUnits, dummy);
-#endif
+	//two pass danger is dangerous ... it might happen that a covering unit moves away, leaving other exposed
+	if (MOD_CORE_TWO_PASS_DANGER)
+	{
+		CvPlayer& thisPlayer = GET_PLAYER(m_ePlayer);
+		PlotIndexContainer plotsWithOwnedUnitsLikelyToBeKilled;
+
+		//first pass
+		UpdateDangerInternal(plotsWithOwnedUnitsLikelyToBeKilled, bTurnChange, bWarChange);
+
+		//find out which units might die and therefore won't have a ZOC
+		int iLoop;
+		for (CvUnit* pLoopUnit = thisPlayer.firstUnit(&iLoop); pLoopUnit != NULL; pLoopUnit = thisPlayer.nextUnit(&iLoop))
+		{
+			if (pLoopUnit->IsCombatUnit() && pLoopUnit->GetDanger() > pLoopUnit->GetCurrHitPoints())
+				plotsWithOwnedUnitsLikelyToBeKilled.push_back(pLoopUnit->plot()->GetPlotIndex());
+		}
+
+		//second pass
+		if (!plotsWithOwnedUnitsLikelyToBeKilled.empty())
+			UpdateDangerInternal(plotsWithOwnedUnitsLikelyToBeKilled, false, true); //turn change already processed
+	}
+	else
+	{
+		PlotIndexContainer dummy;
+		UpdateDangerInternal(dummy, bTurnChange, bWarChange);
+	}
 }
 
 //fog of war is dangerous, but we don't know whether we will take the damage or not ...
@@ -184,83 +200,75 @@ void CvDangerPlots::AddFogDanger(CvPlot* pOrigin, TeamTypes eEnemyTeam, int iRan
 	}
 }
 
-void CvDangerPlots::UpdateDangerInternal(bool bKeepKnownUnits, const PlotIndexContainer& plotsToIgnoreForZOC)
+void CvDangerPlots::UpdateDangerInternal(const PlotIndexContainer& plotsToIgnoreForZOC, bool bTurnChange, bool bWarChange)
 {
 	// danger plots have not been initialized yet, so no need to update
-	if(m_DangerPlots.empty())
+	if (m_DangerPlots.empty())
 		return;
-
-	// important. do this first to avoid recursion
-	m_bDirty = false;
-	m_iTurnSliceBuilt = GC.getGame().getTurnSlice();
 
 	// wipe out values
 	int iGridSize = GC.getMap().numPlots();
-	//	CvAssertMsg(iGridSize == m_DangerPlots.size(), "iGridSize does not match number of DangerPlots");
-	for(int i = 0; i < iGridSize; i++)
+	for (int i = 0; i < iGridSize; i++)
 		m_DangerPlots[i].reset();
+
+	//it's fair to call this function with both turnChange and warChange false! this would be the reload case
+	UnitSet knownUnitsPrevUpdate = m_knownUnits;
+	if (bTurnChange)
+		m_vanishedUnits.clear();
+	if (bWarChange || bTurnChange)
+		m_knownUnits.clear();
+
+	// important. do this first to avoid recursion
+	m_bDirty = false;
+	m_iTurnBuilt = GC.getGame().getGameTurn();
 
 	CvPlayer& thisPlayer = GET_PLAYER(m_ePlayer);
 	TeamTypes thisTeam = thisPlayer.getTeam();
-
-	//units we know from last turn (maintained only for AI, humans must remember on their own)
-	UnitSet previousKnownUnits = m_knownUnits;
-	if (!bKeepKnownUnits || thisPlayer.isHuman())
-		m_knownUnits.clear();
-
 	// for each opposing civ
-	for(int iPlayer = 0; iPlayer < MAX_PLAYERS; iPlayer++)
+	for (int iPlayer = 0; iPlayer < MAX_PLAYERS; iPlayer++)
 	{
 		PlayerTypes ePlayer = (PlayerTypes)iPlayer;
 		CvPlayer& loopPlayer = GET_PLAYER(ePlayer);
 		TeamTypes eLoopTeam = loopPlayer.getTeam();
 
-		if(!loopPlayer.isAlive())
+		if (!loopPlayer.isAlive())
 			continue;
 
-		if(eLoopTeam == thisTeam)
+		if (eLoopTeam == thisTeam)
 			continue;
 
-		if(ShouldIgnorePlayer(ePlayer))
+		if (ShouldIgnorePlayer(ePlayer))
 			continue;
 
 		//for each unit
 		int iLoop = 0;
-		for(CvUnit* pLoopUnit = loopPlayer.firstUnit(&iLoop); pLoopUnit != NULL; pLoopUnit = loopPlayer.nextUnit(&iLoop))
+		for (CvUnit* pLoopUnit = loopPlayer.firstUnit(&iLoop); pLoopUnit != NULL; pLoopUnit = loopPlayer.nextUnit(&iLoop))
 		{
 			if (UpdateDangerSingleUnit(pLoopUnit, false, plotsToIgnoreForZOC))
 			{
-				m_knownUnits.insert(std::make_pair(pLoopUnit->getOwner(), pLoopUnit->GetID()));
+				if (bTurnChange || bWarChange)
+					m_knownUnits.insert(std::make_pair(pLoopUnit->getOwner(), pLoopUnit->GetID()));
 				AddFogDanger(pLoopUnit->plot(), eLoopTeam, 2, false);
 			}
 		}
 
 		// for each city
-		for(CvCity* pLoopCity = loopPlayer.firstCity(&iLoop); pLoopCity != NULL; pLoopCity = loopPlayer.nextCity(&iLoop))
+		for (CvCity* pLoopCity = loopPlayer.firstCity(&iLoop); pLoopCity != NULL; pLoopCity = loopPlayer.nextCity(&iLoop))
 		{
-			if(ShouldIgnoreCity(pLoopCity, false))
+			if (ShouldIgnoreCity(pLoopCity, false))
 				continue;
 
-#if defined(MOD_EVENTS_CITY_BOMBARD)
 			bool bIndirectFireAllowed = false; //this is an OUT parameter ...
 			int iRange = pLoopCity->getBombardRange(bIndirectFireAllowed);
-#else
-			int iRange = /*2*/ GD_INT_GET(CITY_ATTACK_RANGE);
-#endif
 			CvPlot* pCityPlot = pLoopCity->plot();
-			CvPlot* pLoopPlot = NULL;
-			for(int iDX = -(iRange); iDX <= iRange; iDX++)
+			for (int i = RING0_PLOTS; i < RING_PLOTS[iRange]; i++)
 			{
-				for(int iDY = -(iRange); iDY <= iRange; iDY++)
+				CvPlot* pLoopPlot = iterateRingPlots(pCityPlot, i);
+				if (pLoopPlot)
 				{
-					pLoopPlot = plotXYWithRangeCheck(pCityPlot->getX(), pCityPlot->getY(), iDX, iDY, iRange);
-					if(!pLoopPlot || pLoopPlot == pCityPlot)
-						continue;
 
-#if defined(MOD_EVENTS_CITY_BOMBARD)
 					if (!bIndirectFireAllowed && !pCityPlot->canSeePlot(pLoopPlot, NO_TEAM, iRange, NO_DIRECTION))
 						continue;
-#endif
 					AssignCityDangerValue(pLoopCity, pLoopPlot);
 				}
 			}
@@ -270,20 +278,26 @@ void CvDangerPlots::UpdateDangerInternal(bool bKeepKnownUnits, const PlotIndexCo
 	}
 
 	// now compare the new known units with the previous known units
-	for (UnitSet::iterator it = previousKnownUnits.begin(); it != previousKnownUnits.end(); ++it)
+	if (bTurnChange)
 	{
-		//might have made peace ...
-		if (ShouldIgnorePlayer(it->first))
-			continue;
-
-		if (m_knownUnits.find(*it) == m_knownUnits.end())
+		for (UnitSet::iterator it = knownUnitsPrevUpdate.begin(); it != knownUnitsPrevUpdate.end(); ++it)
 		{
-			//it's still there, but moved out of sight - nevertheless count it, a human would do that as well
-			CvUnit* pVanishedUnit = GET_PLAYER(it->first).getUnit(it->second);
+			//might have made peace ...
+			if (ShouldIgnorePlayer(it->first))
+				continue;
 
-			//do not add it to the known units though, so next turn we will have forgotten about it
-			if (pVanishedUnit)
-				UpdateDangerSingleUnit(pVanishedUnit, true, plotsToIgnoreForZOC);
+			if (m_knownUnits.find(*it) == m_knownUnits.end())
+			{
+				//it's still there, but moved out of sight - nevertheless count it, a human would do that as well
+				CvUnit* pVanishedUnit = GET_PLAYER(it->first).getUnit(it->second);
+
+				//do not add it to the known units though, so next turn we will have forgotten about it
+				if (pVanishedUnit)
+				{
+					if (UpdateDangerSingleUnit(pVanishedUnit, true, plotsToIgnoreForZOC))
+						m_vanishedUnits.insert(*it);
+				}
+			}
 		}
 	}
 
@@ -387,19 +401,6 @@ std::vector<CvUnit*> CvDangerPlots::GetPossibleAttackers(const CvPlot& Plot, Tea
 	return m_DangerPlots[Plot.GetPlotIndex()].GetPossibleAttackers(eTeamForVisibilityCheck);
 }
 
-void CvDangerPlots::ResetDangerCache(const CvPlot* pCenterPlot, int iRange)
-{
-	iRange = range(iRange, 0, 5);
-
-	// clear cached danger in the vicinity
-	for (int i = 0; i < RING_PLOTS[iRange]; i++)
-	{
-		CvPlot* pPlot = iterateRingPlots(pCenterPlot, i);
-		if (pPlot)
-			m_DangerPlots[pPlot->GetPlotIndex()].resetCache();
-	}
-}
-
 bool CvDangerPlots::IsKnownAttacker(const CvUnit* pUnit) const
 {
 	if (m_DangerPlots.empty()  || !pUnit || !pUnit->IsCanAttack())
@@ -418,7 +419,6 @@ bool CvDangerPlots::AddKnownAttacker(const CvUnit* pUnit)
 
 	UpdateDangerSingleUnit(pUnit, false, PlotIndexContainer()); //for simplicity, assume no ZOC by owned units
 	m_knownUnits.insert(std::make_pair(pUnit->getOwner(), pUnit->GetID()));
-	ResetDangerCache(pUnit->plot(), 3);
 	return true;
 }
 
@@ -571,14 +571,9 @@ void CvDangerPlots::AssignCityDangerValue(const CvCity* pCity, CvPlot* pPlot)
 template<typename DangerPlots, typename Visitor>
 void CvDangerPlots::Serialize(DangerPlots& dangerPlots, Visitor& visitor)
 {
-	const bool bLoading = visitor.isLoading();
-
-	CvDangerPlots& mutDangerPlots = const_cast<CvDangerPlots&>(dangerPlots);
-
 	visitor(dangerPlots.m_ePlayer);
-	if (bLoading)
-		mutDangerPlots.Init(dangerPlots.m_ePlayer, true);
 	visitor(dangerPlots.m_knownUnits);
+	visitor(dangerPlots.m_vanishedUnits);
 }
 
 /// reads in danger plots info
@@ -587,7 +582,10 @@ void CvDangerPlots::Read(FDataStream& kStream)
 	CvStreamLoadVisitor serialVisitor(kStream);
 	CvDangerPlots::Serialize(*this, serialVisitor);
 
-	m_bDirty = true; //need to update, after all only the known units were serialized
+	//need to update, after all only the known units were serialized
+	m_bDirty = true;
+	//use this as a marker for the update mode
+	m_iTurnBuilt = -1;
 }
 
 /// writes out danger plots info
@@ -762,8 +760,6 @@ int CvDangerPlotContents::GetAirUnitDamage(const CvUnit* pUnit, AirActionType iA
 	return 0;
 }
 
-#define DANGER_MAX_CACHE_SIZE 9
-
 // Get the maximum damage unit could receive at this plot in the next turn (update this with CvUnitCombat changes!)
 int CvDangerPlotContents::GetDanger(const CvUnit* pUnit, const UnitIdContainer& unitsToIgnore, int iExtraDamage, AirActionType iAirAction)
 {
@@ -836,16 +832,6 @@ int CvDangerPlotContents::GetDanger(const CvUnit* pUnit, const UnitIdContainer& 
 		}
 
 		return iPlotDamage;
-	}
-
-	//simple caching for speedup
-	//only for combat units - civilian danger depends on cover from other units, hard to cache that
-	SCachedUnitDanger unitStats(pUnit, iExtraDamage);
-	if (unitStats.addIgnoredUnits(unitsToIgnore))
-	{
-		for (size_t i = 0; i < m_lastUnitDangerResults.size(); i++)
-			if (unitStats == m_lastUnitDangerResults[i].first)
-				return m_lastUnitDangerResults[i].second;
 	}
 
 	// Capturing a city with a garrisoned unit destroys the garrisoned unit
@@ -928,11 +914,6 @@ int CvDangerPlotContents::GetDanger(const CvUnit* pUnit, const UnitIdContainer& 
 	// Damage from surrounding improvements (citadel) and the plot itself
 	iPlotDamage += m_iImprovementDamage;
 	iPlotDamage += m_bFlatPlotDamage ? m_pPlot->getTurnDamage(pUnit->ignoreTerrainDamage(), pUnit->ignoreFeatureDamage(), pUnit->extraTerrainDamage(), pUnit->extraFeatureDamage()) : 0;
-
-	//update cache
-	m_lastUnitDangerResults.push_back(std::make_pair(unitStats, iPlotDamage));
-	if (m_lastUnitDangerResults.size() == DANGER_MAX_CACHE_SIZE)
-		m_lastUnitDangerResults.pop_front();
 
 	//done
 	return iPlotDamage;

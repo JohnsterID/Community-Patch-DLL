@@ -112,16 +112,16 @@ bool CvMilitaryAIStrategyXMLEntry::CacheResults(Database::Results& kResults, CvD
 /// What player flavors will be added by adopting this Strategy?
 int CvMilitaryAIStrategyXMLEntry::GetPlayerFlavorValue(int i) const
 {
-	FAssertMsg(i < GC.getNumFlavorTypes(), "Index out of bounds");
-	FAssertMsg(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < GC.getNumFlavorTypes(), "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
 	return m_piPlayerFlavorValue ? m_piPlayerFlavorValue[i] : -1;
 }
 
 /// What city flavors will be added by adopting this Strategy?
 int CvMilitaryAIStrategyXMLEntry::GetCityFlavorValue(int i) const
 {
-	FAssertMsg(i < GC.getNumFlavorTypes(), "Index out of bounds");
-	FAssertMsg(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < GC.getNumFlavorTypes(), "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
 	return m_piCityFlavorValue ? m_piCityFlavorValue[i] : -1;
 }
 
@@ -134,8 +134,8 @@ int CvMilitaryAIStrategyXMLEntry::GetWeightThreshold() const
 /// How do a player's Personality Flavors affect the Threshold for adopting a Strategy? (if applicable)
 int CvMilitaryAIStrategyXMLEntry::GetPersonalityFlavorThresholdMod(int i) const
 {
-	FAssertMsg(i < GC.getNumFlavorTypes(), "Index out of bounds");
-	FAssertMsg(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < GC.getNumFlavorTypes(), "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
 	return m_piPersonalityFlavorThresholdMod ? m_piPersonalityFlavorThresholdMod[i] : -1;
 }
 
@@ -243,11 +243,7 @@ void CvMilitaryAIStrategyXMLEntries::DeleteArray()
 /// Get a specific entry
 _Ret_maybenull_ CvMilitaryAIStrategyXMLEntry* CvMilitaryAIStrategyXMLEntries::GetEntry(int index)
 {
-#if defined(MOD_BALANCE_CORE)
-	return (index!=NO_MILITARYAISTRATEGY) ? m_paAIStrategyEntries[index] : NULL;
-#else
-	return m_paAIStrategyEntries[index];
-#endif
+	return (index != NO_MILITARYAISTRATEGY) ? m_paAIStrategyEntries[index] : NULL;
 }
 
 
@@ -279,10 +275,10 @@ void CvMilitaryAI::Init(CvMilitaryAIStrategyXMLEntries* pAIStrategies, CvPlayer*
 	m_pDiplomacyAI = pDiplomacyAI;
 
 	// Initialize arrays
-	CvAssertMsg(m_pabUsingStrategy==NULL, "about to leak memory, CvMilitaryAI::m_pabUsingStrategy");
+	ASSERT_DEBUG(m_pabUsingStrategy==NULL, "about to leak memory, CvMilitaryAI::m_pabUsingStrategy");
 	m_pabUsingStrategy = FNEW(bool[m_pAIStrategies->GetNumMilitaryAIStrategies()], c_eCiv5GameplayDLL, 0);
 
-	CvAssertMsg(m_paiTurnStrategyAdopted==NULL, "about to leak memory, CvMilitaryAI::m_paiTurnStrategyAdopted");
+	ASSERT_DEBUG(m_paiTurnStrategyAdopted==NULL, "about to leak memory, CvMilitaryAI::m_paiTurnStrategyAdopted");
 	m_paiTurnStrategyAdopted = FNEW(int[m_pAIStrategies->GetNumMilitaryAIStrategies()], c_eCiv5GameplayDLL, 0);
 
 	m_aiTempFlavors.init();
@@ -322,9 +318,10 @@ void CvMilitaryAI::Reset()
 	m_eNavalDefenseState = NO_DEFENSE_STATE;
 	m_iNumberOfTimesOpsBuildSkippedOver = 0;
 	m_iNumberOfTimesSettlerBuildSkippedOver = 0;
-#if defined(MOD_BALANCE_CORE)
+
 	for (int iI = 0; iI < MAX_MAJOR_CIVS; iI++)
 		m_aiWarFocus[iI] = WARTYPE_UNDEFINED;
+
 	m_iNumFreeCarriers = 0;
 	//new unit counters
 	m_iNumArcherLandUnits = 0;
@@ -339,7 +336,6 @@ void CvMilitaryAI::Reset()
 	m_iNumCarrierNavalUnits = 0;
 	m_iNumMissileUnits = 0;
 	m_iNumActiveUniqueUnits = 0;
-#endif
 
 	for(int iI = 0; iI < m_pAIStrategies->GetNumMilitaryAIStrategies(); iI++)
 	{
@@ -352,7 +348,7 @@ void CvMilitaryAI::Reset()
 template<typename MilitaryAI, typename Visitor>
 void CvMilitaryAI::Serialize(MilitaryAI& militaryAI, Visitor& visitor)
 {
-	CvAssertMsg(militaryAI.m_pAIStrategies != NULL && militaryAI.m_pAIStrategies->GetNumMilitaryAIStrategies() > 0, "Number of AIStrategies to serialize is expected to greater than 0");
+	ASSERT_DEBUG(militaryAI.m_pAIStrategies != NULL && militaryAI.m_pAIStrategies->GetNumMilitaryAIStrategies() > 0, "Number of AIStrategies to serialize is expected to greater than 0");
 	visitor(militaryAI.m_iNumberOfTimesOpsBuildSkippedOver);
 	visitor(militaryAI.m_iNumberOfTimesSettlerBuildSkippedOver);
 
@@ -530,7 +526,7 @@ bool CvMilitaryAI::RequestBullyingOperation(PlayerTypes eEnemy)
 /// Spend money to quickly add a unit to a city
 CvUnit* CvMilitaryAI::BuyEmergencyUnit(UnitAITypes eUnitType, CvCity* pCity)
 {
-	// No units in puppet cities or automated citites except for Venice!
+	// No units in puppet cities or automated cities except for Venice!
 	if (CityStrategyAIHelpers::IsTestCityStrategy_IsPuppetAndAnnexable(pCity) || pCity->isHumanAutomated())
 	{
 		return NULL;
@@ -598,7 +594,7 @@ bool CvMilitaryAI::BuyEmergencyBuilding(CvCity* pCity)
 						int iResult = pCity->CreateBuilding(eBldg);
 
 						DEBUG_VARIABLE(iResult);
-						CvAssertMsg(iResult != -1, "Unable to create building");
+						ASSERT_DEBUG(iResult != -1, "Unable to create building");
 
 						CvString szMsg;
 						szMsg.Format("Emergency Building Purchased: %s, ", pkBuildingInfo->GetDescription());
@@ -1831,10 +1827,7 @@ void CvMilitaryAI::UpdateDefenseState()
 /// Count up barbarian camps and units visible to us
 void CvMilitaryAI::ScanForBarbarians()
 {
-
-#if defined(MOD_BALANCE_CORE)
 	int iLastTurnBarbarianCount = m_iVisibleBarbarianCount;
-#endif
 
 	m_iBarbarianCampCount = 0;
 	m_iVisibleBarbarianCount = 0;
@@ -1864,12 +1857,9 @@ void CvMilitaryAI::ScanForBarbarians()
 		}
 	}
 
-#if defined(MOD_BALANCE_CORE)
 	//try to smooth the count a bit
 	if (m_iVisibleBarbarianCount < iLastTurnBarbarianCount)
-		m_iVisibleBarbarianCount = iLastTurnBarbarianCount-1;
-#endif
-
+		m_iVisibleBarbarianCount = iLastTurnBarbarianCount - 1;
 }
 
 /// Start or stop military strategies to get flavors set properly
@@ -1985,10 +1975,8 @@ void CvMilitaryAI::UpdateMilitaryStrategies()
 					bStrategyShouldBeActive = MilitaryAIHelpers::IsTestStrategy_MinorCivThreatCritical(m_pPlayer);
 				else if(strStrategyName == "MILITARYAISTRATEGY_ERADICATE_BARBARIANS")
 					bStrategyShouldBeActive = MilitaryAIHelpers::IsTestStrategy_EradicateBarbarians(eStrategy, m_pPlayer, m_iBarbarianCampCount, m_iVisibleBarbarianCount);
-#if defined(MOD_BALANCE_CORE)
 				else if(strStrategyName == "MILITARYAISTRATEGY_ERADICATE_BARBARIANS_CRITICAL")
 					bStrategyShouldBeActive = MilitaryAIHelpers::IsTestStrategy_EradicateBarbariansCritical(eStrategy, m_pPlayer, m_iBarbarianCampCount, m_iVisibleBarbarianCount);
-#endif
 				else if(strStrategyName == "MILITARYAISTRATEGY_WINNING_WARS")
 					bStrategyShouldBeActive = MilitaryAIHelpers::IsTestStrategy_WinningWars(m_pPlayer);
 				else if(strStrategyName == "MILITARYAISTRATEGY_LOSING_WARS")
@@ -2157,33 +2145,32 @@ void CvMilitaryAI::UpdateMilitaryStrategies()
 
 void CvMilitaryAI::DoNuke(PlayerTypes ePlayer)
 {
+	// if we need to nuke the Barbarians, we've already lost this game 10x over
+	if (ePlayer == BARBARIAN_PLAYER)
+		return;
+
 	bool bLaunchNuke = false;
 	StrengthTypes eMilitaryStrength = m_pPlayer->GetDiplomacyAI()->GetRawMilitaryStrengthComparedToUs(ePlayer);
 	WarStateTypes eCurrentWarState = m_pPlayer->GetDiplomacyAI()->GetWarState(ePlayer);
 
-	// only evaluate nukes when we have nukes and we've declared war on someone
+	// only evaluate nukes when we have nukes
 	if (m_pPlayer->getNumNukeUnits() > 0) 
 	{
-		// they nuked us, so we can nuke them.
-		if (m_pPlayer->GetDiplomacyAI()->GetNumTimesNuked(ePlayer) > 0)
-		{	
-			bLaunchNuke = true;
-		}
-		// if we already nuked them, uhhh, keep it up!
-		else if (GET_PLAYER(ePlayer).GetDiplomacyAI()->GetNumTimesNuked(m_pPlayer->GetID()) > 0)
-		{
-			bLaunchNuke = true;
-		}
 		// if we will surely lose this war anyway, we might as well nuke them!
-		else if (eMilitaryStrength == STRENGTH_IMMENSE || eCurrentWarState == WAR_STATE_NEARLY_DEFEATED)
+		if (eMilitaryStrength == STRENGTH_IMMENSE || eCurrentWarState == WAR_STATE_NEARLY_DEFEATED)
 		{
 			bLaunchNuke = true;
 		}
-		else 
+		else if (GET_PLAYER(ePlayer).isMajorCiv())
 		{
-			bool bRollForNuke = false;
-			if (GET_PLAYER(ePlayer).isMajorCiv())
+			// if one of us has already nuked the other...well, I'll keep the trend going!
+			if (m_pPlayer->GetDiplomacyAI()->GetNumTimesNuked(ePlayer) > 0 || GET_PLAYER(ePlayer).GetDiplomacyAI()->GetNumTimesNuked(m_pPlayer->GetID()) > 0)
 			{
+				bLaunchNuke = true;
+			}
+			else
+			{
+				bool bRollForNuke = false;
 				CivOpinionTypes eCivOpinion = m_pPlayer->GetDiplomacyAI()->GetCivOpinion(ePlayer);
 				if (eMilitaryStrength == STRENGTH_POWERFUL || eCurrentWarState <= WAR_STATE_TROUBLED)
 				{
@@ -2216,9 +2203,7 @@ void CvMilitaryAI::DoNuke(PlayerTypes ePlayer)
 	}
 
 	if (bLaunchNuke)
-	{
 		RequestNukeAttack(ePlayer);
-	}
 }
 
 void CvMilitaryAI::SetupInstantDefenses(PlayerTypes ePlayer)
@@ -2414,7 +2399,7 @@ void CvMilitaryAI::MakeEmergencyPurchases()
 {
 
 	// Are we winning all the wars we are in?
-	MilitaryAIStrategyTypes eStrategyAtWar = (MilitaryAIStrategyTypes) GC.getInfoTypeForString("MILITARYAISTRATEGY_AT_WAR");
+	static MilitaryAIStrategyTypes eStrategyAtWar = (MilitaryAIStrategyTypes) GC.getInfoTypeForString("MILITARYAISTRATEGY_AT_WAR");
 	if(!IsUsingStrategy(eStrategyAtWar) || m_pPlayer->GetDiplomacyAI()->GetStateAllWars() == STATE_ALL_WARS_WINNING)
 	{
 		// Is there an operation waiting for one more unit?
@@ -2458,7 +2443,7 @@ void CvMilitaryAI::DisbandObsoleteUnits()
 	else
 	{
 		// Are we running at a deficit?
-		EconomicAIStrategyTypes eStrategyLosingMoney = (EconomicAIStrategyTypes)GC.getInfoTypeForString("ECONOMICAISTRATEGY_LOSING_MONEY");
+		static EconomicAIStrategyTypes eStrategyLosingMoney = (EconomicAIStrategyTypes)GC.getInfoTypeForString("ECONOMICAISTRATEGY_LOSING_MONEY");
 		bInDeficit = m_pPlayer->GetEconomicAI()->IsUsingStrategy(eStrategyLosingMoney);
 		// Are we running anything other than the Conquest Grand Strategy?
 		if (m_pPlayer->GetDiplomacyAI()->IsGoingForWorldConquest())
@@ -2635,28 +2620,12 @@ CvUnit* CvMilitaryAI::FindUnitToScrap(DomainTypes eDomain, bool bCheckObsolete, 
 			UnitTypes eUpgradeUnit = pLoopUnit->GetUpgradeUnitType();
 			if (eUpgradeUnit != NO_UNIT)
 			{
-				//ok nice looks like we can upgrade
+				// Ok nice looks like we can upgrade
 				bIsObsolete = false;
 
-				//but does this unit's upgrade require additional resources we don't have?
-				CvUnitEntry* pUpgradeUnitInfo = GC.GetGameUnits()->GetEntry(eUpgradeUnit);
-				if (pUpgradeUnitInfo != NULL)
-				{
-					for (int iResourceLoop = 0; iResourceLoop < GC.getNumResourceInfos(); iResourceLoop++)
-					{
-						ResourceTypes eResource = (ResourceTypes)iResourceLoop;
-						int iNumResourceNeeded = pUpgradeUnitInfo->GetResourceQuantityRequirement(eResource);
-						int iNumResourceInUse = pLoopUnit->getUnitInfo().GetResourceQuantityRequirement(eResource);
-						if (iNumResourceNeeded - iNumResourceInUse > m_pPlayer->getNumResourceTotal(eResource))
-							bIsObsolete = true;
-
-						if (MOD_UNITS_RESOURCE_QUANTITY_TOTALS)
-						{
-							if (pUpgradeUnitInfo->GetResourceQuantityTotal(eResource) > m_pPlayer->getNumResourceTotal(eResource))
-								bIsObsolete = true;
-						}
-					}
-				}
+				// But do we have the resources for it?
+				if (!m_pPlayer->HasResourceForNewUnit(eUpgradeUnit, false, true, pLoopUnit->getUnitType()))
+					bIsObsolete = true;
 			}
 		}
 
@@ -3534,7 +3503,7 @@ int MilitaryAIHelpers::GetWeightThresholdModifier(MilitaryAIStrategyTypes eStrat
 		FlavorTypes eFlavor = (FlavorTypes) iFlavorLoop;
 		int iPersonalityFlavor = pkFlavorManager->GetPersonalityIndividualFlavor(eFlavor);
 		CvMilitaryAIStrategyXMLEntry* pkEntry = pkAIStrategies->GetEntry(eStrategy);
-		CvAssert(pkEntry != NULL);
+		ASSERT_DEBUG(pkEntry != NULL);
 		if(pkEntry)
 		{
 			int iStrategyFlavorMod = pkEntry->GetPersonalityFlavorThresholdMod(eFlavor);
@@ -3550,7 +3519,7 @@ int MilitaryAIHelpers::GetWeightThresholdModifier(MilitaryAIStrategyTypes eStrat
 bool MilitaryAIHelpers::IsTestStrategy_EnoughMilitaryUnits(CvPlayer* pPlayer)
 {
 	// Are we running at a deficit?
-	EconomicAIStrategyTypes eStrategyLosingMoney = (EconomicAIStrategyTypes) GC.getInfoTypeForString("ECONOMICAISTRATEGY_LOSING_MONEY");
+	static EconomicAIStrategyTypes eStrategyLosingMoney = (EconomicAIStrategyTypes) GC.getInfoTypeForString("ECONOMICAISTRATEGY_LOSING_MONEY");
 	bool bInDeficit = pPlayer->GetEconomicAI()->IsUsingStrategy(eStrategyLosingMoney);
 
 	// Are we running anything other than the Conquest Grand Strategy?
@@ -3606,7 +3575,7 @@ bool MilitaryAIHelpers::IsTestStrategy_WarMobilization(MilitaryAIStrategyTypes e
 	PlayerTypes eOtherPlayer;
 
 	// If we're at war don't bother with this Strategy
-	MilitaryAIStrategyTypes eStrategyAtWar = (MilitaryAIStrategyTypes) GC.getInfoTypeForString("MILITARYAISTRATEGY_AT_WAR");
+	static MilitaryAIStrategyTypes eStrategyAtWar = (MilitaryAIStrategyTypes) GC.getInfoTypeForString("MILITARYAISTRATEGY_AT_WAR");
 	if(pPlayer->GetMilitaryAI()->IsUsingStrategy(eStrategyAtWar))
 	{
 		return false;
@@ -3632,7 +3601,7 @@ bool MilitaryAIHelpers::IsTestStrategy_WarMobilization(MilitaryAIStrategyTypes e
 	for(int iMajorLoop = 0; iMajorLoop < MAX_MAJOR_CIVS; iMajorLoop++)
 	{
 		eOtherPlayer = (PlayerTypes) iMajorLoop;
-#if defined(MOD_BALANCE_CORE)
+
 		if(pkDiplomacyAI->GetVictoryBlockLevel(eOtherPlayer) > BLOCK_LEVEL_WEAK)
 		{
 			iCurrentWeight += 5;
@@ -3641,7 +3610,6 @@ bool MilitaryAIHelpers::IsTestStrategy_WarMobilization(MilitaryAIStrategyTypes e
 		{
 			iCurrentWeight += 5;
 		}
-#endif
 
 		// Mobilize for war is automatic if we are preparing a sneak attack
 		if (pkDiplomacyAI->GetCivApproach(eOtherPlayer) == CIV_APPROACH_WAR)
@@ -3669,7 +3637,7 @@ bool MilitaryAIHelpers::IsTestStrategy_WarMobilization(MilitaryAIStrategyTypes e
 	}
 
 	CvMilitaryAIStrategyXMLEntry* pStrategy = pPlayer->GetMilitaryAI()->GetMilitaryAIStrategies()->GetEntry(eStrategy);
-	CvAssert(pStrategy != NULL);
+	ASSERT_DEBUG(pStrategy != NULL);
 	if(pStrategy)
 	{
 		int iWeightThreshold = pStrategy->GetWeightThreshold();	// 100
@@ -3710,7 +3678,7 @@ bool MilitaryAIHelpers::IsTestStrategy_MinorCivThreatCritical(CvPlayer* pPlayer)
 bool MilitaryAIHelpers::IsTestStrategy_EradicateBarbarians(MilitaryAIStrategyTypes eStrategy, CvPlayer* pPlayer, int iBarbarianCampCount, int iVisibleBarbarianCount)
 {
 	// If we're at war don't bother with this Strategy (unless it is clear we are already winning)
-	MilitaryAIStrategyTypes eStrategyAtWar = (MilitaryAIStrategyTypes) GC.getInfoTypeForString("MILITARYAISTRATEGY_AT_WAR");
+	static MilitaryAIStrategyTypes eStrategyAtWar = (MilitaryAIStrategyTypes) GC.getInfoTypeForString("MILITARYAISTRATEGY_AT_WAR");
 	if(pPlayer->GetMilitaryAI()->IsUsingStrategy(eStrategyAtWar))
 	{
 		if(pPlayer->GetDiplomacyAI()->GetStateAllWars() != STATE_ALL_WARS_WINNING)
@@ -3731,7 +3699,7 @@ bool MilitaryAIHelpers::IsTestStrategy_EradicateBarbarians(MilitaryAIStrategyTyp
 	}
 
 	CvMilitaryAIStrategyXMLEntry* pStrategy = pPlayer->GetMilitaryAI()->GetMilitaryAIStrategies()->GetEntry(eStrategy);
-	CvAssert(pStrategy != NULL);
+	ASSERT_DEBUG(pStrategy != NULL);
 	if(pStrategy)
 	{
 		int iStrategyWeight = iBarbarianCampCount * 75 + iVisibleBarbarianCount * 25;   // Two visible camps or 3 roving Barbarians will trigger this
@@ -3775,7 +3743,7 @@ bool MilitaryAIHelpers::IsTestStrategy_EradicateBarbariansCritical(MilitaryAIStr
 	int iStrategyWeight = 0;
 
 	CvMilitaryAIStrategyXMLEntry* pStrategy = pPlayer->GetMilitaryAI()->GetMilitaryAIStrategies()->GetEntry(eStrategy);
-	CvAssert(pStrategy != NULL);
+	ASSERT_DEBUG(pStrategy != NULL);
 	if(pStrategy)
 	{
 		iStrategyWeight = iBarbarianCampCount * 75 + iVisibleBarbarianCount * 25;
@@ -3845,7 +3813,6 @@ bool MilitaryAIHelpers::IsTestStrategy_EnoughRangedUnits(CvPlayer* pPlayer, int 
 /// "Need Ranged" Player Strategy: If a player has too many melee units
 bool MilitaryAIHelpers::IsTestStrategy_NeedRangedUnits(CvPlayer* pPlayer, int iNumRanged, int iNumMelee)
 {
-#if defined(MOD_BALANCE_CORE_MILITARY)
 	if(pPlayer->GetMilitaryAI()->IsBuildingArmy(ARMY_TYPE_LAND))
 	{
 		if (pPlayer->IsUnderrepresentedUnitType(UNITAI_RANGED) || pPlayer->IsUnderrepresentedUnitType(UNITAI_CITY_BOMBARD))
@@ -3853,7 +3820,7 @@ bool MilitaryAIHelpers::IsTestStrategy_NeedRangedUnits(CvPlayer* pPlayer, int iN
 			return true;
 		}
 	}
-#endif
+
 	int iFlavorRange = pPlayer->GetGrandStrategyAI()->GetPersonalityAndGrandStrategy((FlavorTypes)GC.getInfoTypeForString("FLAVOR_RANGED"));
 	int iRatio = iNumRanged * 10 / max(1,iNumMelee+iNumRanged);
 	return (iRatio <= iFlavorRange / 2);

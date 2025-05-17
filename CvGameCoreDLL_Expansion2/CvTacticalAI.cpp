@@ -1,5 +1,5 @@
 ﻿/*	-------------------------------------------------------------------------------------------------------
-	� 1991-2012 Take-Two Interactive Software and its subsidiaries.  Developed by Firaxis Games.  
+	© 1991-2012 Take-Two Interactive Software and its subsidiaries.  Developed by Firaxis Games.  
 	Sid Meier's Civilization V, Civ, Civilization, 2K Games, Firaxis Games, Take-Two Interactive Software 
 	and their respective logos are all trademarks of Take-Two interactive Software, Inc.  
 	All other marks and trademarks are the property of their respective owners.  
@@ -40,21 +40,28 @@ const int TACTICAL_COMBAT_CITADEL_BONUS = 67; //larger than 60 to override first
 const int TACTICAL_COMBAT_IMPOSSIBLE_SCORE = -1000;
 const int TACTSIM_UNIQUENESS_CHECK_GENERATIONS = 3; //higher means check more siblings for permutations
 const int TACTSIM_BREADTH_FIRST_GENERATIONS = 3; //switch to depth-first later
+const int TACTSIM_MAX_UNITS = 13; //we have limited storage and time ...
 
 //global memory for tactical simulation
-CvTactPosStorage gTactPosStorage(8000);
+CvTactPosStorage gTactPosStorage(6000);
 TCachedMovePlots gReachablePlotsLookup;
 TCachedRangeAttackPlots gRangeAttackPlotsLookup;
-vector<int> gLandEnemies, gSeaEnemies, gCitadels, gNewlyVisiblePlots;
-vector<STacticalAssignment> gPossibleMoves;
-vector<STacticalAssignment> gOverAllChoices;
-vector<STacticalAssignment> gMovesToAdd;
+vector<int> gLandEnemies, gSeaEnemies, gCitadels, gCities, gNewlyVisiblePlots;
+vector<STacticalAssignment> gPossibleMoves, gPossibleRangedAttacks, gOverAllChoices;
+vector<SComboMove> gMovesToAdd;
+map<int, int> gBadUnitsCount;
+UnitIdContainer gEnemiesToIgnore;
+TUnitFlagLookup gSafePlotCount;
+int gDefaultUnitLossThreshold;
+int gMedianUnitXP;
+int gMinHpForTactsim;
 PlayerTypes eLastTactSimPlayer = NO_PLAYER;
 
 //just some statistics
 unsigned long gMovePlotsCacheHit = 0, gMovePlotsCacheMiss = 0;
 unsigned long gAttackPlotsCacheHit = 0, gAttackPlotsCacheMiss = 0;
 unsigned long gAttackCacheHit = 0, gAttackCacheMiss = 0;
+unsigned long gDangerCacheHit = 0, gDangerCacheMiss = 0;
 unsigned long giEquivalentPos = 0, giDifferentPos = 0;
 unsigned long giValidEndPos = 0, giInvalidEndPos = 0;
 #endif
@@ -72,56 +79,6 @@ void CheckDebugTrigger(int iUnitID)
 // CvTacticalTarget
 //=====================================
 
-bool CvTacticalTarget::IsReadyForCapture() const
-{
-	AITacticalTargetType eType = GetTargetType();
-	if(eType == AI_TACTICAL_TARGET_CITY)
-	{
-		CvPlot *pPlot = GC.getMap().plot(m_iTargetX, m_iTargetY);
-		CvCity *pCity = pPlot->getPlotCity();
-		if(pCity != NULL)
-		{
-			//if there's only one hitpoint left
-			int iCurHp = pCity->GetMaxHitPoints() - pCity->getDamage();
-			return iCurHp<=1;
-		}
-	}
-
-	return false;
-}
-
-/// Still a living target?
-bool CvTacticalTarget::IsTargetStillAlive(PlayerTypes eAttackingPlayer) const
-{
-	bool bRtnValue = false;
-
-	AITacticalTargetType eType = GetTargetType();
-	if(eType == AI_TACTICAL_TARGET_LOW_PRIORITY_UNIT ||
-	        eType == AI_TACTICAL_TARGET_MEDIUM_PRIORITY_UNIT ||
-	        eType == AI_TACTICAL_TARGET_HIGH_PRIORITY_UNIT)
-	{
-		CvPlot* pPlot = GC.getMap().plot(m_iTargetX, m_iTargetY);
-		CvUnit* pUnit = pPlot->getVisibleEnemyDefender(eAttackingPlayer);
-		if(pUnit != NULL && !pUnit->isDelayedDeath())
-		{
-			bRtnValue = true;
-		}
-	}
-	else if(eType == AI_TACTICAL_TARGET_CITY)
-	{
-		CvPlot *pPlot = GC.getMap().plot(m_iTargetX, m_iTargetY);
-		CvCity *pCity = pPlot->getPlotCity();
-		if(pCity != NULL && pCity->getOwner() != eAttackingPlayer && GET_PLAYER(eAttackingPlayer).IsAtWarWith(pCity->getOwner()))
-			bRtnValue = true;
-	}
-	else
-	{
-		bRtnValue = true; //unknown type, assume still valid
-	}
-
-	return bRtnValue;
-}
-
 /// This target make sense for this domain of unit/zone?
 bool CvTacticalTarget::IsTargetValidInThisDomain(DomainTypes eDomain) const
 {
@@ -135,26 +92,20 @@ bool CvTacticalTarget::IsTargetValidInThisDomain(DomainTypes eDomain) const
 	case AI_TACTICAL_TARGET_IMPROVEMENT:
 	case AI_TACTICAL_TARGET_IMPROVEMENT_TO_DEFEND:
 	case AI_TACTICAL_TARGET_TRADE_UNIT_LAND:
-	case AI_TACTICAL_TARGET_CITADEL:
+	case AI_TACTICAL_TARGET_ENEMY_CITADEL:
 	case AI_TACTICAL_TARGET_IMPROVEMENT_RESOURCE:
 	case AI_TACTICAL_TARGET_GOODY:
 		return eDomain == DOMAIN_LAND;
 
 	case AI_TACTICAL_TARGET_BLOCKADE_POINT:
-	case AI_TACTICAL_TARGET_BOMBARDMENT_ZONE:
-	case AI_TACTICAL_TARGET_EMBARKED_CIVILIAN:
 	case AI_TACTICAL_TARGET_TRADE_UNIT_SEA:
 		return eDomain == DOMAIN_SEA;
 
-	case AI_TACTICAL_TARGET_CITY:
-	case AI_TACTICAL_TARGET_CITY_TO_DEFEND:
+	case AI_TACTICAL_TARGET_ENEMY_CITY:
+	case AI_TACTICAL_TARGET_FRIENDLY_CITY:
 	case AI_TACTICAL_TARGET_LOW_PRIORITY_CIVILIAN:
-	case AI_TACTICAL_TARGET_MEDIUM_PRIORITY_CIVILIAN:
 	case AI_TACTICAL_TARGET_HIGH_PRIORITY_CIVILIAN:
-	case AI_TACTICAL_TARGET_VERY_HIGH_PRIORITY_CIVILIAN:
-	case AI_TACTICAL_TARGET_LOW_PRIORITY_UNIT:
-	case AI_TACTICAL_TARGET_MEDIUM_PRIORITY_UNIT:
-	case AI_TACTICAL_TARGET_HIGH_PRIORITY_UNIT:
+	case AI_TACTICAL_TARGET_ENEMY_COMBAT_UNIT:
 		return true;
 	}
 
@@ -426,15 +377,9 @@ void CvTacticalAI::UpdateVisibilityFromUnits(CvPlot* pPlot)
 			pLoopUnit = pPlot->getUnitByIndex(iI);
 			eLoopUnitTeam = pLoopUnit->getTeam();
 
-			const PlayerTypes eMinorCivAlly = GET_TEAM(eLoopUnitTeam).isMinorCiv() ? GET_PLAYER(pLoopUnit->getOwner()).GetMinorCivAI()->GetAlly() : NO_PLAYER;
-			TeamTypes eMinorCivAllyTeam = eMinorCivAlly != NO_PLAYER ? GET_PLAYER(eMinorCivAlly).getTeam() : NO_TEAM;
-
-			if (eMinorCivAllyTeam == ePlayerTeam)
-				eMinorCivAllyTeam = NO_TEAM;
-
 			if (eLoopUnitTeam != ePlayerTeam && !pLoopUnit->isInvisible(ePlayerTeam, false))
 			{
-				pPlot->ChangeKnownAdjacentSight(eLoopUnitTeam, eMinorCivAllyTeam, pLoopUnit->visibilityRange(), pLoopUnit->getFacingDirection(true));
+				pPlot->ChangeKnownAdjacentSight(eLoopUnitTeam, NO_TEAM, pLoopUnit->visibilityRange(), pLoopUnit->getFacingDirection(true));
 			}
 		}
 	}
@@ -456,13 +401,13 @@ void CvTacticalAI::UpdateVisibilityFromBorders(CvPlot* pPlot)
 {
 	const TeamTypes ePlayerTeam = m_pPlayer->getTeam();
 	const TeamTypes ePlotTeam = pPlot->getTeam();
-	const PlayerTypes eMinorCivAlly = GET_TEAM(ePlotTeam).isMinorCiv() ? GET_PLAYER(pPlot->getOwner()).GetMinorCivAI()->GetAlly() : NO_PLAYER;
+	const PlayerTypes eMinorCivAlly = ePlotTeam != NO_TEAM ? (GET_TEAM(ePlotTeam).isMinorCiv() ? GET_PLAYER(pPlot->getOwner()).GetMinorCivAI()->GetAlly() : NO_PLAYER) : NO_PLAYER;
 	TeamTypes eMinorCivAllyTeam = eMinorCivAlly != NO_PLAYER ? GET_PLAYER(eMinorCivAlly).getTeam() : NO_TEAM;
 
 	if (eMinorCivAllyTeam == ePlayerTeam)
 		eMinorCivAllyTeam = NO_TEAM;
 
-	if (ePlotTeam != NO_TEAM && ePlotTeam != ePlayerTeam && GET_TEAM(ePlayerTeam).isHasMet(ePlotTeam))
+	if (ePlotTeam != NO_TEAM && ePlotTeam != ePlayerTeam)
 	{
 		pPlot->ChangeKnownAdjacentSight(ePlotTeam, eMinorCivAllyTeam, GD_INT_GET(PLOT_VISIBILITY_RANGE), NO_DIRECTION);
 	}
@@ -510,7 +455,7 @@ void CvTacticalAI::FindTacticalTargets()
 					int iBorderScore = (pLandZone ? pLandZone->GetBorderScore(DOMAIN_LAND) : 0) + (pWaterZone ? pWaterZone->GetBorderScore(DOMAIN_SEA) : 0);
 					if (iBorderScore > 0)
 					{
-						newTarget.SetTargetType(AI_TACTICAL_TARGET_CITY_TO_DEFEND);
+						newTarget.SetTargetType(AI_TACTICAL_TARGET_FRIENDLY_CITY);
 						newTarget.SetAuxIntData(iBorderScore);
 						m_AllTargets.push_back(newTarget);
 					}
@@ -519,7 +464,7 @@ void CvTacticalAI::FindTacticalTargets()
 				// ... enemy city
 				else if (atWar(m_pPlayer->getTeam(), pCity->getTeam()))
 				{
-					newTarget.SetTargetType(AI_TACTICAL_TARGET_CITY);
+					newTarget.SetTargetType(AI_TACTICAL_TARGET_ENEMY_CITY);
 					//barbarians don't care about cities much compared to normal players
 					newTarget.SetAuxIntData( m_pPlayer->isBarbarian() ? 20 : 100);
 					m_AllTargets.push_back(newTarget);
@@ -527,15 +472,16 @@ void CvTacticalAI::FindTacticalTargets()
 			}
 			else
 			{
-				// ... enemy combat unit?
-				CvUnit* pUnit = pLoopPlot->getVisibleEnemyDefender(m_pPlayer->GetID());
-				if (pUnit != NULL)
+				// ... enemy combat unit? we allow visible ones and some we remember from the previous turn
+				CvUnit* pUnit = pLoopPlot->getBestDefender(NO_PLAYER, m_pPlayer->GetID(), NULL, true, true);
+				bool bCanSeeUnit = pUnit && pLoopPlot->isVisible(m_pPlayer->getTeam()) && !pUnit->isInvisible(m_pPlayer->getTeam(), false);
+				bool bRememberUnit = pUnit && m_pPlayer->IsVanishedUnit(pUnit->GetIDInfo());
+				if (bCanSeeUnit || bRememberUnit)
 				{
 					//minors ignore barbarians until they are close to their borders
 					if (!m_pPlayer->isMinorCiv() || !pUnit->isBarbarian() || pUnit->plot()->isAdjacentTeam(m_pPlayer->getTeam()))
 					{
-						//note that the HIGH/MEDIUM/LOW classification is changed later in IdentifyPriorityTargets
-						newTarget.SetTargetType(AI_TACTICAL_TARGET_LOW_PRIORITY_UNIT);
+						newTarget.SetTargetType(AI_TACTICAL_TARGET_ENEMY_COMBAT_UNIT);
 						newTarget.SetUnitPtr(pUnit);
 						newTarget.SetAuxIntData(50);
 						m_AllTargets.push_back(newTarget);
@@ -551,22 +497,9 @@ void CvTacticalAI::FindTacticalTargets()
 						//barbarians do not attack civilians before the first city was founded.
 						if (!m_pPlayer->isBarbarian() || GET_PLAYER(pUnit->getOwner()).GetNumCitiesFounded() > 0)
 						{
-							newTarget.SetTargetType(AI_TACTICAL_TARGET_LOW_PRIORITY_CIVILIAN);
+							newTarget.SetTargetType(IsHighPriorityCivilianTarget(&newTarget) ? AI_TACTICAL_TARGET_HIGH_PRIORITY_CIVILIAN : AI_TACTICAL_TARGET_LOW_PRIORITY_CIVILIAN);
 							newTarget.SetUnitPtr(pUnit);
 							newTarget.SetAuxIntData(25);
-
-							if (IsVeryHighPriorityCivilianTarget(&newTarget))
-							{
-								newTarget.SetTargetType(AI_TACTICAL_TARGET_VERY_HIGH_PRIORITY_CIVILIAN);
-							}
-							else if (IsHighPriorityCivilianTarget(&newTarget))
-							{
-								newTarget.SetTargetType(AI_TACTICAL_TARGET_HIGH_PRIORITY_CIVILIAN);
-							}
-							else if (IsMediumPriorityCivilianTarget(&newTarget))
-							{
-								newTarget.SetTargetType(AI_TACTICAL_TARGET_MEDIUM_PRIORITY_CIVILIAN);
-							}
 							m_AllTargets.push_back(newTarget);
 						}
 					}
@@ -597,7 +530,7 @@ void CvTacticalAI::FindTacticalTargets()
 					GC.getImprovementInfo(pLoopPlot->getRevealedImprovementType(m_pPlayer->getTeam()))->GetNearbyEnemyDamage() > /*10 in CP, 5 in VP*/ GD_INT_GET(ENEMY_HEAL_RATE) &&
 					!pLoopPlot->IsImprovementPillaged())
 				{
-					newTarget.SetTargetType(AI_TACTICAL_TARGET_CITADEL);
+					newTarget.SetTargetType(AI_TACTICAL_TARGET_ENEMY_CITADEL);
 					newTarget.SetAuxIntData(80);
 					m_AllTargets.push_back(newTarget);
 				}
@@ -645,7 +578,7 @@ void CvTacticalAI::FindTacticalTargets()
 					m_AllTargets.push_back(newTarget);
 				}
 
-				// ... trade unit
+				// ... enemy trade unit
 				if (pLoopPlot->isVisible(m_pPlayer->getTeam()) && pPlayerTrade->ContainsEnemyTradeUnit(pLoopPlot))
 				{
 					newTarget.SetTargetType( pLoopPlot->isWater() ? AI_TACTICAL_TARGET_TRADE_UNIT_SEA : AI_TACTICAL_TARGET_TRADE_UNIT_LAND);
@@ -654,7 +587,7 @@ void CvTacticalAI::FindTacticalTargets()
 				}
 
 				// ... defensive bastion?
-				if (m_pPlayer->GetID() == pLoopPlot->getOwner() &&
+				if (m_pPlayer->GetID() == pLoopPlot->getOwner() && pLoopPlot->getDomain()==DOMAIN_LAND &&
 					(pLoopPlot->defenseModifier(m_pPlayer->getTeam(), false, false) >= 30 || pLoopPlot->IsChokePoint()) &&
 					(!vUnfriendlyMajors.empty() && pLoopPlot->IsBorderLand(m_pPlayer->GetID(), vUnfriendlyMajors))
 					)
@@ -668,16 +601,20 @@ void CvTacticalAI::FindTacticalTargets()
 					m_AllTargets.push_back(newTarget);
 				}
 
-				// ... friendly improvement?
+				// ... friendly strategic resource improvement?
 				if (m_pPlayer->GetID() == pLoopPlot->getOwner() &&
-					pLoopPlot->getImprovementType() != NO_IMPROVEMENT &&
-					!pLoopPlot->IsImprovementPillaged() && !pLoopPlot->isGoody())
+					pLoopPlot->getResourceType() != NO_RESOURCE && 
+					pLoopPlot->getImprovementType() != NO_IMPROVEMENT && !pLoopPlot->IsImprovementPillaged())
 				{
 					if (pLoopPlot->getOwningCity() != NULL && !vUnfriendlyMajors.empty() && pLoopPlot->getOwningCity()->isBorderCity(vUnfriendlyMajors))
 					{
-						newTarget.SetTargetType(AI_TACTICAL_TARGET_IMPROVEMENT_TO_DEFEND);
-						newTarget.SetAuxIntData(1);
-						m_AllTargets.push_back(newTarget);
+						CvResourceInfo* pkResourceInfo = GC.getResourceInfo(pLoopPlot->getResourceType());
+						if (pkResourceInfo && pkResourceInfo->getResourceUsage() == RESOURCEUSAGE_STRATEGIC)
+						{
+							newTarget.SetTargetType(AI_TACTICAL_TARGET_IMPROVEMENT_TO_DEFEND);
+							newTarget.SetAuxIntData(1);
+							m_AllTargets.push_back(newTarget);
+						}
 					}
 				}
 
@@ -717,13 +654,6 @@ void CvTacticalAI::FindTacticalTargets()
 	}
 
 	// POST-PROCESSING ON TARGETS
-
-	// Mark enemy units threatening our cities (or camps) as priority targets
-	IdentifyPriorityTargets();
-	IdentifyPriorityBarbarianTargets();
-
-	// Also add some priority targets that we'd like to hit just because of their unit type (e.g. catapults)
-	IdentifyPriorityTargetsByType();
 
 	// make sure high prio units have the higher scores
 	UpdateTargetScores();
@@ -784,24 +714,23 @@ void CvTacticalAI::ProcessDominanceZones()
 		{
 			CvTacticalDominanceZone* pZone = GetTacticalAnalysisMap()->GetZoneByIndex(iI);
 
-			if(pZone->GetOverallDominanceFlag() != TACTICAL_DOMINANCE_FRIENDLY && pZone->GetTerritoryType() == TACTICAL_TERRITORY_FRIENDLY && !pZone->IsWater())
-			{
-				PlotEmergencyPurchases(pZone);
-				PlotDefensiveAirlifts(pZone);
-			}
+			PlotEmergencyPurchases(pZone);
+			PlotDefensiveAirlifts(pZone);
+
+			int iTargets = ExtractTargetsForZone(pZone);
+			if (iTargets==0)
+				continue;
 
 			if (GC.getLogging() && GC.getAILogging())
 			{
 				CvString strLogString;
 				CvCity* pZoneCity = pZone->GetZoneCity();
-				strLogString.Format("Zone %d, %s, city of %s, posture %s",  
+				strLogString.Format("Zone %d, %s, city of %s, posture %s, %d targets",  
 					pZone ? pZone->GetZoneID() : -1, pZone->IsWater() ? "water" : "land",
 					pZoneCity ? pZoneCity->getNameNoSpace().c_str() : "none", 
-					postureNames[pZone->GetPosture()]);
+					postureNames[pZone->GetPosture()], iTargets);
 				LogTacticalMessage(strLogString);
 			}
-
-			ExtractTargetsForZone(pZone);
 
 			switch (pZone->GetPosture())
 			{
@@ -885,12 +814,12 @@ void CvTacticalAI::AssignGlobalMidPrioMoves()
 	PlotHealMoves(false);
 
 	//harass the enemy (plundering also happens during combat sim ...)
-	PlotPillageMoves(AI_TACTICAL_TARGET_CITADEL, true);
+	PlotPillageMoves(AI_TACTICAL_TARGET_ENEMY_CITADEL, true);
 	PlotPlunderTradeUnitMoves(DOMAIN_LAND);
 	PlotPlunderTradeUnitMoves(DOMAIN_SEA);
 	PlotPillageMoves(AI_TACTICAL_TARGET_IMPROVEMENT_RESOURCE, true);
 	PlotPillageMoves(AI_TACTICAL_TARGET_IMPROVEMENT, true);
-	PlotPillageMoves(AI_TACTICAL_TARGET_CITADEL, false);
+	PlotPillageMoves(AI_TACTICAL_TARGET_ENEMY_CITADEL, false);
 	PlotPillageMoves(AI_TACTICAL_TARGET_IMPROVEMENT_RESOURCE, false);
 	PlotPillageMoves(AI_TACTICAL_TARGET_IMPROVEMENT, false);
 	PlotBlockadeMoves();
@@ -939,10 +868,10 @@ void CvTacticalAI::AssignBarbarianMoves()
 void CvTacticalAI::ExecuteCaptureCityMoves()
 {
 	// See how many moves of this type we can execute
-	for (CvTacticalTarget* pTarget = GetFirstZoneTarget(AI_TACTICAL_TARGET_CITY, AL_HIGH); pTarget!=NULL; pTarget = GetNextZoneTarget(AL_HIGH))
+	for (CvTacticalTarget* pTarget = GetFirstZoneTarget(AI_TACTICAL_TARGET_ENEMY_CITY, AL_HIGH); pTarget!=NULL; pTarget = GetNextZoneTarget(AL_HIGH))
 	{
 		//mark the target whether the attack happened or not - we won't have a better chance this turn
-		pTarget->SetLastAggLvl(AL_HIGH);
+		pTarget->SetLastAggLevel(AL_HIGH);
 
 		// See what units we have who can reach target this turn
 		CvPlot* pPlot = GC.getMap().plot(pTarget->GetTargetX(), pTarget->GetTargetY());
@@ -1006,15 +935,7 @@ void CvTacticalAI::ExecuteCaptureCityMoves()
 
 					// Are we a melee unit
 					if (!pUnit->IsCanAttackRanged())
-					{
 						iMeleeCount++;
-
-						//don't use too many far-away melee units
-						//the combat sim can't deal with too many units
-						//make sure there are ranged units in there as well
-						if (iMeleeCount > 3 && m_CurrentMoveUnits.size()>9 && !pPlot->isAdjacent(pUnit->plot()))
-							m_CurrentMoveUnits[iI].SetAttackStrength(-1);
-					}
 				}
 
 				if (iMeleeCount == 0 && iRequiredDamage <= 1)
@@ -1090,7 +1011,7 @@ void CvTacticalAI::PlotGrabGoodyMoves()
 	for (CvTacticalTarget* pTarget = GetFirstZoneTarget(AI_TACTICAL_TARGET_BARBARIAN_CAMP); pTarget!=NULL; pTarget = GetNextZoneTarget())
 	{
 		CvPlot* pPlot = GC.getMap().plot(pTarget->GetTargetX(), pTarget->GetTargetY());
-		if (FindUnitsForHarassing(pPlot,iRange,-1,-1,DOMAIN_LAND,false,true))
+		if (FindUnitsForHarassing(pPlot,iRange,-1,-1,DOMAIN_LAND,false,true,3))
 		{
 			ExecuteBarbarianCampMove(pPlot);
 			if( GC.getLogging() && GC.getAILogging() )
@@ -1121,165 +1042,6 @@ void CvTacticalAI::ExecuteBarbarianTheft()
 	{
 		vUsedUnits[i]->finishMoves();
 		UnitProcessed(vUsedUnits[i]->GetID());
-	}
-}
-
-struct STargetWithTwoScoresTiebreak
-{
-	STargetWithTwoScoresTiebreak(CvTacticalTarget* pTarget_, CvPlot* pPlot_, int score1_, int score2_) : pTarget(pTarget_), pPlot(pPlot_), score1(score1_), score2(score2_) {}
-
-	bool operator<(const STargetWithTwoScoresTiebreak& other) const
-	{
-		return (score1<other.score1) || (score1 == other.score1 && score2<other.score2);
-	}
-
-	CvTacticalTarget* pTarget;
-	CvPlot* pPlot;
-	int score1, score2;
-};
-
-/// Assign a group of units to attack each unit we think we can destroy
-void CvTacticalAI::ExecuteDestroyUnitMoves(AITacticalTargetType targetType, bool bMustBeAbleToKill, eAggressionLevel aggLvl)
-{
-	vector<STargetWithTwoScoresTiebreak> targets;
-
-	// See how many moves of this type we can execute
-	for (CvTacticalTarget* pTarget = GetFirstZoneTarget(targetType, aggLvl); pTarget!=NULL; pTarget = GetNextZoneTarget(aggLvl))
-	{
-		// See what units we have who can reach targets this turn
-		CvPlot* pPlot = GC.getMap().plot(pTarget->GetTargetX(), pTarget->GetTargetY());
-		CvUnit* pDefender = pPlot->getVisibleEnemyDefender(m_pPlayer->GetID());
-		if (pDefender && !pDefender->isDelayedDeath())
-		{
-			//if we're not about to make a kill, stay away from zones we are supposed to avoid
-			if (!bMustBeAbleToKill)
-			{
-				CvTacticalDominanceZone* pZone = GetTacticalAnalysisMap()->GetZoneByPlot(pPlot);
-				if (pZone && pZone->GetPosture() == TACTICAL_POSTURE_WITHDRAW)
-					continue;
-			}
-
-			FindUnitsWithinStrikingDistance(pPlot);
-			FindCitiesWithinStrikingDistance(pPlot);
-
-			int iExpectedDamage = ComputeTotalExpectedDamage(*pTarget) + ComputeTotalExpectedCityBombardDamage(pDefender);
-			if (iExpectedDamage>0)
-			{
-				int iRequiredDamage = pDefender->GetCurrHitPoints();
-
-				//when in doubt attack the unit with fewer neighboring enemies first (can happen especially in naval combat)
-				int iTiebreak = pPlot->countMatchingAdjacentPlots(NO_DOMAIN,NO_PLAYER,NO_PLAYER,NO_PLAYER) - pPlot->GetNumEnemyUnitsAdjacent(m_pPlayer->getTeam(), NO_DOMAIN);
-
-				//also prefer to attack enemies we have a higher chance of killing (this should include garrisons while 'units within striking distance' ignores those)
-				iTiebreak += m_pPlayer->GetPossibleAttackers(*pPlot, m_pPlayer->getTeam()).size();
-
-				pTarget->SetAuxIntData(iRequiredDamage);
-				targets.push_back(STargetWithTwoScoresTiebreak(pTarget,pPlot,iExpectedDamage-iRequiredDamage,iTiebreak) );
-			}
-		}
-	}
-
-	//we want to attacks the one we can do most damage to first
-	std::stable_sort(targets.begin(), targets.end());
-	std::reverse(targets.begin(), targets.end());
-
-	for (size_t i=0; i<targets.size(); i++)
-	{
-		CvUnit* pDefender = targets[i].pPlot->getVisibleEnemyDefender(m_pPlayer->GetID());
-		if (!pDefender)
-			continue;
-
-		//this is still a bit suboptimal, we might move units which are better positioned to attack another target
-		//on the other hand, ExecuteAttackWithUnits() considers other targets in the vicinity anyway
-		FindUnitsWithinStrikingDistance(targets[i].pPlot);
-		FindCitiesWithinStrikingDistance(targets[i].pPlot);
-
-		if(!bMustBeAbleToKill)
-		{
-			// Put in any attacks where we'll inflict at least equal damage
-			if(GC.getLogging() && GC.getAILogging())
-			{
-				CvString strLogString;
-
-				CvString strPlayerName = GET_PLAYER(pDefender->getOwner()).getCivilizationShortDescription();
-
-				CvUnitEntry* pkUnitInfo = GC.getUnitInfo(pDefender->getUnitType());
-				CvString strTemp = (pkUnitInfo != NULL)? pkUnitInfo->GetDescription() : "Unknown Unit Type";
-
-				switch(targetType)
-				{
-				case AI_TACTICAL_TARGET_HIGH_PRIORITY_UNIT:
-					strLogString.Format("Looking at damaging high priority %s, X: %d, Y: %d, ", strTemp.GetCString(),
-							            pDefender->getX(), pDefender->getY());
-					break;
-				case AI_TACTICAL_TARGET_MEDIUM_PRIORITY_UNIT:
-					strLogString.Format("Looking at damaging medium priority %s, X: %d, Y: %d, ", strTemp.GetCString(),
-							            pDefender->getX(), pDefender->getY());
-					break;
-				case AI_TACTICAL_TARGET_LOW_PRIORITY_UNIT:
-					strLogString.Format("Looking at damaging low priority %s, X: %d, Y: %d, ", strTemp.GetCString(),
-							            pDefender->getX(), pDefender->getY());
-					break;
-				default:
-					UNREACHABLE(); // Unsupported `targetType`.
-				}
-				strLogString += strPlayerName;
-				LogTacticalMessage(strLogString);
-			}
-
-			//mark the target no matter if the attack succeeds
-			targets[i].pTarget->SetLastAggLvl(aggLvl);
-
-			//return true if target was killed
-			if (ExecuteAttackWithCitiesAndGarrisons(pDefender))
-				continue;
-
-			ExecuteAttackWithUnits(targets[i].pPlot, aggLvl);
-		}
-		// Do we have enough firepower to destroy it?
-		else
-		{
-			if(targets[i].score1>0) //score1 is the overkill number
-			{
-				// If so, execute enough moves to destroy it
-				if(GC.getLogging() && GC.getAILogging())
-				{
-					CvString strLogString;
-					CvString strTemp;
-					CvString strPlayerName;
-					strPlayerName = GET_PLAYER(pDefender->getOwner()).getCivilizationShortDescription();
-					strTemp = GC.getUnitInfo(pDefender->getUnitType())->GetDescription();
-					switch(targetType)
-					{
-					case AI_TACTICAL_TARGET_HIGH_PRIORITY_UNIT:
-						strLogString.Format("Looking at killing high priority %s, id %d, X: %d, Y: %d, ", strTemp.GetCString(),
-							pDefender->GetID(), pDefender->getX(), pDefender->getY());
-						break;
-					case AI_TACTICAL_TARGET_MEDIUM_PRIORITY_UNIT:
-						strLogString.Format("Looking at killing medium priority %s, id %d, X: %d, Y: %d ,", strTemp.GetCString(),
-							pDefender->GetID(), pDefender->getX(), pDefender->getY());
-						break;
-					case AI_TACTICAL_TARGET_LOW_PRIORITY_UNIT:
-						strLogString.Format("Looking at killing low priority %s, id %d, X: %d, Y: %d, ", strTemp.GetCString(),
-							pDefender->GetID(), pDefender->getX(), pDefender->getY());
-						break;
-					default:
-						UNREACHABLE(); // Unsupported `targetType`.
-					}
-					strLogString += strPlayerName;
-					LogTacticalMessage(strLogString);
-				}
-
-				//mark the target no matter if the attack succeeds
-				targets[i].pTarget->SetLastAggLvl(aggLvl);
-
-				//return true if target was killed
-				if (ExecuteAttackWithCitiesAndGarrisons(pDefender))
-					continue;
-
-				ExecuteAttackWithUnits(targets[i].pPlot, aggLvl);
-			}
-		}
 	}
 }
 
@@ -1320,11 +1082,21 @@ void CvTacticalAI::PlotMovesToSafety(bool bCombatUnits)
 					}
 				}
 
-				if(bAddUnit)
+				if (bAddUnit)
+				{
 					m_CurrentMoveUnits.push_back(CvTacticalUnit(pUnit->GetID()));
+					//we will later sort by "attack strength" so fake it
+					//ranged/slow units should retreat first, ie have a high strength
+					int iFakeStrength = (pUnit->IsCanAttackRanged() ? 30 : 20) - pUnit->baseMoves(false);
+					m_CurrentMoveUnits.back().SetAttackStrength(iFakeStrength);
+					m_CurrentMoveUnits.back().SetHealthPercent(1,1);
+				}
 			}
 		}
 	}
+
+	//melee units should retreat last
+	std::sort(m_CurrentMoveUnits.begin(), m_CurrentMoveUnits.end());
 
 	for(unsigned int iI = 0; iI < m_CurrentMoveUnits.size(); iI++)
 	{
@@ -1359,9 +1131,8 @@ void CvTacticalAI::PlotBarbarianAttacks()
 	//the Execute* functions are generic, need to set the current tactical move before calling them
 	ClearCurrentMoveUnits(AI_TACTICAL_BARBARIAN_HUNT);
 	ExecuteBarbarianTheft();
-	ExecuteDestroyUnitMoves(AI_TACTICAL_TARGET_HIGH_PRIORITY_UNIT, false, AL_BRAVEHEART);
-	ExecuteDestroyUnitMoves(AI_TACTICAL_TARGET_MEDIUM_PRIORITY_UNIT, false, AL_BRAVEHEART);
-	ExecuteDestroyUnitMoves(AI_TACTICAL_TARGET_LOW_PRIORITY_UNIT, false, AL_BRAVEHEART);
+	for (CvTacticalTarget* pTarget = GetFirstZoneTarget(AI_TACTICAL_TARGET_ENEMY_COMBAT_UNIT, AL_BRAVEHEART); pTarget != NULL; pTarget = GetNextZoneTarget(AL_BRAVEHEART))
+		ExecuteDestroyEnemyUnits(*pTarget, AL_BRAVEHEART);
 	ExecuteCaptureCityMoves();
 }
 
@@ -1377,7 +1148,7 @@ void CvTacticalAI::PlotPlunderTradeUnitMoves(DomainTypes eDomain)
 		// See what units we have who can reach target this turn
 		CvPlot* pPlot = GC.getMap().plot(pTarget->GetTargetX(), pTarget->GetTargetY());
 
-		if (FindUnitsForHarassing(pPlot,1,GD_INT_GET(MAX_HIT_POINTS)/2,-1,eDomain,false,false))
+		if (FindUnitsForHarassing(pPlot,1,GD_INT_GET(MAX_HIT_POINTS)/2,-1,eDomain,false,false,1))
 		{
 			// Queue best one up to capture it
 			ExecutePlunderTradeUnit(pPlot);
@@ -1421,7 +1192,7 @@ void CvTacticalAI::PlotPillageMoves(AITacticalTargetType eTarget, bool bImmediat
 	CvString szTargetName = "";
 	if(GC.getLogging() && GC.getAILogging())
 	{
-		if (eTarget == AI_TACTICAL_TARGET_CITADEL)
+		if (eTarget == AI_TACTICAL_TARGET_ENEMY_CITADEL)
 		{
 			szTargetName = "Citadel";
 			iBaseDamage = 0; //also undamaged units may pillage this
@@ -1476,7 +1247,7 @@ void CvTacticalAI::PlotPillageMoves(AITacticalTargetType eTarget, bool bImmediat
 				}
 
 			}
-			else if (FindUnitsForHarassing(pPlot, 0, GD_INT_GET(MAX_HIT_POINTS) / 3, GD_INT_GET(MAX_HIT_POINTS) - iMinDamage, DOMAIN_LAND, true, false))
+			else if (FindUnitsForHarassing(pPlot, 0, GD_INT_GET(MAX_HIT_POINTS) / 3, GD_INT_GET(MAX_HIT_POINTS) - iMinDamage, DOMAIN_LAND, true, false, 1))
 			{
 				if (ExecutePillage(pPlot))
 				{
@@ -1489,7 +1260,7 @@ void CvTacticalAI::PlotPillageMoves(AITacticalTargetType eTarget, bool bImmediat
 				}
 			}
 		}
-		else if (FindUnitsForHarassing(pPlot, 2, GD_INT_GET(MAX_HIT_POINTS) / 2, GD_INT_GET(MAX_HIT_POINTS) - iMinDamage, DOMAIN_LAND, false, false))
+		else if (FindUnitsForHarassing(pPlot, 2, GD_INT_GET(MAX_HIT_POINTS) / 2, GD_INT_GET(MAX_HIT_POINTS) - iMinDamage, DOMAIN_LAND, false, false, 1))
 		{
 			//be careful when sending out single units ...
 			CvTacticalDominanceZone* pZone = GetTacticalAnalysisMap()->GetZoneByPlot(pPlot);
@@ -1523,7 +1294,7 @@ void CvTacticalAI::PlotBlockadeMoves()
 	{
 		// See what units we have who can reach target this turn
 		CvPlot* pPlot = GC.getMap().plot(pTarget->GetTargetX(), pTarget->GetTargetY());
-		if (FindUnitsForHarassing(pPlot, 4, GD_INT_GET(MAX_HIT_POINTS)/2, -1, DOMAIN_SEA, false, false))
+		if (FindUnitsForHarassing(pPlot, 4, GD_INT_GET(MAX_HIT_POINTS)/2, -1, DOMAIN_SEA, false, false, 1))
 		{
 			// Queue best one up to capture it
 			ExecuteNavalBlockadeMove(pPlot);
@@ -1541,9 +1312,7 @@ void CvTacticalAI::PlotBlockadeMoves()
 void CvTacticalAI::PlotCivilianAttackMoves()
 {
 	ClearCurrentMoveUnits(AI_TACTICAL_CAPTURE);
-	ExecuteCivilianAttackMoves(AI_TACTICAL_TARGET_VERY_HIGH_PRIORITY_CIVILIAN);
 	ExecuteCivilianAttackMoves(AI_TACTICAL_TARGET_HIGH_PRIORITY_CIVILIAN);
-	ExecuteCivilianAttackMoves(AI_TACTICAL_TARGET_MEDIUM_PRIORITY_CIVILIAN);
 	ExecuteCivilianAttackMoves(AI_TACTICAL_TARGET_LOW_PRIORITY_CIVILIAN);
 }
 
@@ -1554,7 +1323,7 @@ void CvTacticalAI::ExecuteCivilianAttackMoves(AITacticalTargetType eTargetType)
 	{
 		// See what units we have who can reach target this turn
 		CvPlot* pPlot = GC.getMap().plot(pTarget->GetTargetX(), pTarget->GetTargetY());
-		if(FindUnitsForHarassing(pPlot,1,GD_INT_GET(MAX_HIT_POINTS)/2,-1,DOMAIN_LAND,false,false))
+		if(FindUnitsForHarassing(pPlot,1,GD_INT_GET(MAX_HIT_POINTS)/2,-1,DOMAIN_LAND,false,false,1))
 		{
 			for (size_t i = 0; i < m_CurrentMoveUnits.size(); i++)
 			{
@@ -1575,16 +1344,8 @@ void CvTacticalAI::ExecuteCivilianAttackMoves(AITacticalTargetType eTargetType)
 						CvString strLogString;
 						switch (eTargetType)
 						{
-						case AI_TACTICAL_TARGET_VERY_HIGH_PRIORITY_CIVILIAN:
-							strLogString.Format("Attacking very high priority civilian, X: %d, Y: %d", pTarget->GetTargetX(),
-								pTarget->GetTargetY());
-							break;
 						case AI_TACTICAL_TARGET_HIGH_PRIORITY_CIVILIAN:
 							strLogString.Format("Attacking high priority civilian, X: %d, Y: %d", pTarget->GetTargetX(),
-								pTarget->GetTargetY());
-							break;
-						case AI_TACTICAL_TARGET_MEDIUM_PRIORITY_CIVILIAN:
-							strLogString.Format("Attacking medium priority civilian, X: %d, Y: %d", pTarget->GetTargetX(),
 								pTarget->GetTargetY());
 							break;
 						case AI_TACTICAL_TARGET_LOW_PRIORITY_CIVILIAN:
@@ -1653,7 +1414,7 @@ void CvTacticalAI::PlotBarbarianCampDefense()
 			{
 				//capture unprotected civilians if we can return to camp in the same turn
 				CvPlot** neighbors = GC.getMap().getNeighborsShuffled(pPlot);
-				for (int i = 0; i < 6; i++)
+				for (int i = 0; i < NUM_DIRECTION_TYPES; i++)
 				{
 					CvPlot* pNeighbor = neighbors[i];
 					if (!pNeighbor)
@@ -1676,7 +1437,7 @@ void CvTacticalAI::PlotBarbarianCampDefense()
 
 			UnitProcessed(currentDefender->GetID());
 		}
-		else if (FindUnitsForHarassing(pPlot,5,-1,-1,DOMAIN_LAND,false,false))
+		else if (FindUnitsForHarassing(pPlot,5,-1,-1,DOMAIN_LAND,false,false,1))
 		{
 			CvUnit* pUnit = (m_CurrentMoveUnits.size() > 0) ? m_pPlayer->getUnit(m_CurrentMoveUnits.begin()->GetID()) : 0;
 			ExecuteMoveToPlot(pUnit,pPlot);
@@ -1695,7 +1456,7 @@ void CvTacticalAI::PlotGarrisonMoves(int iNumTurnsAway, bool bEmergencyOnly)
 {
 	ClearCurrentMoveUnits(AI_TACTICAL_GARRISON);
 
-	for (CvTacticalTarget* pTarget = GetFirstZoneTarget(AI_TACTICAL_TARGET_CITY_TO_DEFEND); pTarget!=NULL; pTarget = GetNextZoneTarget())
+	for (CvTacticalTarget* pTarget = GetFirstZoneTarget(AI_TACTICAL_TARGET_FRIENDLY_CITY); pTarget!=NULL; pTarget = GetNextZoneTarget())
 	{
 		CvPlot* pPlot = GC.getMap().plot(pTarget->GetTargetX(), pTarget->GetTargetY());
 		CvCity* pCity = pPlot->getPlotCity();
@@ -1903,18 +1664,14 @@ void CvTacticalAI::PlotAirPatrolMoves()
 /// Spend money to buy defenses
 void CvTacticalAI::PlotEmergencyPurchases(CvTacticalDominanceZone* pZone)
 {
-	if(m_pPlayer->isMinorCiv())
-		return;
-	if (!pZone)
+	if(!pZone || pZone->IsWater())
 		return;
 
 	CvCity* pCity = pZone->GetZoneCity();
-
-	// Only in our own cities
 	if (!pCity || pCity->getOwner() != m_pPlayer->GetID())
 		return;
 
-	// Done waste money if there's no hope
+	// Don't waste money if there's no hope
 	if (pCity->isInDangerOfFalling())
 		return;
 
@@ -1924,7 +1681,7 @@ void CvTacticalAI::PlotEmergencyPurchases(CvTacticalDominanceZone* pZone)
 		bWantUnits = false;
 
 	// If we need additional units - ignore the supply limit here, we're probably losing units anyway
-	if(pZone->GetOverallDominanceFlag()>TACTICAL_DOMINANCE_FRIENDLY)
+	if(pZone->GetOverallDominanceFlag()>TACTICAL_DOMINANCE_FRIENDLY || pCity->isUnderSiege())
 	{
 		if(!MOD_BALANCE_CORE_BUILDING_INVESTMENTS)
 			m_pPlayer->GetMilitaryAI()->BuyEmergencyBuilding(pCity);
@@ -1954,10 +1711,11 @@ void CvTacticalAI::PlotEmergencyPurchases(CvTacticalDominanceZone* pZone)
 /// Spend money to buy defenses
 void CvTacticalAI::PlotDefensiveAirlifts(CvTacticalDominanceZone* pZone)
 {
-	if(m_pPlayer->isMinorCiv())
+	if(!pZone || pZone->IsWater() || m_pPlayer->isMinorCiv())
 		return;
 
-	if (!pZone)
+	//nothing to do
+	if (pZone->GetOverallDominanceFlag() == TACTICAL_DOMINANCE_FRIENDLY)
 		return;
 
 	ClearCurrentMoveUnits(AI_TACTICAL_AIRLIFT);
@@ -2051,74 +1809,58 @@ void CvTacticalAI::PlotNavalEscortMoves()
 // PLOT MOVES FOR ZONE TACTICAL POSTURES
 
 /// Win an attrition campaign with bombardments
-void CvTacticalAI::PlotAttritionAttacks(CvTacticalDominanceZone* /*pZone*/)
+void CvTacticalAI::PlotAttritionAttacks(CvTacticalDominanceZone* pZone)
 {
+	pZone; //unused but can be inspected
 	ClearCurrentMoveUnits(AI_TACTICAL_ATTRITION);
 
 	//todo: the targets are sorted in a very rough "how bad can they hit us" order
 	//but we should probably sort them in a "how bad can we hit them" order
-	//ExecuteAttritionAttacks() considers only the given target for city/garrison attacks
-
-	for (CvTacticalTarget* pTarget = GetFirstZoneTarget(AI_TACTICAL_TARGET_HIGH_PRIORITY_UNIT); pTarget!=NULL && pTarget->IsTargetStillAlive(m_pPlayer->GetID()); pTarget = GetNextZoneTarget())
-		ExecuteAttritionAttacks(*pTarget);
-
-	for (CvTacticalTarget* pTarget = GetFirstZoneTarget(AI_TACTICAL_TARGET_MEDIUM_PRIORITY_UNIT); pTarget!=NULL && pTarget->IsTargetStillAlive(m_pPlayer->GetID()); pTarget = GetNextZoneTarget())
-		ExecuteAttritionAttacks(*pTarget);
-
-	for (CvTacticalTarget* pTarget = GetFirstZoneTarget(AI_TACTICAL_TARGET_LOW_PRIORITY_UNIT); pTarget!=NULL && pTarget->IsTargetStillAlive(m_pPlayer->GetID()); pTarget = GetNextZoneTarget())
-		ExecuteAttritionAttacks(*pTarget);
+	for (CvTacticalTarget* pTarget = GetFirstZoneTarget(AI_TACTICAL_TARGET_ENEMY_COMBAT_UNIT, AL_LOW); pTarget!=NULL; pTarget = GetNextZoneTarget(AL_LOW))
+		ExecuteDestroyEnemyUnits(*pTarget,AL_LOW);
 
 	//don't expose our units for city attacks here; if we are likely to succeed we don't call PlotAttritionAttacks
 }
 
 /// Defeat enemy units by using our advantage in numbers
-void CvTacticalAI::PlotExploitFlanksMoves(CvTacticalDominanceZone* /*pZone*/)
+void CvTacticalAI::PlotExploitFlanksMoves(CvTacticalDominanceZone* pZone)
 {
+	pZone; //unused but can be inspected
 	ClearCurrentMoveUnits(AI_TACTICAL_FLANKATTACK);
 
-	for (CvTacticalTarget* pTarget = GetFirstZoneTarget(AI_TACTICAL_TARGET_HIGH_PRIORITY_UNIT); pTarget!=NULL && pTarget->IsTargetStillAlive(m_pPlayer->GetID()); pTarget = GetNextZoneTarget())
-		ExecuteFlankAttack(*pTarget);
+	for (CvTacticalTarget* pTarget = GetFirstZoneTarget(AI_TACTICAL_TARGET_ENEMY_COMBAT_UNIT, AL_MEDIUM); pTarget!=NULL; pTarget = GetNextZoneTarget(AL_MEDIUM))
+		ExecuteDestroyEnemyUnits(*pTarget, AL_MEDIUM);
 
-	for (CvTacticalTarget* pTarget = GetFirstZoneTarget(AI_TACTICAL_TARGET_MEDIUM_PRIORITY_UNIT); pTarget!=NULL && pTarget->IsTargetStillAlive(m_pPlayer->GetID()); pTarget = GetNextZoneTarget())
-		ExecuteFlankAttack(*pTarget);
-
-	for (CvTacticalTarget* pTarget = GetFirstZoneTarget(AI_TACTICAL_TARGET_LOW_PRIORITY_UNIT); pTarget!=NULL && pTarget->IsTargetStillAlive(m_pPlayer->GetID()); pTarget = GetNextZoneTarget())
-		ExecuteFlankAttack(*pTarget);
-
-	//don't expose our units for city attacks here; if we are likely to succeed we don't call PlotExploitFlanksMoves
+	//just in case there is a city ... it can happen that the city is wide open and the defenders are on another island
+	ExecuteCaptureCityMoves();
 }
 
 /// We have more overall strength than enemy, defeat his army first
-void CvTacticalAI::PlotSteamrollMoves(CvTacticalDominanceZone* /*pZone*/)
+void CvTacticalAI::PlotSteamrollMoves(CvTacticalDominanceZone* pZone)
 {
+	pZone; //unused but can be inspected
 	ClearCurrentMoveUnits(AI_TACTICAL_STEAMROLL);
 
 	// See if there are any kill attacks we can make.
-	ExecuteDestroyUnitMoves(AI_TACTICAL_TARGET_HIGH_PRIORITY_UNIT, true, AL_HIGH);
-	ExecuteDestroyUnitMoves(AI_TACTICAL_TARGET_MEDIUM_PRIORITY_UNIT, true);
-	ExecuteDestroyUnitMoves(AI_TACTICAL_TARGET_LOW_PRIORITY_UNIT, true);
-
-	// We have superiority, so let's attack high prio targets even with bad odds
-	ExecuteDestroyUnitMoves(AI_TACTICAL_TARGET_HIGH_PRIORITY_UNIT, false, AL_HIGH);
-	ExecuteDestroyUnitMoves(AI_TACTICAL_TARGET_MEDIUM_PRIORITY_UNIT, false);
-	ExecuteDestroyUnitMoves(AI_TACTICAL_TARGET_LOW_PRIORITY_UNIT, false);
+	for (CvTacticalTarget* pTarget = GetFirstZoneTarget(AI_TACTICAL_TARGET_ENEMY_COMBAT_UNIT, AL_HIGH); pTarget != NULL; pTarget = GetNextZoneTarget(AL_HIGH))
+		ExecuteDestroyEnemyUnits(*pTarget, AL_HIGH);
 
 	// Now go after the city
 	ExecuteCaptureCityMoves();
 }
 
 /// We should be strong enough to take out the city before the enemy can whittle us down with ranged attacks
-void CvTacticalAI::PlotSurgicalCityStrikeMoves(CvTacticalDominanceZone* /*pZone*/)
+void CvTacticalAI::PlotSurgicalCityStrikeMoves(CvTacticalDominanceZone* pZone)
 {
+	pZone; //unused but can be inspected
 	ClearCurrentMoveUnits(AI_TACTICAL_SURGICAL_STRIKE);
 
 	// Attack the city first
 	ExecuteCaptureCityMoves();
 
 	// Take any other really good attacks we've set up
-	ExecuteDestroyUnitMoves(AI_TACTICAL_TARGET_HIGH_PRIORITY_UNIT, false);
-	ExecuteDestroyUnitMoves(AI_TACTICAL_TARGET_MEDIUM_PRIORITY_UNIT, false);
-	ExecuteDestroyUnitMoves(AI_TACTICAL_TARGET_LOW_PRIORITY_UNIT, false);
+	for (CvTacticalTarget* pTarget = GetFirstZoneTarget(AI_TACTICAL_TARGET_ENEMY_COMBAT_UNIT, AL_MEDIUM); pTarget != NULL; pTarget = GetNextZoneTarget(AL_MEDIUM))
+		ExecuteDestroyEnemyUnits(*pTarget, AL_MEDIUM);
 }
 
 /// Build a defensive shell around this city
@@ -2127,28 +1869,23 @@ void CvTacticalAI::PlotHedgehogMoves(CvTacticalDominanceZone* pZone)
 	ClearCurrentMoveUnits(AI_TACTICAL_HEDGEHOG);
 
 	// Be careful with our units, we don't have so many
-	ExecuteDestroyUnitMoves(AI_TACTICAL_TARGET_HIGH_PRIORITY_UNIT, false, AL_LOW);
-	ExecuteDestroyUnitMoves(AI_TACTICAL_TARGET_MEDIUM_PRIORITY_UNIT, false, AL_LOW);
-	ExecuteDestroyUnitMoves(AI_TACTICAL_TARGET_LOW_PRIORITY_UNIT, false, AL_LOW);
+	for (CvTacticalTarget* pTarget = GetFirstZoneTarget(AI_TACTICAL_TARGET_ENEMY_COMBAT_UNIT, AL_LOW); pTarget != NULL; pTarget = GetNextZoneTarget(AL_LOW))
+		ExecuteDestroyEnemyUnits(*pTarget, AL_LOW);
 
 	// exception : early reinforcement before attacks in other zones are considered
 	PlotReinforcementMoves(pZone);
 }
 
 /// Try to push back the invader
-void CvTacticalAI::PlotCounterattackMoves(CvTacticalDominanceZone* /*pZone*/)
+void CvTacticalAI::PlotCounterattackMoves(CvTacticalDominanceZone* pZone)
 {
+	pZone; //unused but can be inspected
 	ClearCurrentMoveUnits(AI_TACTICAL_COUNTERATTACK);
 
 	// Attack priority unit targets
-	ExecuteDestroyUnitMoves(AI_TACTICAL_TARGET_HIGH_PRIORITY_UNIT, true);
-	ExecuteDestroyUnitMoves(AI_TACTICAL_TARGET_MEDIUM_PRIORITY_UNIT, true);
-	ExecuteDestroyUnitMoves(AI_TACTICAL_TARGET_LOW_PRIORITY_UNIT, true);
+	for (CvTacticalTarget* pTarget = GetFirstZoneTarget(AI_TACTICAL_TARGET_ENEMY_COMBAT_UNIT, AL_MEDIUM); pTarget != NULL; pTarget = GetNextZoneTarget(AL_MEDIUM))
+		ExecuteDestroyEnemyUnits(*pTarget, AL_MEDIUM);
 
-	// Now targets we can't destroy
-	ExecuteDestroyUnitMoves(AI_TACTICAL_TARGET_HIGH_PRIORITY_UNIT, false);
-	ExecuteDestroyUnitMoves(AI_TACTICAL_TARGET_MEDIUM_PRIORITY_UNIT, false);
-	ExecuteDestroyUnitMoves(AI_TACTICAL_TARGET_LOW_PRIORITY_UNIT, false);
 }
 
 /// Withdraw out of current dominance zone
@@ -2186,11 +1923,18 @@ void CvTacticalAI::PlotWithdrawMoves(CvTacticalDominanceZone* pZone)
 			}
 
 			m_CurrentMoveUnits.push_back(CvTacticalUnit(pUnit->GetID()));
+			//we will later sort by "attack strength" so fake it
+			//ranged/slow units should retreat first, ie have a high strength
+			int iFakeStrength = (pUnit->IsCanAttackRanged() ? 30 : 20) - pUnit->baseMoves(false);
+			m_CurrentMoveUnits.back().SetAttackStrength(iFakeStrength);
+			m_CurrentMoveUnits.back().SetHealthPercent(1, 1);
 		}
 	}
 
 	if(m_CurrentMoveUnits.size() > 0)
 	{
+		//melee units should retreat last
+		std::sort(m_CurrentMoveUnits.begin(), m_CurrentMoveUnits.end());
 		ExecuteWithdrawMoves();
 	}
 }
@@ -2214,8 +1958,14 @@ void CvTacticalAI::PlotReinforcementMoves(CvTacticalDominanceZone* pTargetZone)
 		return;
 
 	//sometimes we do not need further reinforcement - should we check whether we still need siege units specifically?
+	bool bNeedMeleeOnly = false;
 	if (pTargetZone->GetOverallDominanceFlag() == TACTICAL_DOMINANCE_FRIENDLY && pTargetZone->GetRangedDominanceFlag(100) == TACTICAL_DOMINANCE_FRIENDLY)
-		return;
+	{
+		if (pTargetZone->GetFriendlyMeleeStrength() == 0) //get in melee units to capture a city!
+			bNeedMeleeOnly = true;
+		else
+			return;
+	}
 
 	//sometimes it's pointless, too far out
 	if (!pTargetZone->HasNeighborZone(m_pPlayer->GetID()) && pTargetZone->GetOverallDominanceFlag() == TACTICAL_DOMINANCE_ENEMY)
@@ -2224,7 +1974,7 @@ void CvTacticalAI::PlotReinforcementMoves(CvTacticalDominanceZone* pTargetZone)
 	// we want units which are somewhat close (so we don't deplete other combat zones) 
 	// do not set a player - that way we can traverse unrevealed plots and foreign territory
 	SPathFinderUserData data(NO_PLAYER, PT_ARMY_MIXED, NO_PLAYER, GetRecruitRange());
-	CvPlot* pTargetPlot = pTargetZone->GetZoneCity()->plot();
+	CvPlot* pTargetPlot = pZoneCity->plot();
 
 	ReachablePlots relevantPlots = GC.GetStepFinder().GetPlotsInReach(pTargetPlot, data);
 
@@ -2247,6 +1997,10 @@ void CvTacticalAI::PlotReinforcementMoves(CvTacticalDominanceZone* pTargetZone)
 								continue;
 				}
 
+				// Skip ranged if we only need melee
+				if (bNeedMeleeOnly && pUnit->IsCanAttackRanged())
+					continue;
+
 				// Carriers have special moves
 				if (pUnit->AI_getUnitAIType() == UNITAI_CARRIER_SEA)
 					continue;
@@ -2259,6 +2013,7 @@ void CvTacticalAI::PlotReinforcementMoves(CvTacticalDominanceZone* pTargetZone)
 				//it's enough if we recruit them for armies or combat sim
 				if (pUnit->IsGreatGeneral() || pUnit->IsGreatAdmiral())
 					continue;
+
 				//conversely, don't leave generals out in the cold
 				if (pUnit->IsCoveringFriendlyCivilian())
 				{
@@ -2349,6 +2104,15 @@ void CvTacticalAI::ReviewUnassignedUnits()
 			//do not skip the turn, finish moves, set the turn processed flag for units which we didn't move
 			//homeland AI will take care of them!
 		}
+	}
+
+	//fallback - if a city can bombard a unit but the corresponding target was suppressed, we do the attack here
+	int iLoop;
+	for (CvCity* pLoopCity = m_pPlayer->firstCity(&iLoop); pLoopCity != NULL; pLoopCity = m_pPlayer->nextCity(&iLoop))
+	{
+		CvUnit* pTarget = pLoopCity->getBestRangedStrikeTarget();
+		if (pTarget)
+			pLoopCity->doTask(TASK_RANGED_ATTACK, pTarget->getX(), pTarget->getY(), false);
 	}
 }
 
@@ -2653,7 +2417,7 @@ void CvTacticalAI::PlotArmyMovesEscort(CvArmyAI* pThisArmy)
 			}
 			else
 			{
-				if (MoveToEmptySpaceNearTarget(pCivilian, pOperation->GetTargetPlot(), DOMAIN_LAND, INT_MAX))
+				if (MoveToEmptySpaceNearTarget(pCivilian, pOperation->GetTargetPlot(), DOMAIN_LAND, INT_MAX, true))
 				{
 					if(GC.getLogging() && GC.getAILogging())
 						strLogString.Format("%s now at (%d,%d). Moving to empty space near target (%d,%d) without escort.",  pCivilian->getName().c_str(), pCivilian->getX(), pCivilian->getY(), pOperation->GetTargetPlot()->getX(), pOperation->GetTargetPlot()->getY() );
@@ -2779,9 +2543,12 @@ bool CvTacticalAI::CheckForEnemiesNearArmy(CvArmyAI* pArmy)
 			continue;
 		}
 
+		//can we attack somebody?
+		vector<pair<CvPlot*, bool>> targets = TacticalAIHelpers::GetTargetsInRange(pUnit);
 		//who can attack us?
 		vector<CvUnit*> vEnemyAttackers = m_pPlayer->GetPossibleAttackers(*pUnit->plot(), m_pPlayer->getTeam());
-		if (vEnemyAttackers.empty())
+
+		if (targets.empty() && vEnemyAttackers.empty())
 		{
 			pUnit = pArmy->GetNextUnit(pUnit);
 			continue;
@@ -2835,6 +2602,9 @@ bool CvTacticalAI::CheckForEnemiesNearArmy(CvArmyAI* pArmy)
 		}
 	}
 
+	if (pClosestEnemyPlot == NULL)
+		return false;
+
 	//ignore units which are VERY far out; combat sim will ignore the "worst" units if necessary
 	vector<CvUnit*> ourUnitsFinal;
 	for (set<CvUnit*, PrSortByUnitId>::iterator it = ourUnitsInitial.begin(); it != ourUnitsInitial.end(); ++it)
@@ -2850,28 +2620,13 @@ bool CvTacticalAI::CheckForEnemiesNearArmy(CvArmyAI* pArmy)
 		LogTacticalMessage(strMsg);
 	}
 
-	//we probably didn't see all enemy units, so doublecheck ...
-	//but take care to pick the right zone in the right domain
-	CvCity* pClosestEnemyCity = GC.getGame().GetClosestCityByPlots(pClosestEnemyPlot, NO_PLAYER);
-	CvTacticalDominanceZone* pZone = m_pPlayer->GetTacticalAI()->GetTacticalAnalysisMap()->GetZoneByCity(pClosestEnemyCity,pArmy->GetType()!=ARMY_TYPE_LAND);
-	if (pZone && pZone->GetZoneCity() && pZone->GetOverallDominanceFlag() == TACTICAL_DOMINANCE_ENEMY)
+	//we probably didn't see all enemy units, so doublecheck ... don't get drawn into the wrong fight
+	CvCity* pClosestCity = GC.getGame().GetClosestCityByPlots(pClosestEnemyPlot, NO_PLAYER);
+	CvTacticalDominanceZone* pZone = m_pPlayer->GetTacticalAI()->GetTacticalAnalysisMap()->GetZoneByCity(pClosestCity,pArmy->GetType()!=ARMY_TYPE_LAND);
+	if (pZone && pZone->GetZoneCity() && pZone->GetTerritoryType()==TACTICAL_TERRITORY_ENEMY && pZone->GetOverallDominanceFlag() == TACTICAL_DOMINANCE_ENEMY)
 		return false;
 
-	int iCount = 0;
-	bool bSuccess = false;
-	do
-	{
-		vector<STacticalAssignment> vAssignments = TacticalAIHelpers::FindBestUnitAssignments(ourUnitsFinal, pClosestEnemyPlot, AL_MEDIUM, gTactPosStorage);
-		if (vAssignments.empty())
-			break;
-
-		//restarts might happen when new enemies become visible
-		bSuccess = TacticalAIHelpers::ExecuteUnitAssignments(m_pPlayer->GetID(), vAssignments);
-		iCount++;
-	}
-	while (!bSuccess && iCount < 4);
-
-	return bSuccess;
+	return TacticalAIHelpers::FindAndExecuteBestUnitAssignments(ourUnitsFinal,pClosestEnemyPlot,AL_MEDIUM);
 }
 
 void CvTacticalAI::ExecuteGatherMoves(CvArmyAI * pArmy, CvPlot * pTurnTarget)
@@ -2909,265 +2664,39 @@ void CvTacticalAI::ExecuteGatherMoves(CvArmyAI * pArmy, CvPlot * pTurnTarget)
 
 // ROUTINES TO PROCESS AND SORT TARGETS
 
-/// Mark units that can damage key items as priority targets
-void CvTacticalAI::IdentifyPriorityTargets()
-{
-	//calculate this only once
-	std::map<int,ReachablePlots> unitMovePlots;
-
-	// Loop through each of our cities
-	int iCityLoop = 0;
-	for(CvCity* pLoopCity = m_pPlayer->firstCity(&iCityLoop); pLoopCity != NULL; pLoopCity = m_pPlayer->nextCity(&iCityLoop))
-	{
-		// Compile a list of units that can attack it this turn and what their expected damage is
-		vector<CvTacticalTarget*> possibleAttackers;
-		int iExpectedTotalDamage = 0;
-
-		//todo: should really use FindUnitsWithinStrikingDistance() here but it does not re-use the moveplots ...
-		for (CvTacticalTarget* pTarget = GetFirstUnitTarget(); pTarget!=NULL; pTarget = GetNextUnitTarget())
-		{
-			CvPlot* pPlot = GC.getMap().plot(pTarget->GetTargetX(), pTarget->GetTargetY());
-			CvUnit* pEnemyUnit = pPlot->getVisibleEnemyDefender(m_pPlayer->GetID());
-			if(pEnemyUnit)
-			{
-				int iExpectedDamage = 0;
-
-				if(pEnemyUnit->IsCanAttackRanged())
-				{
-					if (pEnemyUnit->canRangeStrikeAt(pLoopCity->getX(), pLoopCity->getY()))
-						//can attack directly
-						iExpectedDamage = pEnemyUnit->GetRangeCombatDamage(NULL, pLoopCity, false, 0, NULL, NULL, true, true);
-					else
-					{
-						//have to move first
-						ReachablePlots plots;
-						std::map<int,ReachablePlots>::iterator it = unitMovePlots.find(pEnemyUnit->GetID());
-						if (it==unitMovePlots.end())
-						{
-							plots = pEnemyUnit->GetAllPlotsInReachThisTurn(true, true, false);
-							unitMovePlots[pEnemyUnit->GetID()] = plots;
-						}
-						else
-							plots = it->second;
-
-						//start from the outside
-						for (int i=pEnemyUnit->GetRange(); i>0 && iExpectedDamage==0; i--)
-						{
-							std::vector<CvPlot*> vPlots = TacticalAIHelpers::GetPlotsForRangedAttack(pLoopCity->plot(),pEnemyUnit,i,false);
-
-							for (std::vector<CvPlot*>::iterator it = vPlots.begin(); it != vPlots.end() && iExpectedDamage == 0; ++it)
-								if (plots.find((*it)->GetPlotIndex()) != plots.end())
-									iExpectedDamage = pEnemyUnit->GetRangeCombatDamage(NULL, pLoopCity, false, 0, NULL, NULL, true, true);
-						}
-					}
-				}
-				else
-				{
-					//melee always needs to move
-					ReachablePlots plots;
-					std::map<int,ReachablePlots>::iterator it = unitMovePlots.find(pEnemyUnit->GetID());
-					if (it==unitMovePlots.end())
-					{
-						plots = pEnemyUnit->GetAllPlotsInReachThisTurn(true, true, false);
-						unitMovePlots[pEnemyUnit->GetID()] = plots;
-					}
-					else
-						plots = it->second;
-
-					ReachablePlots::iterator plot = plots.find( pLoopCity->plot()->GetPlotIndex() );
-					if ( plot != plots.end() )
-					{
-						if (pEnemyUnit->isRangedSupportFire()) //plot is likely incorrect but this is just an estimation
-							iExpectedDamage += pEnemyUnit->GetRangeCombatDamage(NULL, pLoopCity, false, 0, 
-													pLoopCity->plot(), pEnemyUnit->plot(), true);
-
-						int iAttackerStrength = pEnemyUnit->GetMaxAttackStrength(NULL, pLoopCity->plot(), NULL, true, true);
-						int iDefenderStrength = pLoopCity->getStrengthValue(false,pEnemyUnit->ignoreBuildingDefense());
-						iExpectedDamage += pEnemyUnit->getCombatDamage(iAttackerStrength, iDefenderStrength, /*bIncludeRand*/ false, /*bAttackerIsCity*/ false, /*bDefenderIsCity*/ true);
-					}
-				}
-
-				if(iExpectedDamage > 0)
-				{
-					iExpectedTotalDamage += iExpectedDamage;
-					possibleAttackers.push_back(pTarget);
-				}
-			}
-		}
-
-		for (size_t i = 0; i < possibleAttackers.size(); i++)
-		{
-			CvPlot* pPlot = GC.getMap().plot( possibleAttackers[i]->GetTargetX(), possibleAttackers[i]->GetTargetY() );
-			CvUnit* pEnemyUnit = pPlot->getVisibleEnemyDefender(m_pPlayer->GetID());
-
-			//the siege units are the dangerous ones! cities should target them first
-			//for counterattack with units the tactical combat simulation chooses attacks based on estimated damage
-			if (pEnemyUnit && pEnemyUnit->AI_getUnitAIType()==UNITAI_CITY_BOMBARD)
-				possibleAttackers[i]->SetTargetType(AI_TACTICAL_TARGET_HIGH_PRIORITY_UNIT);
-			else
-				possibleAttackers[i]->SetTargetType(AI_TACTICAL_TARGET_MEDIUM_PRIORITY_UNIT);
-		}
-	}
-}
-
-/// Mark units that can damage our barbarian camps as priority targets
-void CvTacticalAI::IdentifyPriorityBarbarianTargets()
-{
-	if (!m_pPlayer->isBarbarian())
-	{
-		for (CvTacticalTarget* pTarget = GetFirstUnitTarget(); pTarget!=NULL; pTarget = GetNextUnitTarget())
-		{
-			CvPlot* pPlot = GC.getMap().plot(pTarget->GetTargetX(), pTarget->GetTargetY());
-			if (pPlot->getImprovementType() == GD_INT_GET(BARBARIAN_CAMP_IMPROVEMENT))
-				pTarget->SetTargetType(AI_TACTICAL_TARGET_HIGH_PRIORITY_UNIT);
-		}
-	}
-	else
-	{
-		for(int iI = 0; iI < GC.getMap().numPlots(); iI++)
-		{
-			CvPlot* pLoopPlot = GC.getMap().plotByIndexUnchecked(iI);
-			if(pLoopPlot->getImprovementType() == GD_INT_GET(BARBARIAN_CAMP_IMPROVEMENT))
-			{
-				for (CvTacticalTarget* pTarget = GetFirstUnitTarget(); pTarget!=NULL; pTarget = GetNextUnitTarget())
-				{
-					bool bPriorityTarget = false;
-
-					// Skip if already a priority target (because was able to strike another camp)
-					if(pTarget->GetTargetType() != AI_TACTICAL_TARGET_HIGH_PRIORITY_UNIT)
-					{
-						CvPlot* pPlot = GC.getMap().plot(pTarget->GetTargetX(), pTarget->GetTargetY());
-						CvUnit* pEnemyUnit = pPlot->getVisibleEnemyDefender(m_pPlayer->GetID());
-						if(pEnemyUnit->IsCanAttackRanged() && pEnemyUnit->GetMaxRangedCombatStrength(NULL, NULL, true) > pEnemyUnit->GetMaxAttackStrength(NULL, pLoopPlot, NULL))
-						{
-							if(plotDistance(pEnemyUnit->getX(), pEnemyUnit->getY(), pLoopPlot->getX(), pLoopPlot->getY()) <= pEnemyUnit->GetRange())
-							{
-								if(pEnemyUnit->canRangeStrikeAt(pLoopPlot->getX(), pLoopPlot->getY()))
-								{
-									bPriorityTarget = true;
-								}
-							}
-						}
-						else if(pEnemyUnit->TurnsToReachTarget(pLoopPlot,CvUnit::MOVEFLAG_TURN_END_IS_NEXT_TURN,1)<1)
-						{
-							bPriorityTarget = true;
-						}
-						if(bPriorityTarget)
-						{
-							pTarget->SetTargetType(AI_TACTICAL_TARGET_HIGH_PRIORITY_UNIT);
-						}
-					}
-				}
-			}
-		}
-	}
-}
-
 void CvTacticalAI::DumpTacticalTargets()
 {
-	for (CvTacticalTarget* pTarget = GetFirstUnitTarget(); pTarget!=NULL; pTarget = GetNextUnitTarget())
+	for (CvTacticalTarget* pTarget = GetFirstZoneTarget(AI_TACTICAL_TARGET_ENEMY_COMBAT_UNIT); pTarget!=NULL; pTarget = GetNextZoneTarget())
 	{
-		const char* prio = NULL;
-		switch (pTarget->GetTargetType())
-		{
-		case AI_TACTICAL_TARGET_LOW_PRIORITY_UNIT:
-			prio = "low";
-			break;
-		case AI_TACTICAL_TARGET_MEDIUM_PRIORITY_UNIT:
-			prio = "med";
-			break;
-		case AI_TACTICAL_TARGET_HIGH_PRIORITY_UNIT:
-			prio = "hi";
-			break;
-		default:
-			continue;
-		}
-
 		CvUnit* pUnit = pTarget->GetUnitPtr();
 		CvString strMsg;
-		strMsg.Format("Enemy %s, id %d at (%d,%d) with prio %s, score %d, damage %d", pUnit->getName().c_str(), pUnit->GetID(), pTarget->GetTargetX(), pTarget->GetTargetY(),
-			prio, pTarget->GetAuxIntData(), pUnit->getDamage());
+		strMsg.Format("Enemy %s, id %d at (%d,%d), score %d, damage %d", 
+			pUnit->getName().c_str(), pUnit->GetID(), pTarget->GetTargetX(), pTarget->GetTargetY(),
+			pTarget->GetAuxIntData(), pUnit->getDamage());
 		LogTacticalMessage(strMsg);
 	}
 }
 
-/// Mark units that we'd like to make opportunity attacks on because of their unit type (e.g. catapults)
-void CvTacticalAI::IdentifyPriorityTargetsByType()
-{
-	// Look through all the enemies we can see
-	for(unsigned int iI = 0; iI < m_AllTargets.size(); iI++)
-	{
-		CvUnit* pUnit = m_AllTargets[iI].GetUnitPtr();
-		if (!pUnit)
-			continue;
-
-		// Carriers are always high prio
-		if (pUnit->hasCargo())
-			m_AllTargets[iI].SetTargetType(AI_TACTICAL_TARGET_HIGH_PRIORITY_UNIT);
-
-		// Don't consider units that are already high priority
-		if(m_AllTargets[iI].GetTargetType() == AI_TACTICAL_TARGET_MEDIUM_PRIORITY_UNIT ||
-		        m_AllTargets[iI].GetTargetType() == AI_TACTICAL_TARGET_LOW_PRIORITY_UNIT)
-		{
-			// Units defending citadels will always be high priority targets
-			ImprovementTypes eImprovement = pUnit->plot()->getImprovementType();
-			if(pUnit->plot()->getOwner() == pUnit->getOwner() &&
-			        eImprovement != NO_IMPROVEMENT && GC.getImprovementInfo(eImprovement)->GetNearbyEnemyDamage() > 0)
-			{
-				m_AllTargets[iI].SetTargetType(AI_TACTICAL_TARGET_HIGH_PRIORITY_UNIT);
-			}
-		}
-
-		// Don't consider units that are already higher than low priority
-		if(m_AllTargets[iI].GetTargetType() == AI_TACTICAL_TARGET_LOW_PRIORITY_UNIT)
-		{
-			//units which are in the front line should be medium at least
-			if (pUnit->plot()->GetNumSpecificPlayerUnitsAdjacent(m_pPlayer->GetID())>0)
-				m_AllTargets[iI].SetTargetType(AI_TACTICAL_TARGET_MEDIUM_PRIORITY_UNIT);
-		}
-	}
-}
-
-/// after the high/mid/low prio unit target types are set, adjust the score so that the sorting works correctly
+// adjust the score so that we can sort the targets
+// keep in mind that the tactical combat sim will also take into account other enemies around the target
+// and try to do as much damage as possible. so we only need a rough scoring here.
 void CvTacticalAI::UpdateTargetScores()
 {
-	for(TacticalList::iterator it = m_AllTargets.begin(); it != m_AllTargets.end(); ++it)
+	for(vector<CvTacticalTarget>::iterator it = m_AllTargets.begin(); it != m_AllTargets.end(); ++it)
 	{
 		CvPlot* pPlot = GC.getMap().plot(it->GetTargetX(), it->GetTargetY());
-
-		//try to attack target (no matter the type) close to us first
-		if (pPlot->IsFriendlyUnitAdjacent(m_pPlayer->getTeam(), true))
-			it->SetAuxIntData(it->GetAuxIntData() + 8);
-
-		//try to attack targets close to our cities first
-		if (m_pPlayer->GetCityDistanceInPlots(pPlot)<4)
-			it->SetAuxIntData(it->GetAuxIntData() + 3);
-
-		if(it->GetTargetType() == AI_TACTICAL_TARGET_MEDIUM_PRIORITY_UNIT)
+		if(it->GetTargetType() == AI_TACTICAL_TARGET_ENEMY_COMBAT_UNIT)
 		{
-			//initially all targets were low prio, if it's higher now we give it a boost
-			it->SetAuxIntData( it->GetAuxIntData() + 25 );
+			//try to attack target close to our units first
+			vector<CvUnit*> myUnits = pPlot->GetAdjacentFriendlyCombatUnits(m_pPlayer->getTeam(), 3, pPlot->getDomain());
+			it->SetAuxIntData(it->GetAuxIntData() + myUnits.size());
 
-			CvPlot* pPlot = GC.getMap().plot(it->GetTargetX(), it->GetTargetY());
-			CvUnit* pUnit = pPlot->getVisibleEnemyDefender(m_pPlayer->GetID());
-			if (pUnit)
+			//try to attack targets close to our cities first
+			int iDist = m_pPlayer->GetCityDistanceInPlots(pPlot);
+			if (iDist != INT_MAX)
 			{
-				//if the target is damaged, give it a further boost
-				it->SetAuxIntData( it->GetAuxIntData() + pUnit->getDamage()/10 );
-			}
-		}
-
-		if(it->GetTargetType() == AI_TACTICAL_TARGET_HIGH_PRIORITY_UNIT)
-		{
-			//initially all targets were low prio, if it's higher now we give it a boost
-			it->SetAuxIntData( it->GetAuxIntData() + 50 );
-
-			CvPlot* pPlot = GC.getMap().plot(it->GetTargetX(), it->GetTargetY());
-			CvUnit* pUnit = pPlot->getVisibleEnemyDefender(m_pPlayer->GetID());
-			if (pUnit)
-			{
-				//if the target is damaged, give it a further boost
-				it->SetAuxIntData( it->GetAuxIntData() + pUnit->getDamage()/10 );
+				int iDistScore = max(0, 5 - iDist);
+				it->SetAuxIntData(it->GetAuxIntData() + iDistScore);
 			}
 		}
 	}
@@ -3178,20 +2707,18 @@ void CvTacticalAI::SortTargetListAndDropUselessTargets()
 	// Important: Sort all targets by aux data (if used for that target type)
 	std::stable_sort(m_AllTargets.begin(), m_AllTargets.end());
 
-	TacticalList reducedTargetList;
+	vector<CvTacticalTarget> reducedTargetList;
 
 	//now in the sorted list we can suppress adjacent non-maximum targets
 	int iSuppressionRange = 2;
-	for (TacticalList::iterator it = m_AllTargets.begin(); it != m_AllTargets.end(); ++it)
+	for (vector<CvTacticalTarget>::iterator it = m_AllTargets.begin(); it != m_AllTargets.end(); ++it)
 	{
 		bool bBetterTargetAdjacent = false;
 
 		//do this only for enemy units in the same domain
-		if (it->GetTargetType() == AI_TACTICAL_TARGET_HIGH_PRIORITY_UNIT ||
-			it->GetTargetType() == AI_TACTICAL_TARGET_MEDIUM_PRIORITY_UNIT ||
-			it->GetTargetType() == AI_TACTICAL_TARGET_LOW_PRIORITY_UNIT )
+		if (it->GetTargetType() == AI_TACTICAL_TARGET_ENEMY_COMBAT_UNIT )
 		{
-			for (TacticalList::iterator it2 = reducedTargetList.begin(); it2 != reducedTargetList.end(); ++it2)
+			for (vector<CvTacticalTarget>::iterator it2 = reducedTargetList.begin(); it2 != reducedTargetList.end(); ++it2)
 			{
 				//trick: land zones have id > 0, water zones id < 0. so negative product means domain mismatch
 				if (it->GetDominanceZone() * it2->GetDominanceZone() < 0)
@@ -3202,9 +2729,7 @@ void CvTacticalAI::SortTargetListAndDropUselessTargets()
 				if (m_pPlayer->GetCityDistanceInPlots(pPlot) < 4)
 					continue;
 
-				if (it2->GetTargetType() == AI_TACTICAL_TARGET_HIGH_PRIORITY_UNIT ||
-					it2->GetTargetType() == AI_TACTICAL_TARGET_MEDIUM_PRIORITY_UNIT ||
-					it2->GetTargetType() == AI_TACTICAL_TARGET_LOW_PRIORITY_UNIT)
+				if (it2->GetTargetType() == AI_TACTICAL_TARGET_ENEMY_COMBAT_UNIT)
 				{
 					if (it2->GetAuxIntData() >= it->GetAuxIntData() && plotDistance(it2->GetTargetX(), it2->GetTargetY(), it->GetTargetX(), it->GetTargetY()) <= iSuppressionRange)
 					{
@@ -3231,12 +2756,12 @@ void CvTacticalAI::ClearCurrentMoveUnits(AITacticalMove eNewMove)
 }
 
 /// Sift through the target list and find just those that apply to the dominance zone we are currently looking at
-void CvTacticalAI::ExtractTargetsForZone(CvTacticalDominanceZone* pZone /* Pass in NULL for all zones */)
+int CvTacticalAI::ExtractTargetsForZone(CvTacticalDominanceZone* pZone /* Pass in NULL for all zones */)
 {
 	int iMaxRadius = GetTacticalAnalysisMap()->GetMaxZoneRadius();
 
 	m_ZoneTargets.clear();
-	for(TacticalList::iterator it = m_AllTargets.begin(); it != m_AllTargets.end(); ++it)
+	for(vector<CvTacticalTarget>::iterator it = m_AllTargets.begin(); it != m_AllTargets.end(); ++it)
 	{
 		//domain check
 		if (pZone)
@@ -3249,31 +2774,34 @@ void CvTacticalAI::ExtractTargetsForZone(CvTacticalDominanceZone* pZone /* Pass 
 		//zone match
 		if(pZone == NULL || it->GetDominanceZone() == pZone->GetZoneID())
 		{
-			m_ZoneTargets.push_back(*it);
+			m_ZoneTargets.push_back(&(*it));
 			continue;
 		}
 
 		//zone boundaries are arbitrary sometimes so include neighboring tiles as well for smaller zones
 		if (pZone && plotDistance(pZone->GetCenterX(), pZone->GetCenterY(), it->GetTargetX(), it->GetTargetY()) <= iMaxRadius)
 		{
-			m_ZoneTargets.push_back(*it);
+			m_ZoneTargets.push_back(&(*it));
 		}
 	}
+
+	return (int)m_ZoneTargets.size();
 }
 
 /// Find the first target of a requested type in current dominance zone (call after ExtractTargetsForZone())
-CvTacticalTarget* CvTacticalAI::GetFirstZoneTarget(AITacticalTargetType eType, eAggressionLevel eMaxLvl)
+CvTacticalTarget* CvTacticalAI::GetFirstZoneTarget(AITacticalTargetType eType, eAggressionLevel threshold)
 {
 	m_eCurrentTargetType = eType;
 	m_iCurrentTargetIndex = 0;
 
 	while(m_iCurrentTargetIndex < (int)m_ZoneTargets.size())
 	{
-		if (m_ZoneTargets[m_iCurrentTargetIndex].GetLastAggLvl() <= eMaxLvl)
+		//doesn't make sense to attack multiple times without raising the agg level
+		if (m_ZoneTargets[m_iCurrentTargetIndex]->GetLastAggLevel() < threshold)
 		{
-			if (m_eCurrentTargetType == AI_TACTICAL_TARGET_NONE || m_ZoneTargets[m_iCurrentTargetIndex].GetTargetType() == m_eCurrentTargetType)
+			if (m_eCurrentTargetType == AI_TACTICAL_TARGET_NONE || m_ZoneTargets[m_iCurrentTargetIndex]->GetTargetType() == m_eCurrentTargetType)
 			{
-				return &m_ZoneTargets[m_iCurrentTargetIndex];
+				return m_ZoneTargets[m_iCurrentTargetIndex];
 			}
 		}
 		m_iCurrentTargetIndex++;
@@ -3283,58 +2811,21 @@ CvTacticalTarget* CvTacticalAI::GetFirstZoneTarget(AITacticalTargetType eType, e
 }
 
 /// Find the next target of a requested type in current dominance zone (call after GetFirstZoneTarget())
-CvTacticalTarget* CvTacticalAI::GetNextZoneTarget(eAggressionLevel eMaxLvl)
+CvTacticalTarget* CvTacticalAI::GetNextZoneTarget(eAggressionLevel threshold)
 {
 	m_iCurrentTargetIndex++;
 
 	while(m_iCurrentTargetIndex < (int)m_ZoneTargets.size())
 	{
-		if (m_ZoneTargets[m_iCurrentTargetIndex].GetLastAggLvl() <= eMaxLvl)
+		//doesn't make sense to attack multiple times without raising the agg level
+		if (m_ZoneTargets[m_iCurrentTargetIndex]->GetLastAggLevel() < threshold)
 		{
-			if (m_eCurrentTargetType == AI_TACTICAL_TARGET_NONE || m_ZoneTargets[m_iCurrentTargetIndex].GetTargetType() == m_eCurrentTargetType)
+			if (m_eCurrentTargetType == AI_TACTICAL_TARGET_NONE || m_ZoneTargets[m_iCurrentTargetIndex]->GetTargetType() == m_eCurrentTargetType)
 			{
-				return &m_ZoneTargets[m_iCurrentTargetIndex];
+				return m_ZoneTargets[m_iCurrentTargetIndex];
 			}
 		}
 		m_iCurrentTargetIndex++;
-	}
-
-	return NULL;
-}
-
-/// Find the first unit target (in full list of targets -- NOT by zone)
-CvTacticalTarget* CvTacticalAI::GetFirstUnitTarget()
-{
-	m_iCurrentUnitTargetIndex = 0;
-
-	while(m_iCurrentUnitTargetIndex < (int)m_AllTargets.size())
-	{
-		if(m_AllTargets[m_iCurrentUnitTargetIndex].GetTargetType() == AI_TACTICAL_TARGET_HIGH_PRIORITY_UNIT ||
-		        m_AllTargets[m_iCurrentUnitTargetIndex].GetTargetType() == AI_TACTICAL_TARGET_MEDIUM_PRIORITY_UNIT ||
-		        m_AllTargets[m_iCurrentUnitTargetIndex].GetTargetType() == AI_TACTICAL_TARGET_LOW_PRIORITY_UNIT)
-		{
-			return &m_AllTargets[m_iCurrentUnitTargetIndex];
-		}
-		m_iCurrentUnitTargetIndex++;
-	}
-
-	return NULL;
-}
-
-/// Find the next unit target (call after GetFirstUnitTarget())
-CvTacticalTarget* CvTacticalAI::GetNextUnitTarget()
-{
-	m_iCurrentUnitTargetIndex++;
-
-	while(m_iCurrentUnitTargetIndex < (int)m_AllTargets.size())
-	{
-		if(m_AllTargets[m_iCurrentUnitTargetIndex].GetTargetType() == AI_TACTICAL_TARGET_HIGH_PRIORITY_UNIT ||
-		        m_AllTargets[m_iCurrentUnitTargetIndex].GetTargetType() == AI_TACTICAL_TARGET_MEDIUM_PRIORITY_UNIT ||
-		        m_AllTargets[m_iCurrentUnitTargetIndex].GetTargetType() == AI_TACTICAL_TARGET_LOW_PRIORITY_UNIT)
-		{
-			return &m_AllTargets[m_iCurrentUnitTargetIndex];
-		}
-		m_iCurrentUnitTargetIndex++;
 	}
 
 	return NULL;
@@ -3462,14 +2953,21 @@ void CvTacticalAI::ExecutePlunderTradeUnit(CvPlot* pTargetPlot)
 		if(pUnit->canMoveInto(*pTargetPlot, CvUnit::MOVEFLAG_DESTINATION ))
 		{
 			pUnit->PushMission(CvTypes::getMISSION_MOVE_TO(), pTargetPlot->getX(), pTargetPlot->getY());
-			pUnit->PushMission(CvTypes::getMISSION_PLUNDER_TRADE_ROUTE());
+			if (pUnit->at(pTargetPlot->getX(), pTargetPlot->getY()))
+			{
+				pUnit->PushMission(CvTypes::getMISSION_PLUNDER_TRADE_ROUTE());
+				//only end the turn if we can't move anymore
+				if (!pUnit->canMove())
+					UnitProcessed(pUnit->GetID());
+			}
 		}
-		else
-			MoveToEmptySpaceNearTarget(pUnit,pTargetPlot,NO_DOMAIN,23);
-
-		//only end the turn if we can't move anymore
-		if (!pUnit->canMove())
+		else if (MoveToEmptySpaceNearTarget(pUnit, pTargetPlot, NO_DOMAIN, 23))
+		{
+			TacticalAIHelpers::PerformRangedOpportunityAttack(pUnit, false);
+			//don't run away
 			UnitProcessed(pUnit->GetID());
+		}
+
 	}
 }
 
@@ -3537,10 +3035,8 @@ CvPlot* CvTacticalAI::FindAirTargetNearTarget(CvUnit* pUnit, CvPlot* pApproximat
 	for (unsigned int iI = 0; iI < m_AllTargets.size(); iI++)
 	{
 		// Is the target of an appropriate type?
-		if (m_AllTargets[iI].GetTargetType() == AI_TACTICAL_TARGET_HIGH_PRIORITY_UNIT ||
-			m_AllTargets[iI].GetTargetType() == AI_TACTICAL_TARGET_MEDIUM_PRIORITY_UNIT ||
-			m_AllTargets[iI].GetTargetType() == AI_TACTICAL_TARGET_LOW_PRIORITY_UNIT ||
-			m_AllTargets[iI].GetTargetType() == AI_TACTICAL_TARGET_CITY)
+		if (m_AllTargets[iI].GetTargetType() == AI_TACTICAL_TARGET_ENEMY_COMBAT_UNIT ||
+			m_AllTargets[iI].GetTargetType() == AI_TACTICAL_TARGET_ENEMY_CITY)
 		{
 			//make sure it is close to our actual target plot
 			if (pApproximateTargetPlot)
@@ -3567,9 +3063,7 @@ CvPlot* CvTacticalAI::FindAirTargetNearTarget(CvUnit* pUnit, CvPlot* pApproximat
 					continue;
 
 				int iValue = 0;
-				if (m_AllTargets[iI].GetTargetType() == AI_TACTICAL_TARGET_HIGH_PRIORITY_UNIT)
-					iValue += 23;
-				if (m_AllTargets[iI].GetTargetType() == AI_TACTICAL_TARGET_MEDIUM_PRIORITY_UNIT)
+				if (m_AllTargets[iI].GetTargetType() == AI_TACTICAL_TARGET_ENEMY_COMBAT_UNIT)
 					iValue += 11;
 
 				if (pUnit->AI_getUnitAIType() == UNITAI_MISSILE_AIR)
@@ -3589,7 +3083,10 @@ CvPlot* CvTacticalAI::FindAirTargetNearTarget(CvUnit* pUnit, CvPlot* pApproximat
 					iValue = pUnit->GetAirCombatDamage(pDefender, pCity, false) - iDistance * 3;
 
 					if (pCity != NULL)
+					{
+						iValue /= 2; //prefer attacking units ...
 						iValue -= pCity->GetAirStrikeDefenseDamage(pUnit, false);
+					}
 					else
 						iValue -= pDefender->GetAirStrikeDefenseDamage(pUnit, false);
 
@@ -3611,23 +3108,25 @@ CvPlot* CvTacticalAI::FindAirTargetNearTarget(CvUnit* pUnit, CvPlot* pApproximat
 
 void CvTacticalAI::ExecuteAirSweep(CvPlot* pTargetPlot)
 {
-	if (!pTargetPlot)
+	//maybe there are no interceptors and we just had the fighter for air recon ...
+	if (!pTargetPlot && pTargetPlot->GetInterceptorCount(m_pPlayer->GetID(), NULL, false, true) == 0)
 		return;
 
 	// Start by sending possible air sweeps
-	for(unsigned int iI = 0; iI < m_CurrentAirSweepUnits.size(); iI++)
+	for (unsigned int iI = 0; iI < m_CurrentAirSweepUnits.size(); iI++)
 	{
 		CvUnit* pUnit = m_pPlayer->getUnit(m_CurrentAirSweepUnits[iI].GetID());
 
-		if(pUnit && pUnit->canMove())
+		if (pUnit && pUnit->canMove())
 		{
-			if(pUnit->canAirSweep())
+			if (pUnit->canAirSweep())
 			{
 				pUnit->PushMission(CvTypes::getMISSION_AIR_SWEEP(), pTargetPlot->getX(), pTargetPlot->getY());
-				UnitProcessed(m_CurrentAirSweepUnits[iI].GetID());
+				if (pUnit->isOutOfAttacks())
+					UnitProcessed(m_CurrentAirSweepUnits[iI].GetID());
 			}
 
-			if(GC.getLogging() && GC.getAILogging())
+			if (GC.getLogging() && GC.getAILogging())
 			{
 				CvString strMsg;
 				strMsg.Format("Starting air sweep with %s %d before attack on X: %d, Y: %d", pUnit->getName().c_str(), pUnit->GetID(), pTargetPlot->getX(), pTargetPlot->getY());
@@ -3694,15 +3193,39 @@ bool CvTacticalAI::ExecuteSpotterMove(const vector<CvUnit*>& vUnits, CvPlot* pTa
 		}
 	}
 
-	if (vOptions.empty())
-		return false;
+	if (!vOptions.empty())
+	{
+		std::stable_sort(vOptions.begin(), vOptions.end());
+		ExecuteMoveToPlot(vOptions.front().option.first, vOptions.front().option.second, false, CvUnit::MOVEFLAG_NO_EMBARK);
+		return true;
+	}
 
-	std::stable_sort(vOptions.begin(), vOptions.end());
-	ExecuteMoveToPlot(vOptions.front().option.first, vOptions.front().option.second, false, CvUnit::MOVEFLAG_NO_EMBARK);
-	return true;
+	//last resort. use an air sweep to an adjacent plot for recon
+	CvPlot** aPlotsToCheck = GC.getMap().getNeighborsUnchecked(pTargetPlot);
+	for (unsigned int iI = 0; iI < m_CurrentAirSweepUnits.size(); iI++)
+	{
+		CvUnit* pUnit = m_pPlayer->getUnit(m_CurrentAirSweepUnits[iI].GetID());
+		for (int iI = 0; iI < NUM_DIRECTION_TYPES; iI++)
+		{
+			CvPlot* pAdjacentPlot = aPlotsToCheck[iI];
+			if (pAdjacentPlot != NULL && pAdjacentPlot->isVisible(m_pPlayer->getTeam()))
+			{
+				if (pUnit && pUnit->canAirSweepAt(pAdjacentPlot->getX(), pAdjacentPlot->getY()))
+				{
+					pUnit->PushMission(CvTypes::getMISSION_AIR_SWEEP(), pAdjacentPlot->getX(), pAdjacentPlot->getY());
+					CUSTOMLOG("using air sweep for recon!")
+					if (pUnit->isOutOfAttacks())
+						UnitProcessed(m_CurrentAirSweepUnits[iI].GetID());
+					return true;
+				}
+			}
+		}
+	}
+
+	return false;
 }
 
-bool CvTacticalAI::ExecuteAttackWithCitiesAndGarrisons(CvUnit* pDefender)
+bool CvTacticalAI::ExecuteAttackWithCities(CvUnit* pDefender)
 {
 	// Start by applying damage from city bombards
 	for (unsigned int iI = 0; iI < m_CurrentMoveCities.size(); iI++)
@@ -3713,35 +3236,10 @@ bool CvTacticalAI::ExecuteAttackWithCitiesAndGarrisons(CvUnit* pDefender)
 
 		if (pCity->canRangeStrikeAt(pDefender->getX(), pDefender->getY()) && !pCity->isMadeAttack())
 		{
-			pCity->doTask(TASK_RANGED_ATTACK, pDefender->getX(), pDefender->getY(), 0);
+			pCity->doTask(TASK_RANGED_ATTACK, pDefender->getX(), pDefender->getY(), false);
 			if (pDefender->GetCurrHitPoints() < 1)
 				return true;
 		}
-
-		//special handling for ranged garrisons as they are ignored by tactical AI
-		//note: melee garrisons are handled in PlotGarrisonMoves()
-		CvUnit* pGarrison = pCity->GetGarrisonedUnit();
-		if (pGarrison)
-		{
-			if (pGarrison->shouldHeal(true))
-			{
-				pGarrison->PushMission(CvTypes::getMISSION_SKIP());
-				pGarrison->SetTurnProcessed(true);
-			}
-			else
-			{
-				//may have multiple attacks ...
-				while (pGarrison->canRangeStrikeAt(pDefender->getX(), pDefender->getY()))
-					pGarrison->PushMission(CvTypes::getMISSION_RANGE_ATTACK(), pDefender->getX(), pDefender->getY());
-
-				//if we have attacks left, we can try again in PlotGarrisonMoves() with other target
-				if (pGarrison->isOutOfAttacks())
-					pGarrison->SetTurnProcessed(true);
-			}
-		}
-
-		if (pDefender->GetCurrHitPoints() < 1)
-			return true;
 	}
 
 	//not killed
@@ -3750,9 +3248,6 @@ bool CvTacticalAI::ExecuteAttackWithCitiesAndGarrisons(CvUnit* pDefender)
 
 //evaluate many possible unit assignments around the target plot and choose the best one
 //will not necessarily attack only the target plot when other targets are present!
-//todos:
-// - find out most dangerous enemy unit (cf IdentifyPriorityTargets)
-// - consider possible kills in unit position score (ie ranged unit doesn't need to move if it can kill the attacker so will be safe from retaliation)
 bool CvTacticalAI::ExecuteAttackWithUnits(CvPlot* pTargetPlot, eAggressionLevel eAggLvl)
 {
 	vector<CvUnit*> vUnits;
@@ -3769,7 +3264,7 @@ bool CvTacticalAI::ExecuteAttackWithUnits(CvPlot* pTargetPlot, eAggressionLevel 
 	ExecuteAirAttack(pTargetPlot);
 
 	//did the air attack already kill the enemy?
-	if (pTargetPlot->getBestDefender(NO_PLAYER, m_pPlayer->GetID(), NULL, true) == NULL && !pTargetPlot->isCity())
+	if (pTargetPlot->getBestDefender(NO_PLAYER, m_pPlayer->GetID(), NULL, true, true) == NULL && !pTargetPlot->isCity())
 		return true;
 
 #if defined(MOD_CORE_DEBUGGING)
@@ -3777,21 +3272,7 @@ bool CvTacticalAI::ExecuteAttackWithUnits(CvPlot* pTargetPlot, eAggressionLevel 
 		LogTacticalMessage(CvString::format("trying attack on %d:%d, agg level %d", pTargetPlot->getX(), pTargetPlot->getY(), eAggLvl));
 #endif
 
-	int iCount = 0;
-	bool bSuccess = false;
-	do
-	{
-		vector<STacticalAssignment> vAssignments = TacticalAIHelpers::FindBestUnitAssignments(vUnits, pTargetPlot, eAggLvl, gTactPosStorage);
-		if (vAssignments.empty())
-			break;
-		
-		//true if everything went according to plan. if not, repeat!
-		bSuccess = TacticalAIHelpers::ExecuteUnitAssignments(m_pPlayer->GetID(), vAssignments);
-		iCount++;
-	}
-	while (!bSuccess && iCount < 4);
-
-	return bSuccess;
+	return TacticalAIHelpers::FindAndExecuteBestUnitAssignments(vUnits, pTargetPlot, eAggLvl);
 }
 
 //target can be friendly, neutral or hostile
@@ -3804,19 +3285,8 @@ bool CvTacticalAI::PositionUnitsAroundTarget(const vector<CvUnit*>& vUnits, CvPl
 		LogTacticalMessage(CvString::format("seeking defensive positioning around %d:%d", pTarget->getX(), pTarget->getY()));
 
 	//first round: in case there are enemies around, do a combat simulation
-	int iCount = 0;
-	bool bSuccess = false;
-	do
-	{
-		vector<STacticalAssignment> vAssignments = TacticalAIHelpers::FindBestUnitAssignments(vUnits, pTarget, AL_NONE, gTactPosStorage);
-		if (vAssignments.empty())
-			break;
-		
-		//true if everything went according to plan. if not, repeat!
-		bSuccess = TacticalAIHelpers::ExecuteUnitAssignments(m_pPlayer->GetID(), vAssignments);
-		iCount++;
-	}
-	while (!bSuccess && iCount < 4);
+	vector<CvUnit*> vSimUnits = vUnits; //make a copy we can modify!
+	bool bTactSimSuccess = TacticalAIHelpers::FindAndExecuteBestUnitAssignments(vSimUnits, pTarget, AL_LOW);
 
 	//sometimes tactsim cannot use all units, eg if they are too far out
 	vector<CvUnit*> farout;
@@ -3832,7 +3302,7 @@ bool CvTacticalAI::PositionUnitsAroundTarget(const vector<CvUnit*>& vUnits, CvPl
 		if (pUnit->TurnProcessed())
 			continue;
 		
-		if (bSuccess && plotDistance(*pTarget, *pUnit->plot()) <= TACTICAL_COMBAT_MAX_TARGET_DISTANCE)
+		if (bTactSimSuccess && plotDistance(*pTarget, *pUnit->plot()) <= TACTICAL_COMBAT_MAX_TARGET_DISTANCE)
 			continue; //do not end the turn ... we may want to shuffle them around later
 
 		farout.push_back(pUnit);
@@ -3885,17 +3355,22 @@ bool CvTacticalAI::PositionUnitsAroundTarget(const vector<CvUnit*>& vUnits, CvPl
 		if (pUnit->TurnProcessed() || pUnit->getArmyID() == -1)
 			continue;
 
-		//only flee if we're in danger
+		//only flee if we're in danger, and not too far ideally
 		if (pUnit->GetDanger() > pUnit->healRate(NULL) || (!pUnit->IsCombatUnit() && pUnit->plot()->getNumDefenders(pUnit->getOwner()) == 0))
-			ExecuteMovesToSafestPlot(pUnit);
-		else
 		{
-			pUnit->PushMission(CvTypes::getMISSION_SKIP());
-			pUnit->SetTurnProcessed(true);
+			//units are not typically hurt but this is convenient function to move out of danger
+			//MoveToSafestPlot() may cause units to run too far
+			CvPlot* pPlot = TacticalAIHelpers::FindClosestSafePlotForHealing(pUnit, false);
+			if (pPlot)
+				pUnit->PushMission(CvTypes::getMISSION_MOVE_TO(), pPlot->getX(), pPlot->getY(), 0, false, false, MISSIONAI_TACTMOVE);
 		}
+
+		if (pUnit->canMove())
+			pUnit->PushMission(CvTypes::getMISSION_SKIP());
+		pUnit->SetTurnProcessed(true);
 	}
 
-	return bSuccess;
+	return bTactSimSuccess;
 }
 
 void CvTacticalAI::ExecuteLandingOperation(CvPlot* pTargetPlot)
@@ -4341,8 +3816,6 @@ void CvTacticalAI::ExecuteBarbarianRoaming()
 		CvUnit* pUnit = m_pPlayer->getUnit(m_CurrentMoveUnits[iI].GetID());
 		if(pUnit && pUnit->isBarbarian()) //combat and captured civilians both
 		{
-			CvString strTemp = pUnit->getUnitInfo().GetDescription();
-
 			// LAND MOVES
 			if(pUnit->getDomainType() == DOMAIN_LAND)
 			{
@@ -4363,27 +3836,27 @@ void CvTacticalAI::ExecuteBarbarianRoaming()
 					continue;
 					
 				//civilian to capture?
-				bool bMoved = false;
-				bool bTargetIsUnit = pBestPlot->isEnemyUnit(BARBARIAN_PLAYER, true, true);
+				bool bTargetIsCombat = pBestPlot->isEnemyUnit(BARBARIAN_PLAYER, true, true);
+				bool bTargetIsCivilian = pBestPlot->isEnemyUnit(BARBARIAN_PLAYER, false, true);
+				bool bTargetIsImprovement = pBestPlot->getImprovementType() != NO_IMPROVEMENT && !pBestPlot->IsImprovementPillaged();
 
-				if (!bTargetIsUnit && pBestPlot->isEnemyUnit(BARBARIAN_PLAYER, false, true))
+				//just move in if we can
+				if ((bTargetIsCivilian || bTargetIsImprovement) && !bTargetIsCombat)
 				{
 					pUnit->PushMission(CvTypes::getMISSION_MOVE_TO(), pBestPlot->getX(), pBestPlot->getY());
-					bMoved = pUnit->at(pBestPlot->getX(), pBestPlot->getY());
-				}
-				//if we're already adjacent, we cannot move closer
-				//in fact, since we apparently did not attack this turn, we should flee (handled later)
-				else if (!bTargetIsUnit || plotDistance(*pBestPlot,*pUnit->plot()) > 1 )
-					bMoved = MoveToEmptySpaceNearTarget(pUnit, pBestPlot, DOMAIN_LAND, 12);
-
-				if (bMoved)
-				{
-					if (pUnit->shouldPillage(pUnit->plot()))
+					if (pUnit->canMove() && pUnit->at(pBestPlot->getX(), pBestPlot->getY()))
 						pUnit->PushMission(CvTypes::getMISSION_PILLAGE());
-
-					TacticalAIHelpers::PerformOpportunityAttack(pUnit, true);
-					UnitProcessed(m_CurrentMoveUnits[iI].GetID());
 				}
+				//move towards the target but don't hang around there
+				//in fact, since we apparently did not attack this turn, we should continue roaming
+				else if (bTargetIsCombat && plotDistance(*pBestPlot, *pUnit->plot()) > 1)
+				{
+					MoveToEmptySpaceNearTarget(pUnit, pBestPlot, DOMAIN_LAND, 12);
+				}
+
+				//hit and run, if you can
+				if (!pUnit->canMove())
+					UnitProcessed(m_CurrentMoveUnits[iI].GetID());
 			}
 			// NAVAL MOVES
 			else
@@ -4393,9 +3866,9 @@ void CvTacticalAI::ExecuteBarbarianRoaming()
 					continue;
 
 				//no naval pillaging, it's just too annoying
-				//same logic as above, if we're already at the target we should flee instead of staying
-				bool bTargetIsUnit = pBestPlot->isEnemyUnit(BARBARIAN_PLAYER, true, true);
-				if (!bTargetIsUnit || plotDistance(*pBestPlot, *pUnit->plot()) > 1)
+				//same logic as above, if we're already at the target we don't end the turn but move to safety
+				bool bTargetIsCombat = pBestPlot->isEnemyUnit(BARBARIAN_PLAYER, true, true);
+				if (!bTargetIsCombat || plotDistance(*pBestPlot, *pUnit->plot()) > 1)
 				{
 					if (MoveToEmptySpaceNearTarget(pUnit, pBestPlot, DOMAIN_SEA, 12))
 					{
@@ -4456,14 +3929,13 @@ int CvTacticalAI::ExecuteMoveToPlot(CvUnit* pUnit, CvPlot* pTarget, bool bSetPro
 			else
 				bAlreadyThere = pUnit->at(pTarget->getX(), pTarget->getY());
 
-			if (!bAlreadyThere && pUnit->canMove()) //typically because of MOVEFLAG_ABORT_IN_DANGER and newly revealed enemies ...
+			if (bSetProcessed && !bAlreadyThere && pUnit->canMove()) //typically because of MOVEFLAG_ABORT_IN_DANGER and newly revealed enemies ...
 			{
 				pTarget = TacticalAIHelpers::FindSafestPlotInReach(pUnit, true);
 				if (pTarget)
-				{
 					pUnit->PushMission(CvTypes::getMISSION_MOVE_TO(), pTarget->getX(), pTarget->getY(), 0 /*no approximate flags*/, false, false, MISSIONAI_TACTMOVE, pTarget);
-					UnitProcessed(pUnit->GetID());
-				}
+
+				UnitProcessed(pUnit->GetID());
 			}
 		}
 		//maybe units are blocking our way? 
@@ -4649,48 +4121,25 @@ void CvTacticalAI::ExecuteAirSweepMoves()
 }
 
 /// Bombard enemy units from plots they can't reach (return true if some attack made)
-bool CvTacticalAI::ExecuteAttritionAttacks(CvTacticalTarget& kTarget)
+bool CvTacticalAI::ExecuteDestroyEnemyUnits(CvTacticalTarget& kTarget, eAggressionLevel aggLvl)
 {
 	//mark the target no matter if the attack succeeds
-	kTarget.SetLastAggLvl(AL_LOW);
+	kTarget.SetLastAggLevel(aggLvl);
 
-	//todo: how can we make sure that city and units focus fire on the same targets?
 	CvPlot* pTargetPlot = GC.getMap().plot(kTarget.GetTargetX(), kTarget.GetTargetY());
-	CvUnit* pDefender = pTargetPlot->getVisibleEnemyDefender(m_pPlayer->GetID());
-	if(pDefender)
+	//target may be invisible because we remember it from the previous turn ...
+	CvUnit* pDefender = pTargetPlot->getBestDefender(NO_PLAYER, m_pPlayer->GetID(), NULL, true, true);
+	if (pDefender && !pDefender->isDelayedDeath())
 	{
-		if(pDefender->GetCurrHitPoints() < 1)
-			return false;
-
-		// If this is a unit target we might also be able to hit it with a city
+		// Might be able to hit/kill with a city
 		bool bCityCanAttack = FindCitiesWithinStrikingDistance(pTargetPlot);
-		if (bCityCanAttack && ExecuteAttackWithCitiesAndGarrisons(pDefender))
+		if (bCityCanAttack && ExecuteAttackWithCities(pDefender))
 			return true;
 
-		// Make attacks - this includes melee attacks but only very safe ones
-		if (FindUnitsWithinStrikingDistance(pTargetPlot) && ComputeTotalExpectedDamage(kTarget)>0)
-			return ExecuteAttackWithUnits(pTargetPlot, AL_LOW);
+		// Now the real deal
+		if (FindUnitsWithinStrikingDistance(pTargetPlot) && ComputeTotalExpectedDamage(kTarget) > 0)
+			return ExecuteAttackWithUnits(pTargetPlot, aggLvl);
 	}
-
-	return false;
-}
-
-/// Take a multi-hex attack on an enemy unit this turn
-bool CvTacticalAI::ExecuteFlankAttack(CvTacticalTarget& kTarget)
-{
-	CvPlot* pTargetPlot = GC.getMap().plot(kTarget.GetTargetX(), kTarget.GetTargetY());
-
-	bool bLoneBarbInCamp = (pTargetPlot->getRevealedImprovementType(m_pPlayer->getTeam()) == GD_INT_GET(BARBARIAN_CAMP_IMPROVEMENT)) &&
-		(pTargetPlot->GetNumEnemyUnitsAdjacent(m_pPlayer->getTeam(), NO_DOMAIN) == 0);
-	eAggressionLevel aggLevel = bLoneBarbInCamp ? AL_HIGH : AL_MEDIUM;
-
-	//mark the target no matter if the attack succeeds
-	kTarget.SetLastAggLvl(aggLevel);
-
-	// Make attacks
-	CvUnit* pDefender = pTargetPlot->getVisibleEnemyDefender(m_pPlayer->GetID());
-	if (pDefender && FindUnitsWithinStrikingDistance(pTargetPlot) && ComputeTotalExpectedDamage(kTarget)>0)
-		return ExecuteAttackWithUnits(pTargetPlot, aggLevel);
 
 	return false;
 }
@@ -4717,14 +4166,14 @@ void CvTacticalAI::ExecuteWithdrawMoves()
 			CvTacticalDominanceZone* pNextZone = GetTacticalAnalysisMap()->GetZoneByID(*it);
 			if (pNextZone && pNextZone->GetZoneCity() && pNextZone->IsWater() == (pUnit->getDomainType() == DOMAIN_SEA))
 			{
+				CvPlot* pTestPlot = pNextZone->GetZoneCity()->plot();
 				int iScore = pNextZone->getHospitalityScore();
-				int iTurns = pUnit->TurnsToReachTarget(pTargetPlot, CvUnit::MOVEFLAG_AI_ABORT_IN_DANGER, 12);
+				int iTurns = pUnit->TurnsToReachTarget(pTestPlot, CvUnit::MOVEFLAG_AI_ABORT_IN_DANGER, 12);
 				if (iTurns == INT_MAX)
 					continue;
 
 				iScore = (iScore * 100) / (iTurns + 1);
-
-				if (iScore > iBestScore && pUnit->CanSafelyReachInXTurns(pTargetPlot, 12))
+				if (iScore > iBestScore)
 				{
 					pTargetPlot = GC.getMap().plot(pNextZone->GetCenterX(), pNextZone->GetCenterY());
 					iBestScore = iScore;
@@ -4734,15 +4183,18 @@ void CvTacticalAI::ExecuteWithdrawMoves()
 
 		if (!pTargetPlot)
 		{
-			// Compute moves to nearest city and use as sort criteria
+			//Just go towards nearest city and try to avoid expensive distance map updates for minor players ...
 			CvCity* pNearestCity = m_pPlayer->isMinorCiv() ? m_pPlayer->getCapitalCity() : m_pPlayer->GetClosestCityByPathLength(pUnit->plot());
+
+			//Note this might for naval units since pathlength is cross-domain, might give impossible target!
+			//But considering we have another fallback below this should be ok
 			if (pNearestCity)
 				pTargetPlot = pNearestCity->plot();
 		}
 
-		if (pTargetPlot)
+		if (pTargetPlot && MoveToEmptySpaceNearTarget(pUnit, pTargetPlot, pUnit->getDomainType(), 12, true))
 		{
-			MoveToEmptySpaceNearTarget(pUnit, pTargetPlot, pUnit->getDomainType(), 12, true);
+			TacticalAIHelpers::PerformRangedOpportunityAttack(pUnit, false);
 			UnitProcessed(m_CurrentMoveUnits[iI].GetID());
 
 			if(GC.getLogging() && GC.getAILogging())
@@ -4907,10 +4359,11 @@ CvPlot* CvTacticalAI::GetBestRepositionPlot(CvUnit* pUnit, CvPlot* plotTarget, i
 //AMS: Fills m_CurrentAirSweepUnits with all units able to sweep at target plot.
 void CvTacticalAI::FindAirUnitsToAirSweep(CvPlot* pTarget)
 {
-	m_CurrentAirSweepUnits.clear();
-	int interceptionsOnPlot = pTarget->GetInterceptorCount(m_pPlayer->GetID(),NULL,false,true);
+	// Always use one if available in case we need it for recon
+	int interceptionsOnPlot = max(1, pTarget->GetInterceptorCount(m_pPlayer->GetID(), NULL, false, true));
 
 	// Loop through all units available to tactical AI this turn
+	m_CurrentAirSweepUnits.clear();
 	for (list<int>::iterator it = m_CurrentTurnUnits.begin(); it != m_CurrentTurnUnits.end() && interceptionsOnPlot > 0; ++it)
 	{
 		CvUnit* pLoopUnit = m_pPlayer->getUnit(*it);
@@ -4989,7 +4442,7 @@ CvUnit* CvTacticalAI::FindUnitForThisMove(AITacticalMove eMove, CvPlot* pTarget,
 				switch (pLoopUnit->AI_getUnitAIType())
 				{
 				case UNITAI_RANGED:
-					iExtraScore += 30;
+					iExtraScore += 30 + pTarget->getPlotCity()->getGarrisonRangedAttackModifier();
 					break;
 				case UNITAI_DEFENSE_AIR:
 				case UNITAI_DEFENSE:
@@ -5014,6 +4467,10 @@ CvUnit* CvTacticalAI::FindUnitForThisMove(AITacticalMove eMove, CvPlot* pTarget,
 			{
 				// Heal first, guards might be attacked
 				if (pLoopUnit->shouldHeal(false))
+					continue;
+
+				// Don't embark!
+				if (pLoopUnit->getDomainType() != pTarget->getDomain())
 					continue;
 
 				// No siege units as plot defenders
@@ -5073,7 +4530,7 @@ bool CvTacticalAI::FindUnitsWithinStrikingDistance(CvPlot* pTarget)
 	bool rtnValue = false;
 	bool bIsCityTarget = pTarget->isCity();
 	bool bAirUnitsAdded = false;
-	CvUnit* pDefender = pTarget->getBestDefender(NO_PLAYER, m_pPlayer->GetID());
+	CvUnit* pDefender = pTarget->getBestDefender(NO_PLAYER, m_pPlayer->GetID(), NULL, false, true);
 
 	//todo: check if defender can be damaged at all or if an attacker would die?
 	// Loop through all units available to tactical AI this turn
@@ -5193,17 +4650,8 @@ bool CvTacticalAI::FindCitiesWithinStrikingDistance(CvPlot* pTargetPlot)
 	for(CvCity* pLoopCity = m_pPlayer->firstCity(&iLoop); pLoopCity != NULL; pLoopCity = m_pPlayer->nextCity(&iLoop))
 	{
 		int iAttackStrength = 0;
-
 		if (pLoopCity->canRangeStrikeAt(pTargetPlot->getX(), pTargetPlot->getY()) && !pLoopCity->isMadeAttack())
 			iAttackStrength += pLoopCity->getStrengthValue(true);
-
-		//garrison may have a larger range than the city ...
-		if (pLoopCity->HasGarrison())
-		{
-			CvUnit* pGarrison = pLoopCity->GetGarrisonedUnit();
-			if (pGarrison->canRangeStrikeAt(pTargetPlot->getX(), pTargetPlot->getY()))
-				iAttackStrength += pGarrison->GetBaseRangedCombatStrength();
-		}
 
 		if (iAttackStrength>0)
 		{
@@ -5216,7 +4664,6 @@ bool CvTacticalAI::FindCitiesWithinStrikingDistance(CvPlot* pTargetPlot)
 
 	// Now sort them in the order we'd like them to attack
 	std::stable_sort(m_CurrentMoveCities.begin(), m_CurrentMoveCities.end());
-
 	return !m_CurrentMoveCities.empty();
 }
 
@@ -5275,13 +4722,14 @@ bool CvTacticalAI::FindParatroopersWithinStrikingDistance(CvPlot* pTarget, bool 
 }
 
 //find units for pillaging, plundering, blockading, etc
-bool CvTacticalAI::FindUnitsForHarassing(CvPlot* pTarget, int iNumTurnsAway, int iMinHitpoints, int iMaxHitpoints, DomainTypes eDomain, bool bMustHaveMovesLeft, bool bAllowEmbarkation)
+bool CvTacticalAI::FindUnitsForHarassing(CvPlot* pTarget, int iNumTurnsAway, int iMinHitpoints, int iMaxHitpoints, DomainTypes eDomain, bool bMustHaveMovesLeft, bool bAllowEmbarkation, int iMaxNumUnits)
 {
 	m_CurrentMoveUnits.clear();
 	//need to convert turns to max path length here, zero turns away is also valid!
 	SPathFinderUserData data(m_pPlayer->GetID(), PT_ARMY_MIXED, NO_PLAYER, (iNumTurnsAway+1)*3);
 	ReachablePlots relevantPlots = GC.GetStepFinder().GetPlotsInReach(pTarget, data);
 
+	//plots are ordered by turns to reach!
 	for (ReachablePlots::iterator it = relevantPlots.begin(); it != relevantPlots.end(); ++it)
 	{
 		CvPlot* pPlot = GC.getMap().plotByIndexUnchecked(it->iPlotIndex);
@@ -5332,6 +4780,9 @@ bool CvTacticalAI::FindUnitsForHarassing(CvPlot* pTarget, int iNumTurnsAway, int
 				CvTacticalUnit unit(pLoopUnit->GetID());
 				unit.SetAttackStrength(1 + iNumTurnsAway - iTurnsCalculated);
 				m_CurrentMoveUnits.push_back(unit);
+				//pathfinding is expensive, don't return more than needed
+				if (m_CurrentMoveUnits.size() >= (size_t)iMaxNumUnits)
+					break;
 			}
 		}
 	}
@@ -5373,9 +4824,7 @@ int CvTacticalAI::ComputeTotalExpectedDamage(const CvTacticalTarget& kTarget)
 		// Is target a unit?
 		switch(kTarget.GetTargetType())
 		{
-		case AI_TACTICAL_TARGET_HIGH_PRIORITY_UNIT:
-		case AI_TACTICAL_TARGET_MEDIUM_PRIORITY_UNIT:
-		case AI_TACTICAL_TARGET_LOW_PRIORITY_UNIT:
+		case AI_TACTICAL_TARGET_ENEMY_COMBAT_UNIT:
 		{
 			CvUnit* pDefender = pTargetPlot->getVisibleEnemyDefender(m_pPlayer->GetID());
 			if (pDefender)
@@ -5402,7 +4851,7 @@ int CvTacticalAI::ComputeTotalExpectedDamage(const CvTacticalTarget& kTarget)
 		}
 		break;
 
-		case AI_TACTICAL_TARGET_CITY:
+		case AI_TACTICAL_TARGET_ENEMY_CITY:
 		{
 			CvCity* pCity = pTargetPlot->getPlotCity();
 			if(pCity != NULL)
@@ -5494,7 +4943,7 @@ bool CvTacticalAI::IsExpectedToDamageWithRangedAttack(CvUnit* pAttacker, CvPlot*
 /// Move up close to our target avoiding our own units if possible
 bool CvTacticalAI::MoveToEmptySpaceNearTarget(CvUnit* pUnit, CvPlot* pTarget, DomainTypes eDomain, int iMaxTurns, bool bMustBeSafePath)
 {
-	if (!pUnit || !pTarget)
+	if (!pUnit || !pTarget || pUnit->atPlot(*pTarget))
 		return false;
 
 	int iFlags = 0;
@@ -5511,25 +4960,26 @@ bool CvTacticalAI::MoveToEmptySpaceNearTarget(CvUnit* pUnit, CvPlot* pTarget, Do
 	//if not possible, try again with more leeway
 	if (iTurns==INT_MAX)
 	{
-		iFlags = CvUnit::MOVEFLAG_APPROX_TARGET_RING2;
-		if (eDomain==pTarget->getDomain())
-			iFlags |= CvUnit::MOVEFLAG_APPROX_TARGET_NATIVE_DOMAIN;
+		if (iFlags & CvUnit::MOVEFLAG_APPROX_TARGET_RING1)
+		{
+			iFlags &= ~CvUnit::MOVEFLAG_APPROX_TARGET_RING1;
+			iFlags |= CvUnit::MOVEFLAG_APPROX_TARGET_RING2;
+		}
+		else
+			iFlags |= CvUnit::MOVEFLAG_APPROX_TARGET_RING1;
+
 		iTurns = pUnit->TurnsToReachTarget(pTarget,iFlags,iMaxTurns);
 	}
 
 	if (iTurns <= iMaxTurns)
 	{
-		pUnit->PushMission(CvTypes::getMISSION_MOVE_TO(), pTarget->getX(), pTarget->getY(), iFlags);
-
 		//for inspection in GUI
 		pUnit->SetMissionAI(MISSIONAI_TACTMOVE,pTarget,NULL);
 
-		TacticalAIHelpers::PerformRangedOpportunityAttack(pUnit,true);
+		//may not actually move if there is no safe path
+		pUnit->PushMission(CvTypes::getMISSION_MOVE_TO(), pTarget->getX(), pTarget->getY(), iFlags);
 
 		//don't call finish moves, otherwise we won't heal!
-		if (pUnit->canMove())
-			pUnit->PushMission(CvTypes::getMISSION_SKIP());
-
 		return true;
 	}
 
@@ -5574,7 +5024,7 @@ CvPlot* CvTacticalAI::FindBestBarbarianSeaTarget(CvUnit* pUnit)
 	ReachablePlots movePlots = GC.GetPathFinder().GetPlotsInReach(pUnit->plot(), data);
 
 	// Loop through all unit targets to find the closest
-	for (CvTacticalTarget* pTarget = GetFirstUnitTarget(); pTarget!=NULL; pTarget = GetNextUnitTarget())
+	for (CvTacticalTarget* pTarget = GetFirstZoneTarget(AI_TACTICAL_TARGET_ENEMY_COMBAT_UNIT); pTarget != NULL; pTarget = GetNextZoneTarget())
 	{
 		CvPlot* pPlot = GC.getMap().plot(pTarget->GetTargetX(), pTarget->GetTargetY());
 
@@ -5742,7 +5192,7 @@ bool CvTacticalAI::ShouldRebase(CvUnit* pUnit) const
 					// If it's a nuke, we only want city targets
 					if (pUnit->canNuke())
 					{
-						if (m_AllTargets[iI].GetTargetType() != AI_TACTICAL_TARGET_CITY)
+						if (m_AllTargets[iI].GetTargetType() != AI_TACTICAL_TARGET_ENEMY_CITY)
 							continue;
 						//if the city is already weak, no point in nuking it
 						CvPlot* pTargetPlot = GC.getMap().plot(m_AllTargets[iI].GetTargetX(), m_AllTargets[iI].GetTargetY());
@@ -5751,9 +5201,7 @@ bool CvTacticalAI::ShouldRebase(CvUnit* pUnit) const
 					}
 
 					// Is the target of an appropriate type?
-					if(m_AllTargets[iI].GetTargetType() == AI_TACTICAL_TARGET_HIGH_PRIORITY_UNIT ||
-							m_AllTargets[iI].GetTargetType() == AI_TACTICAL_TARGET_MEDIUM_PRIORITY_UNIT ||
-							m_AllTargets[iI].GetTargetType() == AI_TACTICAL_TARGET_CITY)
+					if(m_AllTargets[iI].GetTargetType() == AI_TACTICAL_TARGET_ENEMY_COMBAT_UNIT)
 					{
 						// Is this target near enough?
 						if(plotDistance(pUnit->getX(), pUnit->getY(), m_AllTargets[iI].GetTargetX(), m_AllTargets[iI].GetTargetY()) <= pUnit->GetRange())
@@ -5794,10 +5242,8 @@ CvPlot* CvTacticalAI::FindNearbyTarget(CvUnit* pUnit, int iMaxTurns, bool bOffen
 		bool bTypeMatch = false;
 		if(bOffensive)
 		{
-			if (target.GetTargetType() == AI_TACTICAL_TARGET_HIGH_PRIORITY_UNIT ||
-				target.GetTargetType() == AI_TACTICAL_TARGET_MEDIUM_PRIORITY_UNIT ||
-				target.GetTargetType() == AI_TACTICAL_TARGET_LOW_PRIORITY_UNIT ||
-				target.GetTargetType() == AI_TACTICAL_TARGET_CITY)
+			if (target.GetTargetType() == AI_TACTICAL_TARGET_ENEMY_COMBAT_UNIT ||
+				target.GetTargetType() == AI_TACTICAL_TARGET_ENEMY_CITY)
 			{
 				bTypeMatch = !TacticalAIHelpers::IsSuicideMeleeAttack(pUnit, GC.getMap().plotUnchecked(target.GetTargetX(), target.GetTargetY()));
 			}
@@ -5806,9 +5252,7 @@ CvPlot* CvTacticalAI::FindNearbyTarget(CvUnit* pUnit, int iMaxTurns, bool bOffen
 				target.GetTargetType() == AI_TACTICAL_TARGET_IMPROVEMENT_RESOURCE ||
 				(target.GetTargetType() == AI_TACTICAL_TARGET_TRADE_UNIT_LAND && pUnit->getDomainType()==DOMAIN_LAND) ||
 				(target.GetTargetType() == AI_TACTICAL_TARGET_TRADE_UNIT_SEA && pUnit->getDomainType()==DOMAIN_SEA) ||
- 				target.GetTargetType() == AI_TACTICAL_TARGET_VERY_HIGH_PRIORITY_CIVILIAN ||
  				target.GetTargetType() == AI_TACTICAL_TARGET_HIGH_PRIORITY_CIVILIAN ||
- 				target.GetTargetType() == AI_TACTICAL_TARGET_MEDIUM_PRIORITY_CIVILIAN ||
 				target.GetTargetType() == AI_TACTICAL_TARGET_LOW_PRIORITY_CIVILIAN )
 			{
 				bTypeMatch = true;
@@ -5816,7 +5260,7 @@ CvPlot* CvTacticalAI::FindNearbyTarget(CvUnit* pUnit, int iMaxTurns, bool bOffen
 		}
 		else //defensive targets
 		{
-			if (target.GetTargetType() == AI_TACTICAL_TARGET_CITY_TO_DEFEND ||
+			if (target.GetTargetType() == AI_TACTICAL_TARGET_FRIENDLY_CITY ||
 				(pUnit->isBarbarian() && target.GetTargetType() == AI_TACTICAL_TARGET_BARBARIAN_CAMP))
 			{
 				bTypeMatch = true;
@@ -5897,148 +5341,24 @@ void CvTacticalAI::UnitProcessed(int iID)
 	}
 }
 
-/// Is this civilian target of the highest priority?
-bool CvTacticalAI::IsVeryHighPriorityCivilianTarget(CvTacticalTarget* pTarget)
-{
-	CvUnit* pUnit = pTarget->GetUnitPtr();
-	return pUnit->IsCombatSupportUnit();
-}
-
 /// Is this civilian target of high priority?
 bool CvTacticalAI::IsHighPriorityCivilianTarget(CvTacticalTarget* pTarget)
 {
-	bool bRtnValue = false;
+	//barbarians don't care
+	if (m_pPlayer->isBarbarian())
+		return true;
+
 	CvUnit* pUnit = pTarget->GetUnitPtr();
 	if (pUnit && pUnit->IsCivilianUnit())
 	{
-		CvUnitEntry* pkUnitInfo = GC.getUnitInfo(pUnit->getUnitType());
-		int iEstimatedEndTurn = GC.getGame().getEstimateEndTurn();
-		if(pkUnitInfo)
-		{
-			// Priorities defined in XML
-			if(pkUnitInfo->GetCivilianAttackPriority() == CIVILIAN_ATTACK_PRIORITY_HIGH)
-			{
-				bRtnValue = true;
-			}
-			else if(pkUnitInfo->GetCivilianAttackPriority() == CIVILIAN_ATTACK_PRIORITY_HIGH_EARLY_GAME_ONLY)
-			{
-				if(GC.getGame().getGameTurn() < (iEstimatedEndTurn / 3))
-				{
-					bRtnValue =  true;
-				}
-			}
-			if(!bRtnValue && pUnit->AI_getUnitAIType() == UNITAI_SETTLE)
-			{
-				//Settlers
-				if(GET_PLAYER(pUnit->getOwner()).getNumCities() < 5)  //small player?
-				{
-					bRtnValue = true;
-				}
-				else if(GC.getGame().getGameTurn() < (iEstimatedEndTurn / 3))  //early game?
-				{
-					bRtnValue =  true;
-				}
-				else if(GET_PLAYER(pUnit->getOwner()).IsCramped())  //player really needs to expand?
-				{
-					bRtnValue = true;
-				}
-			}
-			if(!bRtnValue && m_pPlayer->isBarbarian())
-			{
-				bRtnValue = true; //always high priority for barbs
-			}
-#if defined(MOD_BALANCE_CORE_MILITARY)
-			if (MOD_BALANCE_CORE_MILITARY) 
-			{
-				//Let's not be too aggressive around our own cities.
-				if(!pUnit->isBarbarian() && pUnit->plot()->GetAdjacentCity() != NULL)
-				{
-					if(pUnit->plot()->GetAdjacentCity()->getOwner() == m_pPlayer->GetID())
-					{
-						bRtnValue = false;
-					}
-				}
-				if(!pUnit->isBarbarian())
-				{
-					//Is he trying to lure us to come out of a garrison?
-					for (int iI = 0; iI < NUM_DIRECTION_TYPES; iI++)
-					{
-						CvPlot *pLoopPlot = plotDirection(pUnit->plot()->getX(), pUnit->plot()->getY(), ((DirectionTypes)iI));
-						if (pLoopPlot != NULL)
-						{
-							if((pLoopPlot->defenseModifier(m_pPlayer->getTeam(), false, false) > 10) && pLoopPlot->getNumUnits() > 0)
-							{
-								if(pLoopPlot->getUnitByIndex(0)->getOwner() == m_pPlayer->GetID())
-								{
-									bRtnValue = false;
-								}
-							}
-						}
-					}
-				}
-			}
-#endif
-		}
-	}
-	return bRtnValue;
-}
+		if (pUnit->IsCombatSupportUnit())
+			return true;
 
-/// Is this civilian target of medium priority?
-bool CvTacticalAI::IsMediumPriorityCivilianTarget(CvTacticalTarget* pTarget)
-{
-	bool bRtnValue = false;
-	CvUnit* pUnit = pTarget->GetUnitPtr();
-	if(pUnit)
-	{
-		int iEstimatedEndTurn = GC.getGame().getEstimateEndTurn();
-		if(pUnit->isEmbarked() && !pUnit->IsCombatUnit())  //embarked civilians
-		{
-			bRtnValue = true;
-		}
-		else if(pUnit->AI_getUnitAIType() == UNITAI_SETTLE)
-		{
-			if(GC.getGame().getGameTurn() >= (iEstimatedEndTurn / 3))
-			{
-				bRtnValue =  true;
-			}
-		}
-		else if(pUnit->AI_getUnitAIType() == UNITAI_WORKER)
-		{
-			if(GC.getGame().getGameTurn() < (iEstimatedEndTurn / 3))  //early game?
-			{
-				bRtnValue =  true;
-			}
-		}
-#if defined(MOD_BALANCE_CORE_MILITARY)
-			if (MOD_BALANCE_CORE_MILITARY) 
-			{
-				//Let's not be too aggressive around our own cities.
-				if(pUnit->plot()->GetAdjacentCity() != NULL)
-				{
-					if(pUnit->plot()->GetAdjacentCity()->getOwner() == m_pPlayer->GetID())
-					{
-						bRtnValue = false;
-					}
-				}
-				//Is he trying to lure us to come out of a garrison?
-				for (int iI = 0; iI < NUM_DIRECTION_TYPES; iI++)
-				{
-					CvPlot *pLoopPlot = plotDirection(pUnit->plot()->getX(), pUnit->plot()->getY(), ((DirectionTypes)iI));
-					if (pLoopPlot != NULL)
-					{
-						if((pLoopPlot->defenseModifier(m_pPlayer->getTeam(), false, false) > 15) && pLoopPlot->getNumUnits() > 0)
-						{
-							if(pLoopPlot->getUnitByIndex(0)->getOwner() == m_pPlayer->GetID())
-							{
-								bRtnValue = false;
-							}
-						}
-					}
-				}
-			}
-#endif
+		if (pUnit->AI_getUnitAIType() == UNITAI_SETTLE)
+			return true;
 	}
-	return bRtnValue;
+
+	return false;
 }
 
 FILogFile* CvTacticalAI::GetLogFile()
@@ -6201,7 +5521,7 @@ bool TacticalAIHelpers::IsAttackNetPositive(CvUnit* pUnit, const CvPlot* pTarget
 //see if there is a possible target around the unit
 bool TacticalAIHelpers::PerformOpportunityAttack(CvUnit* pUnit, bool bAllowMovement)
 {
-	if (!pUnit || !pUnit->IsCanAttack() || !pUnit->canMove())
+	if (!pUnit || !pUnit->IsCanAttack() || !pUnit->canMove() || pUnit->isDelayedDeath())
 		return false;
 
 	//for ranged we have a readymade method
@@ -6332,7 +5652,11 @@ bool TacticalAIHelpers::PerformRangedOpportunityAttack(CvUnit* pUnit, bool bAllo
 		}
 
 		//no loop needed, there is only one unit anyway
-		vector<STacticalAssignment> vAssignments = TacticalAIHelpers::FindBestUnitAssignments(vector<CvUnit*>(1, pUnit), pUnit->plot(), AL_LOW, gTactPosStorage);
+		set<int> dummy;
+		vector<STacticalAssignment> vAssignments = TacticalAIHelpers::FindBestUnitAssignments(vector<CvUnit*>(1, pUnit), pUnit->plot(), AL_LOW, gTactPosStorage, dummy);
+		if (vAssignments.empty())
+			return false;
+
 		return TacticalAIHelpers::ExecuteUnitAssignments(pUnit->getOwner(), vAssignments);
 	}
 	else
@@ -6375,7 +5699,7 @@ bool TacticalAIHelpers::PerformRangedOpportunityAttack(CvUnit* pUnit, bool bAllo
 		if (GC.getLogging() && GC.getAILogging())
 		{
 			CvString strMsg;
-			strMsg.Format("Performing ranged opportunity attack with %s at (%d:%d) on (%d:%d)",
+			strMsg.Format("Performing stationary ranged opportunity attack with %s at (%d:%d) on (%d:%d)",
 				pUnit->getName().GetCString(), pUnit->getX(), pUnit->getY(), pBestTarget->getX(), pBestTarget->getY());
 			GET_PLAYER(pUnit->getOwner()).GetTacticalAI()->LogTacticalMessage(strMsg);
 		}
@@ -6482,15 +5806,15 @@ CvPlot* TacticalAIHelpers::FindSafestPlotInReach(const CvUnit* pUnit, bool bAllo
 			iScore += 12;
 
 		//try to hide - if there are few enemy units, this might be a tiebreaker
-		if (!pPlot->IsKnownVisibleToEnemy(pUnit->getOwner()))
-			iScore -= iScore / 4;
+		if (pPlot->IsKnownVisibleToEnemy(pUnit->getOwner()))
+			iScore += iScore / 4;
 
-		//try to go avoid borders
+		//avoid enemy territory
 		if (pPlot->IsAdjacentOwnedByEnemy(pUnit->getTeam()))
 			iScore += iScore / 20;
 
-		//don't stay here, try to get away even if it means temporarily moving to a higher danger plot
-		if (pPlot->IsEnemyCityAdjacent(pUnit->getTeam(), NULL))
+		//avoid enemy units (for civilians danger may be infinite in a lot lof places)
+		if (pPlot->IsEnemyUnitAdjacent(pUnit->getTeam()) || pPlot->IsEnemyCityAdjacent(pUnit->getTeam(), NULL))
 			iScore += iScore / 10;
 
 		//naval units should avoid enemy coast, never know what's hiding there
@@ -6550,8 +5874,8 @@ CvPlot* TacticalAIHelpers::FindSafestPlotInReach(const CvUnit* pUnit, bool bAllo
 		if (pDefender && pDefender != pUnit)
 		{
 			//taking cover only works if the defender will not move away!
-			//since we move civilians only after the combat units have moved it should be safe to pin the defender here
-			if (!pDefender->TurnProcessed())
+			//since we move civilians only after the combat units have moved it should be safe to pin the defender here (AI players only!)
+			if (!pDefender->TurnProcessed() && !pDefender->isHuman())
 			{
 				TacticalAIHelpers::PerformRangedOpportunityAttack(pDefender, false);
 				pDefender->PushMission(CvTypes::getMISSION_SKIP());
@@ -6625,6 +5949,10 @@ bool TacticalAIHelpers::IsGoodPlotForStaging(CvPlayer* pPlayer, CvPlot* pCandida
 	if (iPassableNeighbors<3)
 		return false;
 
+	//we don't know the unit, so use a rough estimation ...
+	if (pPlayer->GetPlotDanger(*pCandidate, false) > /*10*/ GD_INT_GET(NEUTRAL_HEAL_RATE))
+		return false;
+
 	return true;
 }
 
@@ -6649,7 +5977,7 @@ bool TacticalAIHelpers::IsCloseToContestedBorder(CvPlayer* pPlayer, CvPlot* pPlo
 	return bResult;
 }
 
-CvPlot* TacticalAIHelpers::FindClosestSafePlotForHealing(CvUnit* pUnit)
+CvPlot* TacticalAIHelpers::FindClosestSafePlotForHealing(CvUnit* pUnit, bool bConservative)
 {
 	if (!pUnit)
 		return NULL;
@@ -6671,7 +5999,7 @@ CvPlot* TacticalAIHelpers::FindClosestSafePlotForHealing(CvUnit* pUnit)
 		//don't check movement, don't need to heal right now
 		if (pUnit->getDomainType() == DOMAIN_LAND)
 		{
-			if (!pUnit->canHeal(pPlot, true))
+			if (!pUnit->canHeal(pPlot, false))
 				continue;
 
 			//don't mess with (ranged) garrisons if enemies are around
@@ -6699,18 +6027,24 @@ CvPlot* TacticalAIHelpers::FindClosestSafePlotForHealing(CvUnit* pUnit)
 				continue;
 		}
 
-		int iDanger = pUnit->GetDanger(pPlot);
-		if (iDanger <= pUnit->healRate(pPlot)) //ignore pillage health here, it's a one-time effect and may lead into dead ends
+		int iDanger = min(pUnit->GetDanger(pPlot),10000); //handle INT_MAX for civilians
+		int iHealRate = pUnit->healRate(pPlot);
+		int nFriends = pPlot->GetNumFriendlyUnitsAdjacent(pUnit->getTeam(), NO_DOMAIN, true, pUnit);
+
+		//sometimes we want to ignore pillage health, it's a one-time effect and may lead into dead ends
+		if (bPillage && !bConservative)
+			iHealRate += /*25*/ GD_INT_GET(PILLAGE_HEAL_AMOUNT);
+
+		//make up a score function
+		//this is difficult, danger does not consider cover from our own units
+		//on the other hand, our covering units might run away ... just assume an even spread
+		int iRemainingDanger = iDanger / (nFriends+1);
+		int iScore = (pUnit->GetCurrHitPoints() + iHealRate - iRemainingDanger) * 10;
+		//is this safe enough?
+		if (iScore > 0)
 		{
-			int iScore = pUnit->healRate(pPlot) + pPlot->GetNumFriendlyUnitsAdjacent(pUnit->getTeam(), NO_DOMAIN, true, pUnit) * 3 - iDanger;
-
-			//can pillage = good
-			if (bPillage)
-				iScore += /*25*/ GD_INT_GET(PILLAGE_HEAL_AMOUNT);
-
 			//tiebreaker
-			iScore -= GET_PLAYER(pUnit->getOwner()).GetCityDistancePathLength(pPlot);
-
+			iScore -= plotDistance(pPlot->getX(), pPlot->getY(), pUnit->getX(), pUnit->getY()) * 2 - GET_PLAYER(pUnit->getOwner()).GetCityDistancePathLength(pPlot);
 			vCandidates.push_back(SPlotWithScore(pPlot, iScore));
 		}
 	}
@@ -6718,6 +6052,7 @@ CvPlot* TacticalAIHelpers::FindClosestSafePlotForHealing(CvUnit* pUnit)
 	if (!vCandidates.empty())
 	{
 		std::stable_sort(vCandidates.begin(), vCandidates.end());
+		//how to tell whether it's safe enough?
 		return vCandidates.back().pPlot;
 	}
 
@@ -6747,7 +6082,7 @@ std::vector<CvPlot*> TacticalAIHelpers::GetPlotsForRangedAttack(const CvPlot* pT
 	std::vector<SPlotWithScore> vIntermediate;
 	for (size_t i=0; i<vCandidates.size(); i++)
 	{
-		if((vCandidates[i]) == NULL)
+		if(vCandidates[i] == NULL)
 			continue;
 
 		int iDistance = plotDistance(*pRefPlot,*(vCandidates[i]));
@@ -6757,23 +6092,25 @@ std::vector<CvPlot*> TacticalAIHelpers::GetPlotsForRangedAttack(const CvPlot* pT
 		if (!vCandidates[i]->isRevealed(pUnit->getTeam()))
 			continue;
 
+		//this concerns not only embarked units but also ships in harbor!
 		if (!pUnit->isNativeDomain(vCandidates[i]))
 			continue;
 
 		if (bCheckOccupied && vCandidates[i]!=pRefPlot && vCandidates[i]->getBestDefender(NO_PLAYER))
 			continue;
 
-		//Respect domains.
-		if (pUnit->getDomainType() != vCandidates[i]->getDomain())
-			continue;
-
 		if (bOnlyInDomain)
 		{
-			//subs can only attack within their (water) area or adjacent cities
-			if (pRefPlot->getArea() != vCandidates[i]->getArea())
+			//subs can only attack within their (water) area or adjacent cities (VP only)
+			if (pRefPlot->getLandmass() != vCandidates[i]->getLandmass())
 			{
-				CvCity *pCity = vCandidates[i]->getPlotCity();
-				if (!pCity || !pCity->HasAccessToArea(pRefPlot->getArea()))
+				if (!MOD_BALANCE_VP)
+					continue;
+
+				if (!vCandidates[i]->isCity())
+					continue;
+
+				if (!vCandidates[i]->getPlotCity()->HasAccessToLandmassOrOcean(pRefPlot->getLandmass()))
 					continue;
 			}
 		}
@@ -7181,6 +6518,54 @@ CvTacticalPlot::eTactPlotDomain DomainForUnit(const CvUnit* pUnit)
 	}
 }
 
+void CDangerCache::clear()
+{
+	dangerStats.clear();
+}
+
+void CDangerCache::storeDanger(int iDefenderId, int iDefenderPlot, int iPrevDamage, const UnitIdContainer& killedEnemies, int iDanger)
+{
+	//known attacker
+	for (size_t i = 0; i < dangerStats.size(); i++)
+	{
+		if (dangerStats[i].first == iDefenderId)
+		{
+			dangerStats[i].second.push_back(SDefendStats(iDefenderPlot, iPrevDamage, killedEnemies, iDanger));
+			return;
+		}
+	}
+
+	//unknown defender? add a new entry
+	vector<SDefendStats> data(1, SDefendStats(iDefenderPlot, iPrevDamage, killedEnemies, iDanger));
+	dangerStats.push_back(make_pair(iDefenderId, data));
+}
+
+bool CDangerCache::findDanger(int iDefenderId, int iDefenderPlot, int iPrevDamage, const UnitIdContainer& killedEnemies, int& iDanger) const
+{
+	for (size_t i = 0; i < dangerStats.size(); i++)
+	{
+		if (dangerStats[i].first == iDefenderId)
+		{
+			const vector<SDefendStats>& data = dangerStats[i].second;
+			for (size_t i = 0; i < data.size(); i++)
+			{
+				if (data[i].iDefenderPlot == iDefenderPlot &&
+					data[i].iDefenderPrevDamage == iPrevDamage &&
+					data[i].killedEnemies == killedEnemies)
+				{
+					iDanger = data[i].iDanger;
+					gDangerCacheHit++;
+					return true;
+				}
+			}
+		}
+	}
+
+	iDanger = 0;
+	gDangerCacheMiss++;
+	return false;
+}
+
 void CAttackCache::clear()
 {
 	attackStats.clear();
@@ -7232,14 +6617,9 @@ bool CAttackCache::findAttack(int iAttackerId, int iAttackerPlot, int iDefenderI
 }
 
 //note that the score returned from this function is not multiplied by 10 yet
-void ScoreAttack(const CvTacticalPlot& tactPlot, const CvUnit* pUnit, const CvTacticalPlot& assumedPlot, eAggressionLevel eAggLvl, float fAggBias, CAttackCache& cache, STacticalAssignment& result)
+bool ScoreAttackDamage(const CvTacticalPlot& tactPlot, const CvUnit* pUnit, const CvTacticalPlot& assumedPlot, eAggressionLevel eAggLvl, float fAggBias, CAttackCache& cache, STacticalAssignment& result)
 {
-	if (eAggLvl == AL_NONE)
-	{
-		result.iScore = -INT_MAX;
-		return;
-	}
-
+	bool bIsKill = false;
 	int iDamageDealt = 0;
 	int iDamageReceived = 0; //always zero for ranged attack
 	int iExtraScore = 0; //splash damage and other bonuses
@@ -7253,9 +6633,9 @@ void ScoreAttack(const CvTacticalPlot& tactPlot, const CvUnit* pUnit, const CvTa
 	bool bScoreReduction = false;
 	bool bBelowHpLimitAfterMeleeAttack = false;
 
-	//AL_NONE, AL_LOW, AL_MEDIUM, AL_HIGH, AL_BRAVEHEART
+	//AL_LOW, AL_MEDIUM, AL_HIGH, AL_BRAVEHEART
 	//braveheart allows attacks for which you need luck to survive
-	int hpLimit[5] = {80,60,40,20,-5};
+	int hpLimit[5] = {70,40,20,-5};
 
 	if (tactPlot.isEnemyCity()) //a plot can be both a city and a unit - in that case we would attack the city
 	{
@@ -7263,7 +6643,7 @@ void ScoreAttack(const CvTacticalPlot& tactPlot, const CvUnit* pUnit, const CvTa
 		if (!pEnemy)
 		{
 			result.iScore = -INT_MAX;
-			return;
+			return false;
 		}
 
 		//first try the cache
@@ -7300,7 +6680,7 @@ void ScoreAttack(const CvTacticalPlot& tactPlot, const CvUnit* pUnit, const CvTa
 			if (fRemainingTurnsOnAttacker < fRemainingTurnsOnCity && !bGoodFirstAttack)
 			{
 				result.iScore = -INT_MAX;
-				return;
+				return false;
 			}
 		}
 
@@ -7318,6 +6698,10 @@ void ScoreAttack(const CvTacticalPlot& tactPlot, const CvUnit* pUnit, const CvTa
 		//special: if there are multiple enemy units around, try to attack those first
 		if (tactPlot.getNumAdjacentEnemies(CvTacticalPlot::TD_BOTH) > 1 && pUnit->AI_getUnitAIType() != UNITAI_CITY_BOMBARD)
 			bScoreReduction = true;
+
+		//if there is a chance that the enemy will be killed during the sim, we want to know
+		if (iDamageDealt*3 > iPrevHitPoints*2)
+			result.iKillOrNearKillId = pEnemy->GetID();
 	}
 	else if (tactPlot.isEnemyCombatUnit())
 	{
@@ -7325,7 +6709,7 @@ void ScoreAttack(const CvTacticalPlot& tactPlot, const CvUnit* pUnit, const CvTa
 		if (!pEnemy)
 		{
 			result.iScore = -INT_MAX;
-			return;
+			return false;
 		}
 
 		//first use the cache
@@ -7365,9 +6749,13 @@ void ScoreAttack(const CvTacticalPlot& tactPlot, const CvUnit* pUnit, const CvTa
 		if (!pEnemy->IsCanAttack())
 			fAggBias /= 2;
 
-		//don't be distracted by attacks on barbarians when there are real enemies around
-		if (pEnemy->getOwner() == BARBARIAN_PLAYER)
+		//don't be distracted by attacks on barbarians or melee units in other domain when there are real enemies around
+		if (pEnemy->getOwner() == BARBARIAN_PLAYER || (!pEnemy->IsCanAttackRanged() && pEnemy->getDomainType() != pUnit->getDomainType()))
 			bScoreReduction = true;
+
+		//if there is a chance that the enemy will be killed during the sim, we want to know
+		if (iDamageDealt >= iPrevHitPoints - 10)
+			result.iKillOrNearKillId = pEnemy->GetID();
 	}
 
 	//fake general bonus
@@ -7378,7 +6766,7 @@ void ScoreAttack(const CvTacticalPlot& tactPlot, const CvUnit* pUnit, const CvTa
 	}
 
 	//bonus for a kill
-	//also consider near-kills as kills
+	//don't be too precise because of randomness in damage calculation added later
 	//if it doesn't work out we can try again
 	//better than assuming it's not a kill and having a melee unit end up in a bad place
 	if (iDamageDealt >= iPrevHitPoints - 1)
@@ -7388,6 +6776,7 @@ void ScoreAttack(const CvTacticalPlot& tactPlot, const CvUnit* pUnit, const CvTa
 
 		if (tactPlot.isEnemyCity()) //city capture
 		{
+			bIsKill = pUnit->IsCanAttackWithMove(); //only melee can capture/kill a city!
 			bScoreReduction = false;
 
 			//ranged units can't capture, so discourage the attack
@@ -7400,14 +6789,12 @@ void ScoreAttack(const CvTacticalPlot& tactPlot, const CvUnit* pUnit, const CvTa
 			}
 			else
 			{
-				iExtraScore += 600; //capturing a city is important
 				result.eAssignmentType = A_MELEEKILL;
 			}
 		}
 		else //enemy unit killed
 		{
-			//tbd: same bonus for melee kill and range kill? do we have a preference? what about move-after-attack?
-			iExtraScore += 200;
+			bIsKill = true;
 
 			if (pTestPlot->getNumUnits() > 1 && !pTestPlot->isNeutralUnit(pUnit->getOwner(), false, false))
 				iExtraScore += 20; //even more points for a double kill
@@ -7448,7 +6835,7 @@ void ScoreAttack(const CvTacticalPlot& tactPlot, const CvUnit* pUnit, const CvTa
 			fAggFactor *= 1.1f;
 			break;
 		case AL_HIGH:
-			//we check whether we can survive a counterattack in ScoreTurnEnd
+			//we check whether we can survive a counterattack in ScoreCombatUnitTurnEnd
 			fAggFactor *= 2.3f;
 			break;
 		case AL_BRAVEHEART:
@@ -7457,18 +6844,18 @@ void ScoreAttack(const CvTacticalPlot& tactPlot, const CvUnit* pUnit, const CvTa
 			break;
 		default:
 			result.iScore = -INT_MAX;
-			return;
+			return false;
 		}
 
 		//bias depends on the ratio of friendly to enemy units
 		int iScaledDamage = int(iDamageDealt*fAggBias*fAggFactor + 0.5f);
 		int iDamageDelta = iScaledDamage - iDamageReceived;
 		bool bVoluntaryCancel = (bBelowHpLimitAfterMeleeAttack && iDamageDelta < 0 && result.eAssignmentType != A_MELEEKILL && result.eAssignmentType != A_MELEEKILL_NO_ADVANCE);
-		bool bSuicideCancel = (pUnit->GetCurrHitPoints() - iDamageReceived < 1) && eAggLvl != AL_BRAVEHEART;
+		bool bSuicideCancel = (pUnit->GetCurrHitPoints() - iDamageReceived < 3) && eAggLvl != AL_BRAVEHEART; //in the real event there will be some randomness!
 		if (bVoluntaryCancel || bSuicideCancel)
 		{
 			result.iScore = -INT_MAX;
-			return;
+			return false;
 		}
 	}
 
@@ -7483,6 +6870,8 @@ void ScoreAttack(const CvTacticalPlot& tactPlot, const CvUnit* pUnit, const CvTa
 
 	result.iSelfDamage = iDamageReceived;
 	result.iDamage = iDamageDealt;
+
+	return bIsKill;
 }
 
 bool TacticalAIHelpers::IsPlayerCitadel(const CvPlot* pPlot, PlayerTypes ePlayer)
@@ -7537,37 +6926,33 @@ int TacticalAIHelpers::SentryScore(const CvPlot * pPlot, PlayerTypes ePlayer)
 	TeamTypes eTeam = GET_PLAYER(ePlayer).getTeam();
 	int iScore = pPlot->defenseModifier(eTeam, false, false);
 
+	//basically check for plots with good visibility
 	const vector<CvPlot*>& possibleEnemyPlots = GC.getMap().GetPlotsAtRangeX(pPlot, 2, true, true);
 	for (size_t i = 0; i < possibleEnemyPlots.size(); i++)
 	{
 		//there may be a sentinel null pointer
 		if (possibleEnemyPlots[i] == NULL)
 			continue;
-
-		//don't need to cover a plot multiple times ... but don't want the sentry unit to shuffle around too much
-		if (possibleEnemyPlots[i]->getVisibilityCount(eTeam) > 1)
-			continue;
-
-		//really we should consider whether the enemy can move there, not our team
+		//really we should consider whether the enemy can move there, not our team ...
 		if (!possibleEnemyPlots[i]->isValidMovePlot(ePlayer, false))
 			continue;
 
-		iScore += 37; //less than a good defense bonus ...
+		iScore += 23; //less than a good defense bonus ...
 	}
 
 	return iScore;
 }
 
-STacticalAssignment ScorePlotForPillageMove(const SUnitStats& unit, const CvTacticalPlot& testPlot, const SMovePlot& movePlot, const CvTacticalPosition& assumedPosition)
+STacticalAssignment ScorePlotForPillageMove(const SUnitStats& unit, const CvTacticalPlot& testPlot, int iAssumedMovesLeft, const CvTacticalPosition& assumedPosition)
 {
-	//default action is do nothing and invalid score (not -INT_MAX to to prevent overflows!)
-	STacticalAssignment result(unit.iPlotIndex,movePlot.iPlotIndex,unit.iUnitID,movePlot.iMovesLeft,unit.eMoveStrategy,TACTICAL_COMBAT_IMPOSSIBLE_SCORE,A_MOVE);
+	//default action is do nothing and invalid score (not -INT_MAX, to prevent overflows!)
+	STacticalAssignment result(unit.iPlotIndex,testPlot.getPlotIndex(), unit.iUnitID, iAssumedMovesLeft, unit.eMoveStrategy, TACTICAL_COMBAT_IMPOSSIBLE_SCORE, A_MOVE);
 
 	//the plot we're checking right now
 	const CvPlot* pTestPlot = testPlot.getPlot();
 	const CvUnit* pUnit = unit.pUnit;
 
-	if (pUnit->shouldPillage(pTestPlot, true) && !assumedPosition.unitHasAssignmentOfType(unit.iUnitID, A_PILLAGE) && !assumedPosition.plotHasAssignmentOfType(movePlot.iPlotIndex,A_PILLAGE))
+	if (pUnit->shouldPillage(pTestPlot, true) && !assumedPosition.unitHasAssignmentOfType(unit.iUnitID, A_PILLAGE) && !assumedPosition.plotHasAssignmentOfType(testPlot.getPlotIndex(), A_PILLAGE))
 	{
 		result.eAssignmentType = A_PILLAGE;
 
@@ -7605,9 +6990,10 @@ int ScorePlotForVisibility(const CvUnit* pUnit, const CvTacticalPlot& testPlot)
 	return iVisiblityScore;
 }
 
-int ScorePlotForPotentialAttacks(const CvUnit* pUnit, const CvTacticalPlot& testPlot, CvTacticalPlot::eTactPlotDomain eRelevantDomain, int iNumAttacks, const CvTacticalPosition& assumedPosition)
+int ScorePlotForPotentialAttacks(const CvUnit* pUnit, const CvTacticalPlot& testPlot, CvTacticalPlot::eTactPlotDomain eRelevantDomain, int iNumAttacks, const CvTacticalPosition& assumedPosition, int& iKillOrNearKillId)
 {
 	int iBestAttackScore = 0;
+	iKillOrNearKillId = -1;
 
 	//check how much damage we can do to the enemies around this plot
 	//works for both melee and ranged
@@ -7626,12 +7012,24 @@ int ScorePlotForPotentialAttacks(const CvUnit* pUnit, const CvTacticalPlot& test
 			if (!targetPlot.isValid() || !targetPlot.isEnemy())
 				continue;
 
-			//even if we don't want to attack now we might want to attack next turn
-			eAggressionLevel level = assumedPosition.getAggressionLevel() == AL_NONE ? AL_LOW : assumedPosition.getAggressionLevel();
-
 			//we don't care for damage here but let's reuse the scoring function
+			//note here we don't care whether it's a kill or not - don't want to double dip for the move and the kill
+			//also, if the attack would be next turn, chance is the enemy will flee, so it never happens
 			STacticalAssignment temp;
-			ScoreAttack(targetPlot, pUnit, testPlot, level, assumedPosition.getAggressionBias(), gTactPosStorage.getCache(), temp);
+			bool bIsKill = ScoreAttackDamage(targetPlot, pUnit, testPlot, assumedPosition.getAggressionLevel(), assumedPosition.getAggressionBias(), gTactPosStorage.getAttackCache(), temp);
+			if (bIsKill && iNumAttacks > 0 && temp.iScore > 0)
+			{
+				//if we can attack this turn
+				temp.iScore += 100;
+				//let's say we can kill only one ...
+				iKillOrNearKillId = temp.iKillOrNearKillId;
+			}
+			else if (targetPlot.isEnemyCity() && targetPlot.getPlot()->getPlotCity()->isInDangerOfFalling() && !pUnit->IsCanAttackRanged())
+			{
+				//melee should stay close even if the attack is not possible yet
+				temp.iScore = max(temp.iScore, 23);
+			}
+
 			iBestAttackScore = max(temp.iScore, iBestAttackScore);
 		}
 	}
@@ -7653,17 +7051,23 @@ bool isKillAssignment(eUnitAssignmentType eAssignmentType)
 		eAssignmentType == A_RANGEKILL;
 }
 
-int ScoreTurnEnd(const CvUnit* pUnit, eUnitAssignmentType eLastAssignment, const CvTacticalPlot& testPlot, int iMovesLeft, CvTacticalPlot::eTactPlotDomain eRelevantDomain, int iSelfDamage, 
-							const CvTacticalPosition& assumedPosition, eUnitMoveEvalMode evalMode)
+int ScoreCombatUnitTurnEnd(const CvUnit* pUnit, eUnitAssignmentType eLastAssignment, const CvTacticalPlot& testPlot, int iDanger,
+							CvTacticalPlot::eTactPlotDomain eRelevantDomain, int iSelfDamage, int iAssumedExtraKill, bool bHasMoved,
+							const CvTacticalPosition& assumedPosition, eUnitMoveEvalMode evalMode, bool bRelaxedCheck)
 {
 	int iResult = 0;
+
+	gEnemiesToIgnore = assumedPosition.getKilledEnemies();
+	if (iAssumedExtraKill != -1)
+		gEnemiesToIgnore.push_back(iAssumedExtraKill);
 
 	//the danger value reflects any defensive terrain bonuses
 	//but unfortunately danger is not very useful here
 	// * ZOC is unclear during simulation
 	// * freshly revealed enemy units are not considered
-	int	iDanger = pUnit->GetDanger(testPlot.getPlot(), assumedPosition.getKilledEnemies(), iSelfDamage);
 	int iNumAdjFriendlies = (evalMode==EM_FINAL) ? testPlot.getNumAdjacentFriendliesEndTurn(eRelevantDomain) : testPlot.getNumAdjacentFriendlies(eRelevantDomain, -1);
+	if (bRelaxedCheck) //assume we have friends which might catch up to us later
+		iNumAdjFriendlies++;
 	bool bIsFrontlineCitadelOrCity = (TacticalAIHelpers::IsPlayerCitadel(testPlot.getPlot(), assumedPosition.getPlayer()) || testPlot.getPlot()->isCity()) && testPlot.getEnemyDistance() < 3;
 
 	//don't do it if it's a death trap (unless there is no other choice ...)
@@ -7672,18 +7076,12 @@ int ScoreTurnEnd(const CvUnit* pUnit, eUnitAssignmentType eLastAssignment, const
 		if (!bIsFrontlineCitadelOrCity)
 			return INT_MAX;
 
-	//extra careful with siege units / carriers
-	if (pUnit->AI_getUnitAIType() == UNITAI_CITY_BOMBARD || pUnit->AI_getUnitAIType() == UNITAI_CARRIER_SEA)
+	if (!MOD_CORE_TWO_PASS_DANGER)
 	{
-		if (iNumAdjEnemies > 0 && iDanger > pUnit->GetMaxHitPoints())
-			return INT_MAX;
-		if (iNumAdjFriendlies == 0 && iDanger > 3*pUnit->GetMaxHitPoints())
-			return INT_MAX;
+		//check for cover and assume this would help us
+		if (testPlot.hasCoverFromOtherUnits(assumedPosition))
+			iDanger /= 2;
 	}
-
-	//can happen with garrisons, catch this case as it messes up the math
-	if (iDanger == INT_MAX)
-		iDanger = 10 * pUnit->GetMaxHitPoints();
 
 	//avoid these plots
 	if (testPlot.isNextToEnemyCitadel())
@@ -7711,21 +7109,33 @@ int ScoreTurnEnd(const CvUnit* pUnit, eUnitAssignmentType eLastAssignment, const
 			int iRemainingHP = pUnit->GetCurrHitPoints() - iSelfDamage;
 
 			//the minimum amount of hitpoint we want a standalone unit to have for the expected counterattacks
-			int iMagicNumber = (eLastAssignment == A_MELEEKILL || eLastAssignment == A_MELEEKILL_NO_ADVANCE || eLastAssignment == A_RANGEKILL) ? 23 : 37;
+			bool isForKill = (eLastAssignment == A_MELEEKILL || eLastAssignment == A_MELEEKILL_NO_ADVANCE || eLastAssignment == A_RANGEKILL);
+			bool couldFlee = (gSafePlotCount[pUnit->GetID()] > 0);
+			int iMagicNumber = (isForKill || !couldFlee)  ? 23 : 42;
 
 			//this is a bit cryptic to avoid integer truncation. consider danger/hp is the overkill factor.
 			//if the overkill factor is high, we need more hitpoints
 			int iLowHealthThreshold = (iMagicNumber * iDanger) / max(1, iRemainingHP);
 
 			//if there is nothing we would cover or that covers us or we are low on health, don't do it
-			if (iRemainingHP*max(iNumAdjFriendlies,1) < iLowHealthThreshold)
+			int iCover = bRelaxedCheck ? iNumAdjFriendlies+1 : max(iNumAdjFriendlies, 1);
+			if (iRemainingHP*iCover < iLowHealthThreshold)
 				return INT_MAX;
+
+			//extra careful with siege units / carriers
+			if (pUnit->AI_getUnitAIType() == UNITAI_CITY_BOMBARD || pUnit->AI_getUnitAIType() == UNITAI_CARRIER_SEA)
+			{
+				if (iNumAdjEnemies > 0 && iDanger > pUnit->GetMaxHitPoints())
+					return INT_MAX;
+				if (iNumAdjFriendlies == 0 && iDanger > pUnit->GetMaxHitPoints())
+					return INT_MAX;
+			}
 		}
 
 		//if we have friends around assume they will absorb some damage
 		//of course the enemy will tend to focus fire, but then raw danger does not consider ZoC
 		//todo: do not share damage for frontline units?
-		iDanger /= max(iNumAdjFriendlies,1);
+		iDanger /= iNumAdjFriendlies+1;
 
 		//make it relative to current hitpoints
 		int iScaledDanger = (iDanger * /*100*/ GD_INT_GET(COMBAT_AI_OFFENSE_DANGERWEIGHT)) / max(1, pUnit->GetCurrHitPoints());
@@ -7744,7 +7154,7 @@ int ScoreTurnEnd(const CvUnit* pUnit, eUnitAssignmentType eLastAssignment, const
 
 	//minor bonus for staying put and healing
 	//don't add too much else it overrides the firstline/secondline order
-	if (iMovesLeft == pUnit->maxMoves())
+	if (!bHasMoved)
 	{
 		if (pUnit->IsHurt())
 			iResult++; //cannot fortify, only heal
@@ -7794,30 +7204,17 @@ int ScoreTurnEnd(const CvUnit* pUnit, eUnitAssignmentType eLastAssignment, const
 	return iResult;
 }
 
-STacticalAssignment ScorePlotForCombatUnitOffensiveMove(const SUnitStats& unit, const CvTacticalPlot& testPlot, const SMovePlot& movePlot, 
+STacticalAssignment ScorePlotForCombatUnitMove(const SUnitStats& unit, const CvTacticalPlot& testPlot, int iAssumedMovesLeft,
 											const CvTacticalPosition& assumedPosition, eUnitMoveEvalMode evalMode) 
 {
-	//default action is do nothing and invalid score (not -INT_MAX to to prevent overflows!)
-	STacticalAssignment result(unit.iPlotIndex,movePlot.iPlotIndex,unit.iUnitID,movePlot.iMovesLeft,unit.eMoveStrategy,TACTICAL_COMBAT_IMPOSSIBLE_SCORE,A_MOVE);
+	//default action is do nothing and invalid score (not -INT_MAX, to prevent overflows!)
+	STacticalAssignment result(unit.iPlotIndex,testPlot.getPlotIndex(), unit.iUnitID, iAssumedMovesLeft, unit.eMoveStrategy, TACTICAL_COMBAT_IMPOSSIBLE_SCORE, A_MOVE);
 
 	//the plot we're checking right now
 	const CvPlot* pTestPlot = testPlot.getPlot();
 	const CvUnit* pUnit = unit.pUnit;
 
-	//can we put a combat unit here?
-	if (testPlot.isBlockedByNonSimUnit(DomainForUnit(pUnit)))
-	{
-		//double check - the blocking flag is not 100% reliable in cities
-		if (!pTestPlot->isCoastalCityOrPassableImprovement(assumedPosition.getPlayer(),true,true) || pUnit->plot()!=pTestPlot)
-			return result;
-	}
-
-	//cannot deal with enemies here, only friendly/empty plots
-	if (testPlot.isEnemy())
-		return result;
-
 	//different contributions
-	int iDamageScore = 0;
 	int iDangerScore = 0;
 	int iPlotScore = 0;
 
@@ -7826,23 +7223,41 @@ STacticalAssignment ScorePlotForCombatUnitOffensiveMove(const SUnitStats& unit, 
 
 	//lookup desirability by unit strategy / enemy distance
 	//even for intermediate plots, so as not to bias against them
-	int iPlotTypeScores[5][5] = {
-		{ -1,-1,-1,-1,-1 }, //none (should not occur)
-		{  1, 12, 6, 1, -1 }, //firstline (note that it's ok to evaluate the score in an enemy plot for a firstline unit -> meleekill) 
-		{ -1, 6, 12, 2, -1 }, //secondline
-		{ -1, 1, 8, 12, -1 }, //thirdline
-		{ -1, 1, 8,  8, -1 }, //support (can happen for damaged melee units)
-	};
-	iPlotScore = iPlotTypeScores[unit.eMoveStrategy][testPlot.getEnemyDistance(eRelevantDomain)];
+	if (assumedPosition.wantToFight())
+	{
+		//zero to TACTICAL_COMBAT_MAX_TARGET_DISTANCE
+		int iPlotScoreForEnemyDistance[5][5] = {
+			{ -1,-1,-1,-1,-1 }, //none (should not occur)
+			{ 12, 12, 6, 1, -1 }, //firstline (note that it's ok to evaluate the score in an enemy plot for a firstline unit -> meleekill) 
+			{ -1, 6, 12, 2, -1 }, //secondline
+			{  1, 1, 8, 12, -1 }, //thirdline (ranged and damaged melee units)
+			{ -1, 1, 8,  8, -1 }, //support (can also happen for damaged melee units)
+		};
+		iPlotScore = iPlotScoreForEnemyDistance[unit.eMoveStrategy][testPlot.getEnemyDistance(eRelevantDomain)];
 
-	//if we made a kill, assume we are in a good plot
-	//this is very important because enemy distance changes and we might end up with -1
-	if (isKillAssignment(unit.eLastAssignment))
-		iPlotScore = max(6, iPlotScore);
+		//if we made a kill, assume we are in a good plot
+		//this is very important because enemy distance changes and we might end up with -1
+		if (isKillAssignment(unit.eLastAssignment))
+			iPlotScore = max(6, iPlotScore);
+	}
+	else
+	{
+		//we have no enemies around prepare for the unexpected, melee units screening far from the target, other units closer
+		int iTargetDistance = min(plotDistance(*assumedPosition.getTarget(), *pTestPlot), (int)TACTICAL_COMBAT_MAX_TARGET_DISTANCE);
+
+		int iPlotScoreForTargetDistance[5][5] = {
+			{ -1,-1,-1,-1,-1 }, //none (should not occur)
+			{  6, 6, 5, 3, 1 }, //firstline can go anywhere but outside when in doubt
+			{  8, 8, 3, 2, 1 }, //secondline prefers "inside"
+			{  10, 10, 2, 1, 1 }, //thirdline prefers inside even more
+			{  8, 8, 2, 1, 1 }, //support (can also happen for damaged melee units)
+		};
+		iPlotScore = iPlotScoreForTargetDistance[unit.eMoveStrategy][iTargetDistance];
+	}
 
 	if (testPlot.isEnemyCivilian()) //unescorted civilian
 	{
-		if (movePlot.iMovesLeft > 0 || testPlot.getNumAdjacentEnemies(CvTacticalPlot::TD_LAND) == 0)
+		if (iAssumedMovesLeft > 0 || testPlot.getNumAdjacentEnemies(CvTacticalPlot::TD_LAND) == 0)
 		{
 			CvUnit* pCivilian = pTestPlot->getUnitByIndex(0); //there should be only one ...
 			if (pCivilian)
@@ -7854,12 +7269,29 @@ STacticalAssignment ScorePlotForCombatUnitOffensiveMove(const SUnitStats& unit, 
 		}
 	}
 
+	int iDanger = 0;
+	//first try the cache
+	if (!gTactPosStorage.getDangerCache().findDanger(pUnit->GetID(), testPlot.getPlotIndex(), unit.iSelfDamage, assumedPosition.getKilledEnemies(), iDanger))
+	{
+		iDanger = pUnit->GetDanger(testPlot.getPlot(), assumedPosition.getKilledEnemies(), unit.iSelfDamage);
+		//can happen with garrisons, catch this case as it messes up the math
+		if (iDanger == INT_MAX)
+			iDanger = 10 * pUnit->GetMaxHitPoints();
+
+		gTactPosStorage.getDangerCache().storeDanger(pUnit->GetID(), testPlot.getPlotIndex(), unit.iSelfDamage, assumedPosition.getKilledEnemies(), iDanger);
+	}
+
 	//many considerations are only relevant if we end the turn here (critical for skirmishers which can move after attacking ...)
 	//we only consider this when explicitly ending the turn!
 	if (evalMode != EM_INTERMEDIATE)
 	{
 		result.eAssignmentType = A_FINISH;
-		iDangerScore = ScoreTurnEnd(pUnit, unit.eLastAssignment, testPlot, movePlot.iMovesLeft, eRelevantDomain, unit.iSelfDamage, assumedPosition, evalMode);
+		iDangerScore = ScoreCombatUnitTurnEnd(pUnit, unit.eLastAssignment, testPlot, iDanger, 
+			eRelevantDomain, unit.iSelfDamage, -1, iAssumedMovesLeft==unit.iMaxMoves, assumedPosition, evalMode, false);
+
+		// unit giving extra strength to an adjacent city?
+		if (pUnit->GetAdjacentCityDefenseMod() > 0 && GET_PLAYER(assumedPosition.getPlayer()).GetCityDistanceInPlots(pTestPlot)<=1)
+			iPlotScore++;
 
 		if (iDangerScore == INT_MAX)
 			return result; //don't do it
@@ -7869,21 +7301,21 @@ STacticalAssignment ScorePlotForCombatUnitOffensiveMove(const SUnitStats& unit, 
 	}
 	else
 	{
-		//how much damage could we do with our next moves?
-		//check this only during simulation; don't use it for initial/final score as it decreases with enemies killed!
-		int iMaxAttacks = NumAttacksForUnit(movePlot.iMovesLeft, unit.iAttacksLeft);
-		iDamageScore = ScorePlotForPotentialAttacks(pUnit, testPlot, eRelevantDomain, iMaxAttacks, assumedPosition);
-
-		//some indication of danger as a tiebreaker - final danger will be checked later
-		int	iDanger = pUnit->GetDanger(testPlot.getPlot(), assumedPosition.getKilledEnemies(), unit.iSelfDamage);
 		int iRemainingHP = pUnit->GetCurrHitPoints() - unit.iSelfDamage;
-		int iOverkillFactor = min(3, iDanger / max(1, iRemainingHP));
-		iDangerScore -= iOverkillFactor;
+		//scale it up a bit to reduce truncation error during division
+		int iOverkillPercent = (100*iDanger) / max(1, iRemainingHP);
+		iDangerScore -= iOverkillPercent / 20;
+
+		//there is a tendency for fast units to move too far ahead without a chance to withdraw later
+		//so try to catch this case right here, cannot wait until the end of the sim when it's too late
+		if (iOverkillPercent > 300 && iAssumedMovesLeft<3*GD_INT_GET(MOVE_DENOMINATOR) && unit.iMovesLeft>3*GD_INT_GET(MOVE_DENOMINATOR))
+			return result; //don't do it
 
 		//give a bonus for occupying a citadel even if it's just intermediate for now
 		//but we want our units to take turns soaking damage, so we have to incentivise moving in.
 		//bonus should be larger than 60 to override the difference between firstline/secondline base score.
-		if (TacticalAIHelpers::IsPlayerCitadel(testPlot.getPlot(), assumedPosition.getPlayer()) && testPlot.getEnemyDistance() < 3)
+		bool bIsFrontlineCitadelOrCity = (TacticalAIHelpers::IsPlayerCitadel(testPlot.getPlot(), assumedPosition.getPlayer()) || testPlot.getPlot()->isCity()) && testPlot.getEnemyDistance() < 3;
+		if (bIsFrontlineCitadelOrCity)
 		{
 			if (pUnit->GetRange()>1 || testPlot.getNumAdjacentFriendlies(CvTacticalPlot::TD_LAND, unit.iPlotIndex) == 0 || testPlot.getNumAdjacentEnemies(CvTacticalPlot::TD_LAND) > 0)
 	 			iDangerScore += TACTICAL_COMBAT_CITADEL_BONUS;
@@ -7892,7 +7324,7 @@ STacticalAssignment ScorePlotForCombatUnitOffensiveMove(const SUnitStats& unit, 
 		}
 		else if (TacticalAIHelpers::IsOtherPlayerCitadel(testPlot.getPlot(), assumedPosition.getPlayer(), true))
 		{
-			if (movePlot.iMovesLeft>0) //can pillage this turn
+			if (iAssumedMovesLeft>0) //can pillage this turn
 				iDangerScore += TACTICAL_COMBAT_CITADEL_BONUS*2;
 			else
 				iDangerScore += TACTICAL_COMBAT_CITADEL_BONUS;
@@ -7904,7 +7336,7 @@ STacticalAssignment ScorePlotForCombatUnitOffensiveMove(const SUnitStats& unit, 
 
 	//final score
 	//danger values (typically negative!) are mostly useful as tiebreaker
-	result.iScore = iDamageScore * 10 + iPlotScore * 10 + iDangerScore;
+	result.iScore = iPlotScore * 10 + iDangerScore;
 
 	//often there are multiple identical units which could move into a plot (eg in naval battles)
 	//in that case we want to prefer the one which has more movement points left to make the movement animation look better
@@ -7913,113 +7345,12 @@ STacticalAssignment ScorePlotForCombatUnitOffensiveMove(const SUnitStats& unit, 
 	return result;
 }
 
-STacticalAssignment ScorePlotForCombatUnitDefensiveMove(const SUnitStats& unit, const CvTacticalPlot& testPlot, const SMovePlot& movePlot, 
-											const CvTacticalPosition& assumedPosition, eUnitMoveEvalMode evalMode)
-{
-	//default action is do nothing and invalid score (not -INT_MAX to to prevent overflows!)
-	STacticalAssignment result(unit.iPlotIndex,movePlot.iPlotIndex,unit.iUnitID,movePlot.iMovesLeft,unit.eMoveStrategy,TACTICAL_COMBAT_IMPOSSIBLE_SCORE,A_MOVE);
-
-	//the plot we're checking right now
-	const CvPlot* pTestPlot = testPlot.getPlot();
-	const CvUnit* pUnit = unit.pUnit;
-
-	//can we put a combat unit here?
-	if (testPlot.isBlockedByNonSimUnit(DomainForUnit(pUnit)))
-	{
-		//double check - the blocking flag is not 100% reliable in cities
-		if (!pTestPlot->isCoastalCityOrPassableImprovement(assumedPosition.getPlayer(), true, true) || pUnit->plot() != pTestPlot)
-			return result;
-	}
-
-	//cannot deal with enemies here, but we can capture civilians!
-	if (testPlot.isEnemyCombatUnit()||testPlot.isEnemyCity())
-		return result;
-
-	//different contributions
-	int iDamageScore = 0;
-	int iDangerScore = 0;
-	int iPlotScore = 0;
-
-	//ranged attacks are cross-domain
-	CvTacticalPlot::eTactPlotDomain eRelevantDomain = pUnit->IsCanAttackRanged() ? CvTacticalPlot::TD_BOTH : pTestPlot->isWater() ? CvTacticalPlot::TD_SEA : CvTacticalPlot::TD_LAND;
-
-	//lookup score by unit strategy / enemy distance
-	int iPlotTypeScores[5][5] = {
-		{ -1,-1,-1,-1,-1 }, //none (should not occur)
-		{ -1, 12, 6, 4, 1 }, //firstline
-		{ -1, 1, 12, 8, 1 }, //secondline
-		{ -1, 1, 8, 12, 1 }, //thirdline
-		{ -1, 1, 8, 8, -1 }, //support (can happen for damaged melee units)
-	};
-	iPlotScore = iPlotTypeScores[unit.eMoveStrategy][testPlot.getEnemyDistance(eRelevantDomain)];
-
-	//we use defensive moves also for gathering armies when there are no enemies around ...
-	const CvTacticalPlot& targetPlot = assumedPosition.getTactPlot( assumedPosition.getTarget()->GetPlotIndex() );
-	if (targetPlot.isValid() && !targetPlot.isEnemy())
-	{
-		//assume we want to defend the target, ie be ready for an attack from the "outside"
-		//move close to the (friendly) target and weigh the target distance to be competitive with the enemy distance
-		int iPlotDistance = plotDistance(*assumedPosition.getTarget(),*pTestPlot);
-		iPlotScore += 3*(3 - iPlotDistance);
-	}
-	else
-	{
-		//how much damage could we do with our next moves?
-		//for defensive moves we don't expect to kill any enemies, so consider it for all modes (initial, intermediate and final)
-		int iMaxAttacks = NumAttacksForUnit(movePlot.iMovesLeft, unit.iAttacksLeft);
-		iDamageScore = ScorePlotForPotentialAttacks(pUnit, testPlot, eRelevantDomain, iMaxAttacks, assumedPosition);
-	}
-
-	if (evalMode!=EM_INTERMEDIATE)
-	{
-		result.eAssignmentType = A_FINISH;
-		iDangerScore = ScoreTurnEnd(pUnit, unit.eLastAssignment, testPlot, movePlot.iMovesLeft, eRelevantDomain, unit.iSelfDamage, assumedPosition, evalMode);
-
-		if (iDangerScore == INT_MAX)
-			return result; //don't do it
-	}
-	else
-	{
-		//some indication of danger as a tiebreaker - final danger will be checked later
-		int	iDanger = pUnit->GetDanger(testPlot.getPlot(), assumedPosition.getKilledEnemies(), unit.iSelfDamage);
-		int iRemainingHP = pUnit->GetCurrHitPoints() - unit.iSelfDamage;
-		int iOverkillFactor = min(20, 5*iDanger / max(1, iRemainingHP));
-		iDangerScore -= iOverkillFactor;
-	}
-
-	if (testPlot.isEnemyCivilian()) //unescorted civilian
-	{
-		if (movePlot.iMovesLeft > 0 || testPlot.getNumAdjacentEnemies(CvTacticalPlot::TD_LAND) == 0)
-		{
-			CvUnit* pCivilian = pTestPlot->getUnitByIndex(0); //there should be only one ...
-			if (pCivilian)
-			{
-				//workers are not so important ...
-				iPlotScore += (pCivilian->AI_getUnitAIType() == UNITAI_WORKER) ? 5 : 20;
-				result.eAssignmentType = A_CAPTURE; //important so that the next assigment can be a move again
-			}
-		}
-	}
-
-	//consider visibility as well
-	iDangerScore += ScorePlotForVisibility(pUnit, testPlot);
-
-	//final score. dangerscore is typically negative!
-	result.iScore = iPlotScore*10 + iDamageScore*10 + iDangerScore;
-
-	//often there are multiple identical units which could move into a plot
-	//in that case we want to prefer the one which has more movement points left
-	result.iScore += result.iRemainingMoves / GD_INT_GET(MOVE_DENOMINATOR);
-
-	return result;
-}
-
 //stacking with combat units is allowed here!
-STacticalAssignment ScorePlotForNonFightingUnitMove(const SUnitStats& unit, const CvTacticalPlot& testPlot, const SMovePlot& movePlot, 
+STacticalAssignment ScorePlotForNonFightingUnitMove(const SUnitStats& unit, const CvTacticalPlot& testPlot, int iAssumedMovesLeft,
 											const CvTacticalPosition& assumedPosition, eUnitMoveEvalMode evalMode)
 {
-	//default action is do nothing and invalid score (not -INT_MAX to to prevent overflows!)
-	STacticalAssignment result(unit.iPlotIndex,movePlot.iPlotIndex,unit.iUnitID,movePlot.iMovesLeft,unit.eMoveStrategy,TACTICAL_COMBAT_IMPOSSIBLE_SCORE,A_MOVE);
+	//default action is do nothing and invalid score (not -INT_MAX, to prevent overflows!)
+	STacticalAssignment result(unit.iPlotIndex,testPlot.getPlotIndex(), unit.iUnitID, iAssumedMovesLeft, unit.eMoveStrategy, TACTICAL_COMBAT_IMPOSSIBLE_SCORE, A_MOVE);
 	int iScore = 0;
 		
 	//the plot we're checking right now
@@ -8062,39 +7393,48 @@ STacticalAssignment ScorePlotForNonFightingUnitMove(const SUnitStats& unit, cons
 			break;
 		}
 
-		if (evalMode != EM_INTERMEDIATE)
+		bool bHaveSimCover = false;
+		const vector<STacticalUnit>& units = testPlot.getUnitsAtPlot();
+		for (size_t i = 0; i < units.size(); i++)
 		{
-			//we want one of our own combat units covering us (either sim or non sim)
-			if (testPlot.isCombatEndTurn())
+			if (isCombatUnit(units[i].eMoveType))
 			{
-				bool bHaveSimCover = false;
-				const vector<STacticalUnit>& units = testPlot.getUnitsAtPlot();
-				for (size_t i = 0; i < units.size(); i++)
+				//we have to make sure our protector will stay ...
+				CvUnit* pDefender = GET_PLAYER(assumedPosition.getPlayer()).getUnit(units[i].iUnitID);
+				if (!assumedPosition.lastAssignmentIsAfterRestart(units[i].iUnitID) && !pDefender->shouldHeal(false))
 				{
-					if (isCombatUnit(units[i].eMoveType))
-					{
-						//we have to make sure our protector will stay ...
-						CvUnit* pDefender = GET_PLAYER(assumedPosition.getPlayer()).getUnit(units[i].iUnitID);
-						if (!assumedPosition.lastAssignmentIsAfterRestart(units[i].iUnitID) && !pDefender->shouldHeal(false))
-						{
-							bHaveSimCover = true;
-							break;
-						}
-					}
-				}
-				if (!bHaveSimCover)
-				{
-					bool bHaveRealCover = false;
-					CvUnit* pBestDefender = pTestPlot->getBestDefender(assumedPosition.getPlayer());
-					if (pTestPlot->isFriendlyCity(*pUnit) || (pBestDefender && pBestDefender->TurnProcessed() && !pBestDefender->isProjectedToDieNextTurn()))
-						bHaveRealCover = true;
-
-					//don't do it
-					if (!bHaveRealCover)
-						return result;
+					bHaveSimCover = true;
+					break;
 				}
 			}
-			else if (!pTestPlot->isFriendlyCity(*pUnit)) //cities are considered safe
+		}
+
+		bool bHaveRealCover = false;
+		if (!bHaveSimCover)
+		{
+			//this check is stronger than pure IsCombatUnitEndTurn
+			CvUnit* pBestDefender = pTestPlot->getBestDefender(assumedPosition.getPlayer());
+			bool bDefenderIsGood = pBestDefender && pBestDefender->TurnProcessed() && !pBestDefender->isProjectedToDieNextTurn() && pBestDefender->GetDanger() < pBestDefender->GetCurrHitPoints();
+			if (pTestPlot->isFriendlyCity(*pUnit) || bDefenderIsGood)
+				bHaveRealCover = true;
+		}
+
+		if (evalMode == EM_INTERMEDIATE)
+		{
+			//don't do it if we don't have enough movement to move to a safe plot later
+			if (iAssumedMovesLeft<=GD_INT_GET(MOVE_DENOMINATOR) && !bHaveSimCover && !bHaveRealCover)
+				return result;
+		}
+		else
+		{
+			if (testPlot.isNicePlotForCitadel() && pUnit->IsGreatGeneral() && iAssumedMovesLeft > 0)
+			{
+				result.eAssignmentType = A_USE_POWER;
+				result.iRemainingMoves = 0;
+				iScore += 100;
+			}
+			//we want one of our own combat units covering us (either sim or non sim). cities are also considered safe
+			else if (!pTestPlot->isFriendlyCity(*pUnit) && !bHaveSimCover && !bHaveRealCover) 
 				return result;
 
 			//surrounding cover is also good
@@ -8121,7 +7461,7 @@ STacticalAssignment ScorePlotForNonFightingUnitMove(const SUnitStats& unit, cons
 			iScore++;
 
 		//avoid overlap. this works only because we ignore our own aura when calling this function!
-		if (testPlot.hasSupportBonus(unit.iPlotIndex) && movePlot.iPlotIndex!=unit.iPlotIndex)
+		if (testPlot.hasSupportBonus(unit.iPlotIndex) && testPlot.getPlotIndex()!=unit.iPlotIndex)
 			iScore /= 2;
 	}
 	//plain embarked units
@@ -8141,22 +7481,14 @@ STacticalAssignment ScorePlotForNonFightingUnitMove(const SUnitStats& unit, cons
 			break;
 		}
 
-		//can we put a combat unit here?
-		if (testPlot.isBlockedByNonSimUnit(DomainForUnit(pUnit)))
-		{
-			//double check - the blocking flag is not 100% reliable in cities
-			if (!pTestPlot->isCoastalCityOrPassableImprovement(assumedPosition.getPlayer(), true, true) || pUnit->plot() != pTestPlot)
-				return result;
-		}
-
 		if (evalMode!=EM_INTERMEDIATE)
 		{
 			//catch the case with infinite danger
 			int iDanger = min(1000, pUnit->GetDanger(pTestPlot, assumedPosition.getKilledEnemies(), 0));
 
-			//embarked units have limited vision! but if we don't expect combat, we can afford to be less careful
+			//embarked units have limited vision so be careful
 			if (testPlot.isEdgePlot())
-				iDanger += (assumedPosition.getAggressionLevel() == AL_NONE) ? 20 : 50;
+				iDanger += 50;
 
 			//we want friends around us
 			int iFriends = (evalMode==EM_FINAL) ? testPlot.getNumAdjacentFriendliesEndTurn(CvTacticalPlot::TD_BOTH) : testPlot.getNumAdjacentFriendlies(CvTacticalPlot::TD_BOTH, -1);
@@ -8178,13 +7510,17 @@ STacticalAssignment ScorePlotForRangedAttack(const SUnitStats& unit, const CvTac
 {
 	STacticalAssignment newAssignment(unit.iPlotIndex,enemyPlot.getPlotIndex(),unit.iUnitID,unit.iMovesLeft,unit.eMoveStrategy,-1,A_RANGEATTACK);
 
-	//even if we don't want to attack now we might want to attack next turn
-	eAggressionLevel level = assumedPosition.getAggressionLevel() == AL_NONE ? AL_LOW : assumedPosition.getAggressionLevel();
-
 	//received damage is zero here but still use the correct unit number ratio so as not to distort scores
-	ScoreAttack(enemyPlot, unit.pUnit, assumedUnitPlot, level, assumedPosition.getAggressionBias(), gTactPosStorage.getCache(), newAssignment);
+	bool bIsKill = ScoreAttackDamage(enemyPlot, unit.pUnit, assumedUnitPlot, assumedPosition.getAggressionLevel(), assumedPosition.getAggressionBias(), gTactPosStorage.getAttackCache(), newAssignment);
 	if (newAssignment.iScore < 0)
 		return newAssignment;
+
+	//times 10 to match with ScorePlotForCombatUnitMove()
+	newAssignment.iScore *= 10;
+
+	//small bias for staying close to our cities, to have a way to retreat if necessary
+	int iCityDistanceScore = 10 - GET_PLAYER(assumedPosition.getPlayer()).GetCityDistanceInPlots(assumedUnitPlot.getPlot());
+	newAssignment.iScore += max(iCityDistanceScore, 0);
 
 	//what happens next?
 	if (AttackEndsTurn(unit.pUnit, unit.iAttacksLeft))
@@ -8203,9 +7539,9 @@ STacticalAssignment ScorePlotForRangedAttack(const SUnitStats& unit, const CvTac
 		newAssignment.iScore += (newAssignment.iRemainingMoves * 2) / GD_INT_GET(MOVE_DENOMINATOR);
 	}
 
-	//bring it into the same range as movement (add 8 so we're always better than just finishing the turn on a frontline plot)
-	//same logic as in ScorePlotForMeleeAttack()
-	newAssignment.iScore = newAssignment.iScore + 8 * 10;;
+	//flat bonus for a kill
+	if (bIsKill)
+		newAssignment.iScore += 1000;
 
 	//a slight boost for attacking the "real" target
 	if ( enemyPlot.getPlotIndex()==assumedPosition.getTarget()->GetPlotIndex() )
@@ -8214,10 +7550,10 @@ STacticalAssignment ScorePlotForRangedAttack(const SUnitStats& unit, const CvTac
 	return newAssignment;
 }
 
-STacticalAssignment ScorePlotForMeleeAttack(const SUnitStats& unit, const CvTacticalPlot& assumedUnitPlot, const CvTacticalPlot& enemyPlot, const SMovePlot& movePlot, const CvTacticalPosition& assumedPosition)
+STacticalAssignment ScorePlotForMeleeAttack(const SUnitStats& unit, const CvTacticalPlot& assumedUnitPlot, const CvTacticalPlot& enemyPlot, int iAssumedMovesLeft, const CvTacticalPosition& assumedPosition)
 {
 	//default action is invalid
-	STacticalAssignment result(unit.iPlotIndex, movePlot.iPlotIndex, unit.iUnitID, unit.iMovesLeft, unit.eMoveStrategy, -INT_MAX, A_MELEEATTACK);
+	STacticalAssignment result(unit.iPlotIndex, enemyPlot.getPlotIndex(), unit.iUnitID, 0, unit.eMoveStrategy, -INT_MAX, A_MELEEATTACK);
 
 	//the plot we're checking right now
 	const CvPlot* pEnemyPlot = enemyPlot.getPlot();
@@ -8233,11 +7569,11 @@ STacticalAssignment ScorePlotForMeleeAttack(const SUnitStats& unit, const CvTact
 
 	//how often can we attack this turn (depending on moves left on the unit)
 	int iMaxAttacks = min(unit.iAttacksLeft, (unit.iMovesLeft + GD_INT_GET(MOVE_DENOMINATOR) - 1) / GD_INT_GET(MOVE_DENOMINATOR));
-	if (iMaxAttacks == 0)
+	if (iMaxAttacks <= 0)
 		return result;
 
 	//check how much damage we could do
-	ScoreAttack(enemyPlot, pUnit, assumedUnitPlot, assumedPosition.getAggressionLevel(), assumedPosition.getAggressionBias(), gTactPosStorage.getCache(), result);
+	bool bIsKill = ScoreAttackDamage(enemyPlot, pUnit, assumedUnitPlot, assumedPosition.getAggressionLevel(), assumedPosition.getAggressionBias(), gTactPosStorage.getAttackCache(), result);
 	if (result.iScore < 0)
 		return result;
 
@@ -8249,9 +7585,9 @@ STacticalAssignment ScorePlotForMeleeAttack(const SUnitStats& unit, const CvTact
 		result.iRemainingMoves = 0;
 	else
 	{
-		int iMoveCost = unit.iMovesLeft - movePlot.iMovesLeft;
+		int iMoveCost = unit.iMovesLeft - iAssumedMovesLeft;
 		int iAttackCost = max(iMoveCost, GD_INT_GET(MOVE_DENOMINATOR));
-		result.iRemainingMoves -= min(unit.iMovesLeft, iAttackCost);
+		result.iRemainingMoves = max(0,unit.iMovesLeft - iAttackCost);
 	}
 
 	//don't break formation if there are many enemies around
@@ -8260,6 +7596,13 @@ STacticalAssignment ScorePlotForMeleeAttack(const SUnitStats& unit, const CvTact
 		result.iScore = -INT_MAX;
 		return result;
 	}
+
+	//bring it into the same range as movement (add 8 so we're always better than just finishing the turn on a frontline plot)
+	result.iScore = (result.iScore + 8) * 10;
+
+	//small bias for staying close to our cities, to have a way to retreat if necessary
+	int iCityDistanceScore = 10 - GET_PLAYER(assumedPosition.getPlayer()).GetCityDistanceInPlots(assumedUnitPlot.getPlot());
+	result.iScore += max(iCityDistanceScore, 0);
 
 	//strongly discourage melee attack on cities if the real target is something else (capturing is ok)
 	if (result.eAssignmentType != A_MELEEKILL && enemyPlot.isEnemyCity() && assumedPosition.getTarget() != pEnemyPlot)
@@ -8273,8 +7616,9 @@ STacticalAssignment ScorePlotForMeleeAttack(const SUnitStats& unit, const CvTact
 	if (result.eAssignmentType == A_MELEEKILL && enemyPlot.isEnemyCivilian())
 		result.iScore += 5;
 
-	//bring it into the same range as movement (add 8 so we're always better than just finishing the turn on a frontline plot)
-	result.iScore = (result.iScore + 8) * 10;
+	//flat bonus for a kill
+	if (bIsKill)
+		result.iScore += 1000;
 
 	return result;
 }
@@ -8286,7 +7630,7 @@ CvTacticalPlot::CvTacticalPlot(const CvPlot* plot, PlayerTypes ePlayer, const ve
 		return;
 
 	//minor players ignore barb camps and the units inside
-	CvPlayer& kPlayer = GET_PLAYER(ePlayer);
+	CvPlayerAI& kPlayer = GET_PLAYER(ePlayer);
 	if (plot->getRevealedImprovementType(kPlayer.getTeam()) == GD_INT_GET(BARBARIAN_CAMP_IMPROVEMENT) && kPlayer.isMinorCiv() && !kPlayer.isBarbarian())
 		return;
 
@@ -8301,6 +7645,8 @@ CvTacticalPlot::CvTacticalPlot(const CvPlot* plot, PlayerTypes ePlayer, const ve
 	//updated once at the beginning
 	nVisiblePlotsNearEnemyRange2 = 0;
 	nVisiblePlotsNearEnemyRange3 = 0;
+	//maybe only plant citadels if we're not winning anyhow or if we have many generals? kPlayer.GetDiplomacyAI()->GetStateAllWars()
+	bMightWantCitadel = kPlayer.IsNicePlotForCitadel(pPlot);
 
 	//updated if necessary
 	bEdgeOfTheKnownWorldUnknown = true;
@@ -8333,6 +7679,7 @@ CvTacticalPlot::CvTacticalPlot(const CvPlot* plot, PlayerTypes ePlayer, const ve
 	//enemy distance alone is not enough
 	//there may be multiple enemy combat units but we only care about the best defender
 	//also ignore the official visibility, we only add tactical plots if we can see them in the sim
+	//note that AI can see all submarines at this stage (might be ignored as tactical target though)
 	pEnemyCombatUnit = pPlot->getBestDefender(NO_PLAYER,ePlayer,NULL,true,true);
 
 	//concerning embarkation. this is complex because it allows combat units to stack, violating the 1UPT rule.
@@ -8374,16 +7721,14 @@ CvTacticalPlot::CvTacticalPlot(const CvPlot* plot, PlayerTypes ePlayer, const ve
 			if (pPlotUnit->IsCanDefend())
 			{
 				if (pPlotUnit->getDomainType() == DOMAIN_LAND)
-				{
 					bfBlockedByNonSimCombatUnit |= 1;
-					bfBlockedByNonSimCombatUnit |= 4;
-				}
 				else if (pPlotUnit->getDomainType() == DOMAIN_SEA)
-				{
 					bfBlockedByNonSimCombatUnit |= 2;
-					bfBlockedByNonSimCombatUnit |= 4;
-				}
 			}
+
+			//rules for cities are complex so just don't try it
+			if (pPlot->isCity())
+				bfBlockedByNonSimCombatUnit |= 3;
 		}
 		//owned units not included in sim
 		else if (std::find(allOurUnits.begin(), allOurUnits.end(), pPlotUnit) == allOurUnits.end())
@@ -8391,22 +7736,19 @@ CvTacticalPlot::CvTacticalPlot(const CvPlot* plot, PlayerTypes ePlayer, const ve
 			if (pPlotUnit->IsCanDefend())
 			{
 				if (pPlotUnit->getDomainType() == DOMAIN_LAND)
-				{
 					bfBlockedByNonSimCombatUnit |= 1;
-					bfBlockedByNonSimCombatUnit |= 4;
-				}
 				else if (pPlotUnit->getDomainType() == DOMAIN_SEA)
-				{
 					bfBlockedByNonSimCombatUnit |= 2;
-					bfBlockedByNonSimCombatUnit |= 4;
-				}
 
-				if (pPlotUnit->TurnProcessed() && !pPlotUnit->isProjectedToDieNextTurn())
+				if (pPlotUnit->TurnProcessed())
+					//we need to update the adjacent friendly unit count for adjacent plots
+					//but they are not guaranteed to exist at this point so we have to defer this
 					bFriendlyDefenderEndTurn = true;
 
 				//rules for cities are complex so just don't try it
+				//note that owned cities without a garrison are fine to use for tactsim
 				if (pPlot->isCity())
-					bfBlockedByNonSimCombatUnit = 7;
+					bfBlockedByNonSimCombatUnit |= 3;
 			}
 		}
 	}
@@ -8418,6 +7760,11 @@ CvTacticalPlot::CvTacticalPlot(const CvPlot* plot, PlayerTypes ePlayer, const ve
 		aiEnemyDistance[TD_LAND] = 0;
 		aiEnemyDistance[TD_SEA] = 0;
 	}
+}
+
+bool CvTacticalPlot::operator!=(const CvTacticalPlot& rhs) const
+{
+	return memcmp(this,&rhs,sizeof(CvTacticalPlot))!=0;
 }
 
 void CvTacticalPlot::resetVolatileProperties()
@@ -8439,7 +7786,7 @@ void CvTacticalPlot::resetVolatileProperties()
 bool CvTacticalPlot::isBlockedByNonSimUnit(eTactPlotDomain eDomain) const
 {
 	if (eDomain == TD_BOTH)
-		return bfBlockedByNonSimCombatUnit != 0;
+		return (bfBlockedByNonSimCombatUnit & 3) != 0;
 	else if (eDomain == TD_LAND)
 		return (bfBlockedByNonSimCombatUnit & 1) != 0;
 	else if (eDomain == TD_SEA)
@@ -8489,16 +7836,20 @@ bool CvTacticalPlot::hasSupportBonus(int iIgnoreUnitPlot) const
 	return false;
 }
 
-void CvTacticalPlot::setCombatUnitEndTurn(CvTacticalPosition& currentPosition, eTactPlotDomain unitDomain)
+void CvTacticalPlot::setCombatUnitEndTurn(CvTacticalPosition& currentPosition, eTactPlotDomain unitDomain, bool bOverride)
 {
-	//don't do this twice
-	if (!pPlot || bFriendlyDefenderEndTurn)
+	//can't do anything before initialization is done
+	if (!pPlot)
+		return;
+	
+	//don't do this twice unless override
+	if (bFriendlyDefenderEndTurn && !bOverride)
 		return;
 
 	bFriendlyDefenderEndTurn = true;
 
 	CvPlot** aNeighbors = GC.getMap().getNeighborsUnchecked(pPlot);
-	for (int i = 0; i < 6; i++)
+	for (int i = 0; i < NUM_DIRECTION_TYPES; i++)
 	{
 		CvPlot* pNeighbor = aNeighbors[i];
 		if (pNeighbor)
@@ -8510,22 +7861,52 @@ void CvTacticalPlot::setCombatUnitEndTurn(CvTacticalPosition& currentPosition, e
 				if (unitDomain != TD_BOTH)
 					tactPlot.aiFriendlyCombatUnitsAdjacentEndTurn[TD_BOTH]++;
 
-				if (tactPlot.aiFriendlyCombatUnitsAdjacentEndTurn[TD_BOTH] > 7)
+				if (tactPlot.aiFriendlyCombatUnitsAdjacentEndTurn[TD_LAND] > 6 || tactPlot.aiFriendlyCombatUnitsAdjacentEndTurn[TD_SEA] > 6)
 					OutputDebugString("implausible amount of neighbors");
 			}
 		}
 	}
 }
 
-void CvTacticalPlot::changeNeighboringUnitCount(CvTacticalPosition& currentPosition, const STacticalAssignment& move, int iChange) const
+bool CvTacticalPlot::hasCoverFromOtherUnits(const CvTacticalPosition& currentPosition) const
+{
+	if (!isValid())
+		return false;
+
+	//performance optimization
+	if (getEnemyDistance() < 2)
+		return false;
+	if (getEnemyDistance() > 3)
+		return true;
+
+	eTactPlotDomain eDomain = getPlot()->isWater() ? TD_SEA : TD_LAND;
+	CvPlot** aNeighbors = GC.getMap().getNeighborsUnchecked(pPlot);
+	for (int i = 0; i < NUM_DIRECTION_TYPES; i++)
+	{
+		CvPlot* pNeighbor = aNeighbors[i];
+		if (pNeighbor)
+		{
+			const CvTacticalPlot& neighbor = currentPosition.getTactPlot(pNeighbor->GetPlotIndex());
+			if (neighbor.isValid() && neighbor.getEnemyDistance(eDomain) < getEnemyDistance(eDomain))
+			{
+				if (!neighbor.isCombatEndTurn())
+					return false;
+			}
+		}
+	}
+
+	//did not find an empty plot towards the enemy
+	return true;
+}
+
+void CvTacticalPlot::changeNeighboringUnitCount(CvTacticalPosition& currentPosition, eUnitMovementStrategy moveType, eTactPlotDomain unitDomain, int iChange) const
 {
 	//we don't count embarked units
-	if (!pPlot || isEmbarkedUnit(move.eMoveType))
+	if (!pPlot || isEmbarkedUnit(moveType))
 		return;
 
-	CvUnit* pUnit = GET_PLAYER(currentPosition.getPlayer()).getUnit(move.iUnitID);
 	CvPlot** aNeighbors = GC.getMap().getNeighborsUnchecked(pPlot);
-	for (int i = 0; i < 6; i++)
+	for (int i = 0; i < NUM_DIRECTION_TYPES; i++)
 	{
 		CvPlot* pNeighbor = aNeighbors[i];
 		if (pNeighbor)
@@ -8533,16 +7914,15 @@ void CvTacticalPlot::changeNeighboringUnitCount(CvTacticalPosition& currentPosit
 			CvTacticalPlot& tactPlot = currentPosition.getTactPlotMutable(pNeighbor->GetPlotIndex());
 			if (tactPlot.isValid())
 			{
-				if (isSupportUnit(move.eMoveType))
+				if (isSupportUnit(moveType))
 					tactPlot.nSupportUnitsAdjacent += iChange;
 				else //embarked is already handled
 				{
-					CvTacticalPlot::eTactPlotDomain unitDomain = DomainForUnit(pUnit);
 					tactPlot.aiFriendlyCombatUnitsAdjacent[unitDomain] += iChange;
 					if (unitDomain != TD_BOTH)
 						tactPlot.aiFriendlyCombatUnitsAdjacent[TD_BOTH] += iChange;
 
-					if (tactPlot.aiFriendlyCombatUnitsAdjacent[TD_BOTH] > 7)
+					if (tactPlot.aiFriendlyCombatUnitsAdjacentEndTurn[TD_LAND] > 6 || tactPlot.aiFriendlyCombatUnitsAdjacentEndTurn[TD_SEA] > 6)
 						OutputDebugString("implausible amount of neighbors");
 				}
 			}
@@ -8556,8 +7936,11 @@ void CvTacticalPlot::friendlyUnitMovingIn(CvTacticalPosition& currentPosition, c
 	removeEnemyUnitIfPresent();
 	bEnemyCivilianPresent = false;
 
+	CvUnit* pUnit = GET_PLAYER(currentPosition.getPlayer()).getUnit(assignment.iUnitID);
+	CvTacticalPlot::eTactPlotDomain unitDomain = DomainForUnit(pUnit);
+
 	vUnitsHere.push_back( STacticalUnit(assignment.iUnitID,assignment.eMoveType));
-	changeNeighboringUnitCount(currentPosition, assignment, +1);
+	changeNeighboringUnitCount(currentPosition, assignment.eMoveType, unitDomain, +1);
 }
 
 void CvTacticalPlot::friendlyUnitMovingOut(CvTacticalPosition& currentPosition, const STacticalAssignment& assignment)
@@ -8566,8 +7949,11 @@ void CvTacticalPlot::friendlyUnitMovingOut(CvTacticalPosition& currentPosition, 
 	{
 		if (assignment.iUnitID == it->iUnitID)
 		{
+			CvUnit* pUnit = GET_PLAYER(currentPosition.getPlayer()).getUnit(assignment.iUnitID);
+			CvTacticalPlot::eTactPlotDomain unitDomain = DomainForUnit(pUnit);
+
 			vUnitsHere.erase(it);
-			changeNeighboringUnitCount(currentPosition, assignment, -1);
+			changeNeighboringUnitCount(currentPosition, assignment.eMoveType, unitDomain, -1);
 			return;
 		}
 	}
@@ -8575,7 +7961,6 @@ void CvTacticalPlot::friendlyUnitMovingOut(CvTacticalPosition& currentPosition, 
 	OutputDebugString("invalid move\n");
 }
 
-//this is quite unreliable as it does not count non-simulated friendly units!
 int CvTacticalPlot::getNumAdjacentFriendlies(eTactPlotDomain eDomain, int iIgnoreUnitPlot) const 
 {
 	if (iIgnoreUnitPlot >= 0 && isValid())
@@ -8588,7 +7973,6 @@ int CvTacticalPlot::getNumAdjacentFriendlies(eTactPlotDomain eDomain, int iIgnor
 	return aiFriendlyCombatUnitsAdjacent[eDomain];
 }
 
-//this is quite unreliable as it does not count non-simulated friendly units!
 int CvTacticalPlot::getNumAdjacentFriendliesEndTurn(eTactPlotDomain eDomain) const 
 { 
 	return aiFriendlyCombatUnitsAdjacentEndTurn[eDomain]; 
@@ -8640,7 +8024,7 @@ bool CvTacticalPlot::checkEdgePlotsForSurprises(const CvTacticalPosition& curren
 	int iRefDistance = plotDistance(pPlot->getX(), pPlot->getY(), pTarget->getX(), pTarget->getY());
 
 	CvPlot** aNeighbors = GC.getMap().getNeighborsUnchecked(pPlot);
-	for (int i = 0; i < 6; i++)
+	for (int i = 0; i < NUM_DIRECTION_TYPES; i++)
 	{
 		CvPlot* pNeighbor = aNeighbors[i];
 		if (!pNeighbor)
@@ -8737,17 +8121,12 @@ bool IsCombatUnit(const SUnitStats& unit)
 	}
 }
 
-STacticalAssignment ScorePlotForMove(const SUnitStats& unit, const CvTacticalPlot& testPlot, const SMovePlot& movePlot, const CvTacticalPosition& assumedPosition, eUnitMoveEvalMode evalMode)
+STacticalAssignment ScorePlotForMove(const SUnitStats& unit, const CvTacticalPlot& testPlot, int iAssumedMovesLeft, const CvTacticalPosition& assumedPosition, eUnitMoveEvalMode evalMode)
 {
 	if (IsCombatUnit(unit))
-	{
-		if (assumedPosition.getAggressionLevel() > AL_NONE)
-			return ScorePlotForCombatUnitOffensiveMove(unit, testPlot, movePlot, assumedPosition, evalMode);
-		else
-			return ScorePlotForCombatUnitDefensiveMove(unit, testPlot, movePlot, assumedPosition, evalMode);
-	}
+		return ScorePlotForCombatUnitMove(unit, testPlot, iAssumedMovesLeft, assumedPosition, evalMode);
 	else
-		return ScorePlotForNonFightingUnitMove(unit, testPlot, movePlot, assumedPosition, evalMode);
+		return ScorePlotForNonFightingUnitMove(unit, testPlot, iAssumedMovesLeft, assumedPosition, evalMode);
 }
 
 void CvTacticalPosition::getPreferredAssignmentsForUnit(const SUnitStats& unit, int nMaxCount) const
@@ -8762,16 +8141,16 @@ void CvTacticalPosition::getPreferredAssignmentsForUnit(const SUnitStats& unit, 
 	//on the other hand, the daring moves may still be possible later in the sim when they are not so daring anymore.
 	//todo: try "fixup moves", meaning if a possible move is invalid, see if it can be made valid by moving another unit.
 	gPossibleMoves.clear();
+	gPossibleRangedAttacks.clear();
 
 	const CvTacticalPlot& assumedUnitPlot = getTactPlot(unit.iPlotIndex);
 	CvUnit* pUnit = GET_PLAYER(getPlayer()).getUnit(unit.iUnitID);
+	CvTacticalPlot::eTactPlotDomain eRelevantDomain = DomainForUnit(pUnit);
 	if (!pUnit || !assumedUnitPlot.isValid())
 		return;
 
-	//what is the score for simply staying put and doing nothing?
-	//important not to pass zero moves left, otherwise we might ignore possible attacks
-	//do not score danger so we compare apples to apples below
-	STacticalAssignment refAssignment = ScorePlotForMove(unit, assumedUnitPlot, SMovePlot(unit.iPlotIndex, 0, unit.iMovesLeft, 0), *this, EM_INTERMEDIATE);
+	//if the unit is a garrison in a citadel or city, we should not move out ...
+	bool bIsFrontlineCitadelOrCity = (TacticalAIHelpers::IsPlayerCitadel(assumedUnitPlot.getPlot(), getPlayer()) || assumedUnitPlot.getPlot()->isCity()) && assumedUnitPlot.getEnemyDistance() < 3;
 
 	//check moves and melee attacks first
 	const ReachablePlots& reachablePlots = getReachablePlotsForUnit(unit);
@@ -8779,137 +8158,162 @@ void CvTacticalPosition::getPreferredAssignmentsForUnit(const SUnitStats& unit, 
 	{
 		//the plot we're checking right now
 		const CvTacticalPlot& testPlot = getTactPlot(it->iPlotIndex);
-
-		//sanity check
 		if (!testPlot.isValid())
 			continue;
 
-		if (IsCombatUnit(unit) && testPlot.isEnemy())
+		//if there is an enemy in the plot, we want to attack
+		if (testPlot.isEnemy())
 		{
 			//ranged attacks are handled separately below
-			if (pUnit->IsCanAttackRanged() || eAggression == AL_NONE)
+			if (pUnit->IsCanAttackRanged() || !IsCombatUnit(unit))
 				continue;
 
 			//for a melee attack we need to move to a defined adjacent plot first
 			if (plotDistance(*assumedUnitPlot.getPlot(), *testPlot.getPlot()) > 1)
 				continue;
 
-			STacticalAssignment newAssignment = ScorePlotForMeleeAttack(unit,assumedUnitPlot,testPlot,*it,*this);
+			//does the attack make sense
+			STacticalAssignment attack = ScorePlotForMeleeAttack(unit,assumedUnitPlot,testPlot,it->iMovesLeft,*this);
+			if (attack.iScore < 0)
+				continue;
 
-			//attacks must have a positive score
-			bool bCanEndTurnHere = (newAssignment.iRemainingMoves > 0) || couldEndTurnAfterThisAssignment(newAssignment);
-			if (newAssignment.iScore > 0 && bCanEndTurnHere)
-				gPossibleMoves.push_back(newAssignment);
+			//where would we end the turn? ie are we advancing or not
+			const CvTacticalPlot& newPlot = (attack.eAssignmentType == A_MELEEKILL) ? testPlot : assumedUnitPlot;
+			if (attack.iRemainingMoves == 0 && !canProbablyEndTurnInPlot(attack, newPlot))
+				continue;
+
+			//also consider which plot we end up in
+			STacticalAssignment moveToPlot = ScorePlotForMove(unit, newPlot, attack.iRemainingMoves, *this, EM_INTERMEDIATE);
+			attack.iScore += moveToPlot.iScore;
+
+			gPossibleMoves.push_back(attack);
+			//done with this plot
+			continue;
 		}
-		else if (unit.iPlotIndex == it->iPlotIndex)
+
+		//what is the score for simply staying put and not attacking anybody?
+		//use EM_INTERMEDIATE so we're less strict concerning danger, enemies might be killed in the course of the sim
+		STacticalAssignment moveToPlot = ScorePlotForMove(unit, testPlot, it->iMovesLeft, *this, EM_INTERMEDIATE);
+
+		//already there?
+		if (unit.iPlotIndex == it->iPlotIndex)
 		{
-			STacticalAssignment newAssignment = ScorePlotForPillageMove(unit, testPlot, *it, *this);
-			//pillaging must have a positive score
-			if (newAssignment.iScore > 0 && (newAssignment.iRemainingMoves>0 || couldEndTurnAfterThisAssignment(newAssignment)))
-				gPossibleMoves.push_back(newAssignment);
-			else if (refAssignment.iScore > 0)
+			//try pillaging as an intermediate step
+			STacticalAssignment pillaging = ScorePlotForPillageMove(unit, testPlot, it->iMovesLeft, *this);
+			if (pillaging.iScore > 0 && (pillaging.iRemainingMoves > 0 || canProbablyEndTurnInPlot(pillaging, testPlot)))
+				//continue with the same plot, maybe in the final analysis we will skip the pillage because we need the movement points
+				gPossibleMoves.push_back(pillaging);
+
+			//try ranged attacks
+			if (pUnit->IsCanAttackRanged() && unit.iAttacksLeft > 0 && unit.iMovesLeft > 0)
 			{
-				int iBonus = 0;
+				const vector<int>& rangeAttackPlots = getRangeAttackPlotsForUnit(unit);
+				for (vector<int>::const_iterator it = rangeAttackPlots.begin(); it != rangeAttackPlots.end(); ++it)
+				{
+					//the plot we're checking right now
+					const CvTacticalPlot& enemyPlot = getTactPlot(*it);
+
+					//note: all valid plots are visible by definition
+					if (enemyPlot.isValid() && enemyPlot.isEnemy())
+					{
+						STacticalAssignment rangedAttack = ScorePlotForRangedAttack(unit, assumedUnitPlot, enemyPlot, *this);
+						if (rangedAttack.iScore < 0)
+							continue;
+
+						//this is a catch-22: we really want to allow dangerous attacks because we might be able to kill the enemy unit making it safe.
+						//experience shows this leads to a lot of "impossible" positions which have to be discarded later, killing performance.
+						//but canProbablyEndTurnAfterThisAssignment() will consider near-kills for danger estimation!
+						if (rangedAttack.iRemainingMoves == 0 && !canProbablyEndTurnInPlot(rangedAttack, testPlot))
+							continue;
+
+						//discourage attacks on cities with non-siege units if the real target is something else
+						if (enemyPlot.isEnemyCity() && getTarget() != enemyPlot.getPlot() && pUnit->GetRange() > 1 && pUnit->AI_getUnitAIType() != UNITAI_CITY_BOMBARD)
+							rangedAttack.iScore /= 2;
+
+						//fixme: maybe danger changed because we killed or near-killed a unit so update the baseline score?
+						//but let's assume the difference is small
+						rangedAttack.iScore += moveToPlot.iScore;
+
+						gPossibleRangedAttacks.push_back(rangedAttack);
+					}
+				}
+			}
+
+			//also try just staying in place
+			//doesn't matter if we have movement left in this case
+			bool bWantToEndTurnHere = gPossibleRangedAttacks.empty() && canProbablyEndTurnInPlot(moveToPlot, testPlot);
+			if (bWantToEndTurnHere)
+			{
 				//give a bonus for potential fortifying/healing
-				//redundant with ScoreTurnEnd but we have to make sure we consider these moves in the first place
-				if (it->iMovesLeft == pUnit->maxMoves())
+				//redundant with ScoreCombatUnitTurnEnd but we have to make sure we consider these moves in the first place
+				if (it->iMovesLeft == unit.iMaxMoves)
 				{
 					if (pUnit->getDamage() > /*10 in CP, 7 in VP*/ GD_INT_GET(FRIENDLY_HEAL_RATE) / 2)
 					{
 						//calling canHeal is too expensive, so fake it
 						if (pUnit->getDomainType() != DOMAIN_SEA || testPlot.getPlot()->IsFriendlyTerritory(pUnit->getOwner()) || pUnit->isHealOutsideFriendly())
-							iBonus += min(23, pUnit->getDamage());
+							moveToPlot.iScore += min(23, pUnit->getDamage());
 					}
 					if (pUnit->IsEverFortifyable())
-						iBonus += (pUnit->GetDamageAoEFortified()>0) ? 37 : 23;
-				}
-				//same bonus is given for moving in ...
-				if (TacticalAIHelpers::IsPlayerCitadel(testPlot.getPlot(), getPlayer()) && testPlot.getEnemyDistance() <= 3)
-				{
-					//bonus if this is not suicide or nobody is around to take over
-					if (!pUnit->isProjectedToDieNextTurn() || testPlot.getNumAdjacentFriendlies(CvTacticalPlot::TD_LAND,-1) == 0)
-	 					iBonus += TACTICAL_COMBAT_CITADEL_BONUS;
+						moveToPlot.iScore += (pUnit->GetDamageAoEFortified() > 0) ? 37 : 23;
 				}
 
-				bool bCanEndTurnHere = couldEndTurnAfterThisAssignment(refAssignment);
-				if (bCanEndTurnHere)
-				{
-					//subtract a little for wasted movement points to balance out what we added in the ref assignment
-					gPossibleMoves.push_back(
-						STacticalAssignment(unit.iPlotIndex, unit.iPlotIndex, unit.iUnitID, unit.iMovesLeft, unit.eMoveStrategy,
-							iBonus - unit.iMovesLeft / GD_INT_GET(MOVE_DENOMINATOR), A_FINISH_TEMP));
-				}
+				//how much damage could we do with our next moves?
+				//check this only during simulation; don't use it for initial/final score as it decreases with enemies killed!
+				int iDummy = -1; //will be ignored since we don't do the attack this turn
+				int iDamageScore = ScorePlotForPotentialAttacks(pUnit, testPlot, eRelevantDomain, pUnit->getNumAttacks(), *this, iDummy);
+				//note that "passive damage" ie covering our own units is implicit in the plot score for firstline units
+
+				moveToPlot.eAssignmentType = A_FINISH_TEMP;
+				moveToPlot.iScore += iDamageScore*10;
+				gPossibleMoves.push_back(moveToPlot);
 			}
 		}
-		else
+		else //moving to a different plot
 		{
 			//prevent two moves in a row, that is inefficient and can lead to "shuttling" behavior
 			//note: if a move increases tile visibility we change it to MOVE_FORCED so we can move again!
 			if (unit.eLastAssignment == A_MOVE || unit.eLastAssignment == A_MOVE_SWAP)
 				continue;
 
-			//make sure we have a chance to execute this move ... so skip it if there is an unmoveable block
-			if (IsCombatUnit(unit))
-			{
-				int blocks = countBlockingUnitsAtPlot(testPlot.getPlotIndex(), unit.eMoveStrategy);
-				if (blocks > 1 || (blocks == 1 && getAvailableUnitStats( getFirstBlockingUnitIDAtPlot(testPlot.getPlotIndex(), unit.eMoveStrategy) ) == NULL))
-					continue;
-			}
-
-			STacticalAssignment newAssignment = ScorePlotForMove(unit, testPlot, *it, *this, EM_INTERMEDIATE);
-
-			//may be invalid
-			bool bCanEndTurnHereOrFlee = (newAssignment.iRemainingMoves>0) || couldEndTurnAfterThisAssignment(newAssignment);
-			if (!bCanEndTurnHereOrFlee)
+			//don't move out of a city if there are many enemies around
+			if (bIsFrontlineCitadelOrCity && getNumEnemies()>1)
 				continue;
 
-			//important normalization step
-			newAssignment.iScore -= refAssignment.iScore;
+			//make sure we have a chance to execute this move ... so skip it if there is an unmoveable block
+			if (IsCombatUnit(unit) && testPlot.isCombatEndTurn())
+				continue;
 
-			//score functions are biased so that only scores > 0 are interesting moves
-			//still allow mildly negative moves here, maybe we want to do combo moves later!
-			if (newAssignment.iScore > TACTICAL_COMBAT_IMPOSSIBLE_SCORE)
-				gPossibleMoves.push_back(newAssignment);
-		}
-	}
+			//how much damage could we do with our next moves?
+			//check this only during simulation; don't use it for initial/final score as it decreases with enemies killed!
+			int iMaxAttacks = NumAttacksForUnit(it->iMovesLeft, unit.iAttacksLeft);
+			int iDamageScore = ScorePlotForPotentialAttacks(pUnit, testPlot, eRelevantDomain, iMaxAttacks, *this, moveToPlot.iKillOrNearKillId);
+			//note that "passive damage" ie covering our own units is implicit in the plot score for firstline units
 
-	//ranged attacks (also if aggression level is NONE!)
-	if (pUnit->IsCanAttackRanged() && unit.iAttacksLeft>0 && unit.iMovesLeft>0)
-	{
-		const vector<int>& rangeAttackPlots = getRangeAttackPlotsForUnit(unit);
-
-		//what score for simply staying here and doing nothing? pass zero moves to ignore possible attacks
-		STacticalAssignment positionScore = ScorePlotForMove(unit, assumedUnitPlot, SMovePlot(unit.iPlotIndex, 0, 0, 0), *this, EM_INTERMEDIATE);
-
-		for (vector<int>::const_iterator it=rangeAttackPlots.begin(); it!=rangeAttackPlots.end(); ++it)
-		{
-			//the plot we're checking right now
-			const CvTacticalPlot& enemyPlot = getTactPlot(*it);
-
-			//note: all valid plots are visible by definition
-			if (enemyPlot.isValid() && enemyPlot.isEnemy())
+			//may not be able to end the turn ...
+			if ((moveToPlot.iRemainingMoves > GC.getMOVE_DENOMINATOR() && pUnit->canMoveAfterAttacking()) || canProbablyEndTurnInPlot(moveToPlot, testPlot))
 			{
-				STacticalAssignment newAssignment(ScorePlotForRangedAttack(unit,assumedUnitPlot,enemyPlot,*this));
-
-				bool bCanEndTurnHereOrFlee = (newAssignment.iRemainingMoves > 0) || couldEndTurnAfterThisAssignment(newAssignment);
-				if (newAssignment.iScore > 0 && bCanEndTurnHereOrFlee)
-				{
-					//if we're not looking to pick a fight, de-emphasize attacks
-					if (eAggression == AL_NONE)
-						newAssignment.iScore /= 2;
-					//discourage attacks on cities with non-siege units if the real target is something else
-					if (enemyPlot.isEnemyCity() && getTarget() != enemyPlot.getPlot() && pUnit->GetRange()>1 && pUnit->AI_getUnitAIType()!=UNITAI_CITY_BOMBARD)
-						newAssignment.iScore /= 2;
-
-					gPossibleMoves.push_back(newAssignment);
-				}
+				//score functions are biased so that only scores > 0 are interesting moves
+				//still allow mildly negative moves here, maybe we want to do combo moves later!
+				moveToPlot.iScore += iDamageScore * 10;
+				//undo the hypothetical kill
+				moveToPlot.iKillOrNearKillId = -1;
+				gPossibleMoves.push_back(moveToPlot);
 			}
 		}
 	}
 
-	//we don't want the blocked moves for all units to have the same score
-	//so use the number of alternatives as an indicator how urgent this is
-	int iBlockedScore = max(0, 3 - (int)gPossibleMoves.size() / 3);
+	//it can happen that there are a lot of targets to attack - typically this means we should retreat!
+	//so make sure we consider at least one MOVE and not only RANGE_ATTACK assignments
+	//but keep at least one ranged attack!
+	if (gPossibleRangedAttacks.size() >= (size_t)nMaxCount && nMaxCount>1)
+	{
+		std::stable_sort(gPossibleRangedAttacks.begin(), gPossibleRangedAttacks.end());
+		gPossibleRangedAttacks.erase(gPossibleRangedAttacks.begin() + nMaxCount - 1, gPossibleRangedAttacks.end());
+	}
+
+	//only now add the ranged attacks
+	gPossibleMoves.insert(gPossibleMoves.end(), gPossibleRangedAttacks.begin(), gPossibleRangedAttacks.end());
 
 	//need to return in sorted order. note that we don't filter out bad (negative moves) they just are unlikely to get picked
 	std::stable_sort(gPossibleMoves.begin(),gPossibleMoves.end());
@@ -8924,8 +8328,12 @@ void CvTacticalPosition::getPreferredAssignmentsForUnit(const SUnitStats& unit, 
 	}
 
 	//always add a 'do-nothing' move; this does not guarantee that it will get picked but it allows move-attack-flee for damaged units
-	//order does not matter, the parent function will sort again ...
-	gPossibleMoves.push_back(STacticalAssignment(unit.iPlotIndex, unit.iPlotIndex, unit.iUnitID, unit.iMovesLeft, unit.eMoveStrategy, iBlockedScore, A_BLOCKED));
+	//order does not matter, the parent function will sort again ... BLOCKED should be strictly worse than FINISH_TEMP
+	//would be nice to have a way to make sure the "important" blocks (no other options) are picked over unimportant blocks (many other options)
+	//but we should not give a bonus score for wasting movement points to paint ourselves into a corner!
+	//also cannot check for the existamce of good moves here because we don't know yet if we can actually execute the good-looking moves
+	//could also sort the moves by a secondary criterion, but best solution seems to be the "bad unit' mechanism to restart the sim
+	gPossibleMoves.push_back(STacticalAssignment(unit.iPlotIndex, unit.iPlotIndex, unit.iUnitID, unit.iMovesLeft, unit.eMoveStrategy, -10, A_BLOCKED));
 }
 
 //if we have many units we won't look at all of them (for performance reasons)
@@ -8943,14 +8351,27 @@ void CvTacticalPosition::dropSuperfluousUnits(int iMaxUnitsToKeep)
 	updateMovePlotsIfRequired();
 
 	//get the best move for each unit
-	gOverAllChoices.clear();
 	bool bHaveSupport = false;
-	for (size_t i = 0; i < availableUnits.size(); i++)
+	for (size_t i = 0; i < availableUnits.size() && iMaxUnitsToKeep>0; i++)
 	{
 		//this always returns at least one move
 		getPreferredAssignmentsForUnit(availableUnits[i], 1);
 
 		int iScore = gPossibleMoves.front().iScore;
+
+		//prefer to use healthy units so the others can heal
+		CvUnit* pUnit = GET_PLAYER(getPlayer()).getUnit(availableUnits[i].iUnitID);
+		if (pUnit && pUnit->GetCurrHitPoints() < gMinHpForTactsim)
+		{
+			//if we don't have a good use for this damaged unit, then drop it
+			if (gPossibleMoves.front().eAssignmentType == A_MOVE && availableUnits[i].iMovesLeft<3*GD_INT_GET(MOVE_DENOMINATOR))
+			{
+				iScore = TACTICAL_COMBAT_IMPOSSIBLE_SCORE;
+				iMaxUnitsToKeep--;
+			}
+			else
+				iScore /= 2;
+		}
 
 		//make sure to include a general if we have one
 		if (availableUnits[i].eMoveStrategy == MS_SUPPORT)
@@ -8997,7 +8418,7 @@ void CvTacticalPosition::addInitialAssignments()
 		{
 			//we pretend the unit has zero moves, this means we do not score any possible attacks
 			//this is important for symmetry with canStayInPlot()
-			int iScore = ScorePlotForMove(*itUnit, tactPlot, SMovePlot(itUnit->iPlotIndex), *this, EM_INITIAL).iScore;
+			int iScore = ScorePlotForMove(*itUnit, tactPlot, 0, *this, EM_INITIAL).iScore;
 			addAssignment(STacticalAssignment(itUnit->iPlotIndex, itUnit->iPlotIndex, itUnit->iUnitID, itUnit->iMovesLeft, itUnit->eMoveStrategy, iScore, A_INITIAL));
 		}
 	}
@@ -9008,7 +8429,7 @@ void CvTacticalPosition::addInitialAssignments()
 		const CvTacticalPlot& tactPlot = getTactPlot(itUnit->iPlotIndex);
 		if (tactPlot.isValid()) //failsafe
 		{
-			int iScore = ScorePlotForMove(*itUnit, tactPlot, SMovePlot(itUnit->iPlotIndex), *this, EM_INITIAL).iScore;
+			int iScore = ScorePlotForMove(*itUnit, tactPlot, 0, *this, EM_INITIAL).iScore;
 			STacticalAssignment* pInitial = getInitialAssignmentMutable(itUnit->iUnitID);
 			if (pInitial)
 				pInitial->iScore = iScore;
@@ -9040,6 +8461,7 @@ bool CvTacticalPosition::makeNextAssignments(int iMaxBranches, int iMaxChoicesPe
 	//very important, lazy update
 	updateMovePlotsIfRequired();
 
+	gMovesToAdd.clear();
 	gOverAllChoices.clear();
 	for (size_t i=0; i<availableUnits.size(); i++)
 	{
@@ -9047,26 +8469,41 @@ bool CvTacticalPosition::makeNextAssignments(int iMaxBranches, int iMaxChoicesPe
 		gOverAllChoices.insert( gOverAllChoices.end(), gPossibleMoves.begin(), gPossibleMoves.end() );
 	}
 
-	//note that this is a stable sort, meaning in case of ties the original order is maintained
-	//since we have a fixed cutoff, the simulation result depends on the order the moves were created in, ie the order of units
+	//important that moves are ordered by quality instead of unit id
 	std::stable_sort(gOverAllChoices.begin(), gOverAllChoices.end());
-	for (size_t i=0; i<gOverAllChoices.size(); i++)
-	{
-		gMovesToAdd.clear();
 
-		//easy case first, no conflict
+	//sometimes we want to do combo moves, ie swaps should have the combined score of two moves
+	//be generous when checking the candidates, so 5x the number of children we want in the end
+	size_t iMaxCandidates = max(iMaxBranches * 5u, gOverAllChoices.size() / 2);
+	for (size_t i = 0; i < min(gOverAllChoices.size(),iMaxCandidates); i++)
+	{
+		//easy case first, no conflict possible
 		if (gOverAllChoices[i].eAssignmentType != A_MOVE)
 		{
 			//just do the original move
-			gMovesToAdd.push_back(gOverAllChoices[i]);
+			gMovesToAdd.push_back( SComboMove() );
+			gMovesToAdd.back().addMove(gOverAllChoices[i]);
+
+			//maybe we have a block/finish move following our "primary" move? should be harmless to add them together. this reduces our total search depth
+			if (heapSort.bDepthFirst)
+			{
+				if (i < gOverAllChoices.size() - 1 && (gOverAllChoices[i + 1].eAssignmentType == A_FINISH_TEMP || gOverAllChoices[i + 1].eAssignmentType == A_BLOCKED))
+				{
+					//this will fail if the unit id is the same ...
+					if (gMovesToAdd.back().addMove(gOverAllChoices[i+1]))
+						//consider the extra move consumed
+						i++;
+				}
+			}
 		}
 		else
 		{
-			 //possibly our target plot is still occupied ...
+			//possibly our target plot is still occupied ...
 			int blocks = countBlockingUnitsAtPlot(gOverAllChoices[i].iToPlotIndex, gOverAllChoices[i].eMoveType);
 			if (blocks == 0)
 			{
-				gMovesToAdd.push_back(gOverAllChoices[i]);
+				gMovesToAdd.push_back(SComboMove());
+				gMovesToAdd.back().addMove(gOverAllChoices[i]);
 			}
 			else if (blocks == 1)
 			{
@@ -9074,11 +8511,10 @@ bool CvTacticalPosition::makeNextAssignments(int iMaxBranches, int iMaxChoicesPe
 				int blockID = getFirstBlockingUnitIDAtPlot(gOverAllChoices[i].iToPlotIndex, gOverAllChoices[i].eMoveType);
 				for (size_t j = 0; j < gOverAllChoices.size(); j++)
 				{
-					if (gOverAllChoices[j].iUnitID==blockID && gOverAllChoices[j].eAssignmentType == A_MOVE)
+					if (gOverAllChoices[j].iUnitID == blockID && gOverAllChoices[j].eAssignmentType == A_MOVE)
 					{
-						//check if the combo has a positive score - but forcing out a similar unit is usually pointless
-						int iBias = (gOverAllChoices[i].eMoveType != gOverAllChoices[j].eMoveType) ? 0 : 10;
-						if (gOverAllChoices[i].iScore + gOverAllChoices[j].iScore < iBias)
+						//allow slightly negative scores for the combo so as not to prohibit rotation of frontline units
+						if (gOverAllChoices[i].iScore + gOverAllChoices[j].iScore < -10)
 							continue;
 
 						//block wants to move into the plot currently occupied by this unit. bingo!
@@ -9087,93 +8523,93 @@ bool CvTacticalPosition::makeNextAssignments(int iMaxBranches, int iMaxChoicesPe
 							const STacticalAssignment* pLA = getLatestAssignment(gOverAllChoices[j].iUnitID);
 							if (pLA->eAssignmentType != A_MOVE_SWAP) //don't want to swap out a unit which was just swapped in
 							{
-								gMovesToAdd.push_back(gOverAllChoices[i]);
-								gMovesToAdd.back().eAssignmentType = A_MOVE_SWAP; //this one will actually move both units
-								gMovesToAdd.push_back(gOverAllChoices[j]);
-								gMovesToAdd.back().eAssignmentType = A_MOVE_SWAP_REVERSE; //this one is just bookkeeping
+								gMovesToAdd.push_back(SComboMove());
+								gMovesToAdd.back().addMove(gOverAllChoices[i]);
+								//this one will actually move both units
+								gMovesToAdd.back().a.eAssignmentType = A_MOVE_SWAP;
+								gMovesToAdd.back().addMove(gOverAllChoices[j]);
+								//this one is just bookkeeping
+								gMovesToAdd.back().b.eAssignmentType = A_MOVE_SWAP_REVERSE;
 								break;
 							}
 						}
 						else if (!isMoveBlockedByOtherUnit(gOverAllChoices[j])) //free plot
 						{
+							gMovesToAdd.push_back(SComboMove());
 							//add the move to make space
-							gMovesToAdd.push_back(gOverAllChoices[j]);
-							//mark that this is a forced move so we're allowed to move back later
-							gMovesToAdd.back().eAssignmentType = A_MOVE_FORCED;
+							gMovesToAdd.back().addMove(gOverAllChoices[j]);
+							//mark that this is a forced move so we're allowed to move again later
+							gMovesToAdd.back().a.eAssignmentType = A_MOVE_FORCED;
 							//now we can do the original move
-							gMovesToAdd.push_back(gOverAllChoices[i]);
+							gMovesToAdd.back().addMove(gOverAllChoices[i]);
 							break;
 						}
 					}
 				}
-
-				//did we find a block we can move?
-				if (gMovesToAdd.size() != 2)
-					continue;
 			}
 			else //too many blocks to sort out
 				continue;
 		}
+	}
 
-		if (!gMovesToAdd.empty())
+	//note that this is a stable sort, meaning in case of ties the original order is maintained
+	//since we have a fixed cutoff, the simulation result depends on the order the moves were created in, ie the order of units
+	std::stable_sort(gMovesToAdd.begin(), gMovesToAdd.end());
+
+	for (size_t i = 0; i < gMovesToAdd.size(); i++)
+	{
+		//we need memory for the new child but we'll commit it only later after the uniqueness check
+		CvTacticalPosition* pNewChild = storage.peekNext();
+		if (!pNewChild)
+			break;
+
+		//important, hook it up to the parent so we can access the history
+		addChild(pNewChild);
+
+		AddAssignmentResult a = pNewChild->addAssignment(gMovesToAdd[i].a);
+		AddAssignmentResult b = pNewChild->addAssignment(gMovesToAdd[i].b);
+
+		//cannot add a RESTART in the middle of a combo move for consistency, so add afterwards
+		if (a==RESULT_ADDED_W_VIS_CHANGE || b==RESULT_ADDED_W_VIS_CHANGE)
+			pNewChild->assignedMoves.push_back(STacticalAssignment(-1, -1, gMovesToAdd[i].a.iUnitID, 0, gMovesToAdd[i].a.eMoveType, 0, A_RESTART));
+
+		//try to detect duplicates ...
+		bool isConsistent = (a != RESULT_NOT_ADDED && b != RESULT_NOT_ADDED);
+		if (isConsistent && pNewChild->isUnique(TACTSIM_UNIQUENESS_CHECK_GENERATIONS))
 		{
-			if (heapSort.bDepthFirst)
+			//do we need to keep working on this one?
+			if (pNewChild->isEarlyFinish() || pNewChild->isExhausted())
 			{
-				//maybe we have a block/finish move following our "primary" move? should be harmless to add them together. this reduces our total search depth
-				while (i < gOverAllChoices.size() - 1 && (gOverAllChoices[i + 1].eAssignmentType == A_FINISH_TEMP || gOverAllChoices[i + 1].eAssignmentType == A_BLOCKED))
+				int iProblemUnit = -1;
+				if (pNewChild->addFinishMovesIfAcceptable(pNewChild->isEarlyFinish(), iProblemUnit))
 				{
-					//if we don't have a move for the next unit yet
-					if (std::find_if(gMovesToAdd.begin(), gMovesToAdd.end(), PrIsMoveForUnit(gOverAllChoices[i+1].iUnitID)) == gMovesToAdd.end())
-					{
-						gMovesToAdd.push_back(gOverAllChoices[++i]);
-					}
-					else
-						break;
-				}
-			}
-
-			//we need memory for the new child but we'll commit it only later after the uniqueness check
-			CvTacticalPosition* pNewChild = storage.peekNext();
-			if (!pNewChild)
-				break;
-
-			addChild(pNewChild);
-
-			bool isConsistent = true;
-			for (vector<STacticalAssignment>::iterator itNewMove = gMovesToAdd.begin(); itNewMove != gMovesToAdd.end(); ++itNewMove)
-				isConsistent &= pNewChild->addAssignment(*itNewMove);
-
-			//try to detect duplicates ...
-			if (isConsistent && pNewChild->isUnique(TACTSIM_UNIQUENESS_CHECK_GENERATIONS))
-			{
-				//do we need to keep working on this one?
-				if (pNewChild->isEarlyFinish() || pNewChild->isExhausted())
-				{
-					if (pNewChild->addFinishMovesIfAcceptable(pNewChild->isEarlyFinish()))
-					{
-						//good case, we're done
-						completedPositions.push_back(pNewChild);
-						storage.consumeOne();
-						giValidEndPos++;
-					}
-					else
-					{
-						//position is illegal, forget about it so we can re-use the memory
-						removeChild(pNewChild);
-						giInvalidEndPos++;
-					}
+					//good case, we're done
+					completedPositions.push_back(pNewChild);
+					giValidEndPos++;
+					storage.consumeOne();
 				}
 				else
 				{
-					//also good case, keep this for the next round
-					openPositionsHeap.push_back(pNewChild);
-					push_heap(openPositionsHeap.begin(), openPositionsHeap.end(), heapSort);
-					storage.consumeOne();
+					//position is illegal, do not remember it so we can re-use the memory
+					giInvalidEndPos++;
+					removeChild(pNewChild);
+
+					//remember the id of the bad unit so if necessary we can try again without that unit
+					//there might be double-counting or omissions of bad units but we just need to produce a plausible candidate
+					if (iProblemUnit != -1)
+						gBadUnitsCount[iProblemUnit]++;
 				}
 			}
 			else
-				removeChild(pNewChild);
+			{
+				//also good case, keep this for the next round
+				openPositionsHeap.push_back(pNewChild);
+				push_heap(openPositionsHeap.begin(), openPositionsHeap.end(), heapSort);
+				storage.consumeOne();
+			}
 		}
+		else
+			removeChild(pNewChild);
 
 		if (childPositions.size() >= (size_t)iMaxBranches)
 			break;
@@ -9187,19 +8623,20 @@ bool CvTacticalPosition::makeNextAssignments(int iMaxBranches, int iMaxChoicesPe
 //lazy update of move plots
 void CvTacticalPosition::updateMovePlotsIfRequired()
 {
-	if (movePlotUpdateFlag==-1)
+	if (movePlotUpdateFlagA==-1 && movePlotUpdateFlagB==-1)
 	{
 		for (vector<SUnitStats>::iterator itUnit = availableUnits.begin(); itUnit != availableUnits.end(); ++itUnit)
 			updateMoveAndAttackPlotsForUnit(*itUnit);
 	}
-	else if (movePlotUpdateFlag>0)
+	else
 	{
 		for (vector<SUnitStats>::iterator itUnit = availableUnits.begin(); itUnit != availableUnits.end(); ++itUnit)
-			if (itUnit->iUnitID == movePlotUpdateFlag)
+			if (itUnit->iUnitID == movePlotUpdateFlagA || itUnit->iUnitID == movePlotUpdateFlagB)
 				updateMoveAndAttackPlotsForUnit(*itUnit);
 	}
 
-	movePlotUpdateFlag = 0;
+	movePlotUpdateFlagA = 0;
+	movePlotUpdateFlagB = 0;
 }
 
 bool CvTacticalPosition::isMoveBlockedByOtherUnit(const STacticalAssignment& move) const
@@ -9264,9 +8701,11 @@ bool CvTacticalPosition::isExhausted() const
 
 //see if all the plots where our units would end their turn are acceptable
 //this is a deferred check because in the beginning it's not clear how many enemy units we can eliminate
-bool CvTacticalPosition::addFinishMovesIfAcceptable(bool bEarlyFinish)
+bool CvTacticalPosition::addFinishMovesIfAcceptable(bool bEarlyFinish, int& iBadUnitID)
 { 
-	int iBadUnitID = -1; //for debugging
+	//we allow some "bad" units depending on context
+	int iUnitLossThreshold = gDefaultUnitLossThreshold + (int)killedEnemies.size();
+	int iPotentialUnitLossCounter = 0;
 
 	//only units which have exhausted their moves are in this array! if the sim was aborted, somebody else will hopefully pick up the pieces
 	for (size_t i=0; i<notQuiteFinishedUnits.size(); i++)
@@ -9280,14 +8719,23 @@ bool CvTacticalPosition::addFinishMovesIfAcceptable(bool bEarlyFinish)
 		if (unit.eLastAssignment == A_BLOCKED && unit.iMovesLeft>0)
 			continue;
 
-		//if we have a restart pending, that can also be ok if we're not planning to stay
-		if (lastAssignmentIsAfterRestart(unit.iUnitID))
-			continue;
-
 		//make sure we don't leave a unit in an impossible position
 		const CvTacticalPlot& tactPlot = getTactPlot(unit.iPlotIndex);
-		int iNextTurnScore = ScorePlotForMove(unit, tactPlot, SMovePlot(unit.iPlotIndex), *this, EM_FINAL).iScore;
-		if (iNextTurnScore > TACTICAL_COMBAT_IMPOSSIBLE_SCORE)
+		int iNextTurnScore = ScorePlotForMove(unit, tactPlot, 0, *this, EM_FINAL).iScore;
+
+		bool bAccept = (iNextTurnScore > TACTICAL_COMBAT_IMPOSSIBLE_SCORE);
+		if (!bAccept)
+		{
+			//second chance
+			//allow putting the unit in danger if we can afford it and it's not one of our high-xp champions
+			if (unit.pUnit->getExperienceTimes100() < gMedianUnitXP && iPotentialUnitLossCounter < iUnitLossThreshold)
+			{
+				iPotentialUnitLossCounter++;
+				bAccept = true;
+			}
+		}
+
+		if (bAccept)
 		{
 			//if the score is acceptable, end their turn. unless the unit is blocked, then we may use them for other tasks
 			if (unit.eLastAssignment != A_BLOCKED)
@@ -9322,6 +8770,7 @@ bool CvTacticalPosition::addFinishMovesIfAcceptable(bool bEarlyFinish)
 	if (bEarlyFinish)
 	{
 		notQuiteFinishedUnits.clear();
+		iBadUnitID = -1;
 		return true;
 	}
 	
@@ -9330,6 +8779,7 @@ bool CvTacticalPosition::addFinishMovesIfAcceptable(bool bEarlyFinish)
 	if (isKillOrImprovedPosition())
 	{
 		notQuiteFinishedUnits.clear();
+		iBadUnitID = -1;
 		return true;
 	}
 
@@ -9343,8 +8793,9 @@ bool CvTacticalPosition::isKillOrImprovedPosition() const
 	//if we made a kill, that is always good
 	//on the other hand it messes up the enemy distance, so we cannot really compare before/after in that case!
 	//note that regular attacks are checked below!
+	//also a restart means we discovered new enemies so that is also okay
 	for (size_t i = nFirstInterestingAssignment; i < assignedMoves.size(); i++)
-		if (isKillAssignment(assignedMoves[i].eAssignmentType))
+		if (isKillAssignment(assignedMoves[i].eAssignmentType) || assignedMoves[i].eAssignmentType==A_RESTART)
 			return true;
 
 	//find the original position to look up the unit move strategies
@@ -9424,9 +8875,13 @@ bool CvTacticalPosition::isKillOrImprovedPosition() const
 
 		//note that RESTARTS are ignored here ... just hope that we still find good moves after the restart
 	}
+
+	//if we have enemies we want attacks! (kills already checked above)
+	if (wantToFight() && iAttacksNoMove == 0)
+		return false;
 	
 	//staying in place and bombarding is fine! note that retreating a damaged unit counts as positive because it should be MS_THIRDLINE
-	return (iNegative < iPositive) || (iNegative == iPositive && iAttacksNoMove>0) || (eAggression==AL_NONE && iAfter<iBefore);
+	return (iNegative < iPositive) || (iNegative == iPositive && iAttacksNoMove>0) || (wantToFight() && iAfter<iBefore);
 }
 
 //this influences how daring we'll be
@@ -9485,22 +8940,26 @@ void CvTacticalPosition::countEnemiesAndCheckVisibility()
 	std::sort(enemyPlots.begin(), enemyPlots.end());
 }
 
-void CvTacticalPosition::refreshVolatilePlotProperties()
+void CvTacticalPosition::refreshVolatilePlotProperties(bool bInitial)
 {
-	//important, we are going to modify them all
-	cacheAllTactPlotsLocally();
-
 	gLandEnemies.clear();
 	gSeaEnemies.clear();
 	gCitadels.clear();
+	gCities.clear();
 
 	for (vector<CvTacticalPlot>::iterator it = tactPlots.begin(); it != tactPlots.end(); ++it)
 	{
 		//need to check whether this is a city or actual units
-		if (it->getEnemyDistance(CvTacticalPlot::TD_LAND) == 0 && it->isEnemyCombatUnit())
-			gLandEnemies.push_back( it->getPlotIndex() );
-		if (it->getEnemyDistance(CvTacticalPlot::TD_SEA) == 0 && it->isEnemyCombatUnit())
-			gSeaEnemies.push_back( it->getPlotIndex() );
+		if (it->isEnemyCity())
+			gCities.push_back(it->getPlotIndex());
+		//ignore garrisons for enemy distance consideration
+		else if (it->isEnemyCombatUnit())
+		{
+			if (it->getEnemyDistance(CvTacticalPlot::TD_LAND) == 0)
+				gLandEnemies.push_back(it->getPlotIndex());
+			if (it->getEnemyDistance(CvTacticalPlot::TD_SEA) == 0)
+				gSeaEnemies.push_back(it->getPlotIndex());
+		}
 
 		it->resetVolatileProperties();
 
@@ -9512,9 +8971,11 @@ void CvTacticalPosition::refreshVolatilePlotProperties()
 			gCitadels.push_back(it->getPlotIndex());
 	}
 
-	//distance transform pt1
-	for (size_t i=0; i<gLandEnemies.size(); i++)
-		for (vector<CvTacticalPlot>::iterator it = tactPlots.begin(); it != tactPlots.end(); ++it)
+	//distance transform
+	for (vector<CvTacticalPlot>::iterator it = tactPlots.begin(); it != tactPlots.end(); ++it)
+	{
+		//pt1
+		for (size_t i = 0; i < gLandEnemies.size(); i++)
 		{
 			int iDistance = plotDistance(*GC.getMap().plotByIndexUnchecked(gLandEnemies[i]), *it->getPlot());
 			if (iDistance < it->getEnemyDistance(CvTacticalPlot::TD_BOTH))
@@ -9523,14 +8984,13 @@ void CvTacticalPosition::refreshVolatilePlotProperties()
 				it->setEnemyDistance(CvTacticalPlot::TD_LAND, iDistance);
 			if (iDistance == 1)
 			{
-				it->setNumAdjacentEnemies(CvTacticalPlot::TD_BOTH,it->getNumAdjacentEnemies(CvTacticalPlot::TD_BOTH)+1);
-				it->setNumAdjacentEnemies(CvTacticalPlot::TD_LAND,it->getNumAdjacentEnemies(CvTacticalPlot::TD_LAND)+1);
+				it->setNumAdjacentEnemies(CvTacticalPlot::TD_BOTH, it->getNumAdjacentEnemies(CvTacticalPlot::TD_BOTH) + 1);
+				it->setNumAdjacentEnemies(CvTacticalPlot::TD_LAND, it->getNumAdjacentEnemies(CvTacticalPlot::TD_LAND) + 1);
 			}
 		}
 
-	//pt2
-	for (size_t i=0; i<gSeaEnemies.size(); i++)
-		for (vector<CvTacticalPlot>::iterator it = tactPlots.begin(); it != tactPlots.end(); ++it)
+		//pt2
+		for (size_t i = 0; i < gSeaEnemies.size(); i++)
 		{
 			int iDistance = plotDistance(*GC.getMap().plotByIndexUnchecked(gSeaEnemies[i]), *it->getPlot());
 			if (iDistance < it->getEnemyDistance(CvTacticalPlot::TD_BOTH))
@@ -9539,17 +8999,36 @@ void CvTacticalPosition::refreshVolatilePlotProperties()
 				it->setEnemyDistance(CvTacticalPlot::TD_SEA, iDistance);
 			if (iDistance == 1)
 			{
-				it->setNumAdjacentEnemies(CvTacticalPlot::TD_BOTH,it->getNumAdjacentEnemies(CvTacticalPlot::TD_BOTH)+1);
-				it->setNumAdjacentEnemies(CvTacticalPlot::TD_SEA,it->getNumAdjacentEnemies(CvTacticalPlot::TD_SEA)+1);
+				it->setNumAdjacentEnemies(CvTacticalPlot::TD_BOTH, it->getNumAdjacentEnemies(CvTacticalPlot::TD_BOTH) + 1);
+				it->setNumAdjacentEnemies(CvTacticalPlot::TD_SEA, it->getNumAdjacentEnemies(CvTacticalPlot::TD_SEA) + 1);
 			}
 		}
+
+		//pt3
+		for (size_t i = 0; i < gCities.size(); i++)
+		{
+			int iDistance = plotDistance(*GC.getMap().plotByIndexUnchecked(gCities[i]), *it->getPlot());
+			if (iDistance < it->getEnemyDistance(CvTacticalPlot::TD_BOTH))
+				it->setEnemyDistance(CvTacticalPlot::TD_BOTH, iDistance);
+			if (iDistance < it->getEnemyDistance(CvTacticalPlot::TD_LAND))
+				it->setEnemyDistance(CvTacticalPlot::TD_LAND, iDistance);
+			if (iDistance < it->getEnemyDistance(CvTacticalPlot::TD_SEA))
+				it->setEnemyDistance(CvTacticalPlot::TD_SEA, iDistance);
+			if (iDistance == 1)
+			{
+				it->setNumAdjacentEnemies(CvTacticalPlot::TD_BOTH, it->getNumAdjacentEnemies(CvTacticalPlot::TD_BOTH) + 1);
+				it->setNumAdjacentEnemies(CvTacticalPlot::TD_LAND, it->getNumAdjacentEnemies(CvTacticalPlot::TD_LAND) + 1);
+				it->setNumAdjacentEnemies(CvTacticalPlot::TD_SEA, it->getNumAdjacentEnemies(CvTacticalPlot::TD_SEA) + 1);
+			}
+		}
+	}
 
 	//citadels
 	for (size_t i=0; i<gCitadels.size(); i++)
 	{
 		//iterate neighbors
 		CvPlot** aNeighbors = GC.getMap().getNeighborsUnchecked(GC.getMap().plotByIndexUnchecked(gCitadels[i]));
-		for (int i = 0; i < 6; i++)
+		for (int i = 0; i < NUM_DIRECTION_TYPES; i++)
 		{
 			CvPlot* pNeighbor = aNeighbors[i];
 			if (!pNeighbor)
@@ -9560,12 +9039,34 @@ void CvTacticalPosition::refreshVolatilePlotProperties()
 				tactPlot.setNextToEnemyCitadel(true);
 		}
 	}
+
+	//deferred update of adjacent unit count for non-sim units
+	if (bInitial)
+	{
+		for (vector<CvTacticalPlot>::iterator it = tactPlots.begin(); it != tactPlots.end(); ++it)
+		{
+			//even if we're not sure whether the unit is going to stay, we can get temporary benefits
+			if (it->isBlockedByNonSimUnit(CvTacticalPlot::TD_LAND))
+			{
+				it->changeNeighboringUnitCount(*this, MS_FIRSTLINE, CvTacticalPlot::TD_LAND, +1);
+				if (it->isCombatEndTurn())
+					it->setCombatUnitEndTurn(*this, CvTacticalPlot::TD_LAND, true);
+			}
+			//don't count cities twice
+			if (it->isBlockedByNonSimUnit(CvTacticalPlot::TD_SEA) && !it->getPlot()->isCity())
+			{
+				it->changeNeighboringUnitCount(*this, MS_FIRSTLINE, CvTacticalPlot::TD_SEA, +1);
+				if (it->isCombatEndTurn())
+					it->setCombatUnitEndTurn(*this, CvTacticalPlot::TD_SEA, true);
+			}
+		}
+	}
 }
 
 //need a default constructor for stl containers ...
 CvTacticalPosition::CvTacticalPosition()
 {
-	initFromScratch(NO_PLAYER, AL_NONE, NULL);
+	initFromScratch(NO_PLAYER, AL_LOW, NULL);
 }
 
 void CvTacticalPosition::initFromScratch(PlayerTypes player, eAggressionLevel eAggLvl, CvPlot* pTarget)
@@ -9581,7 +9082,8 @@ void CvTacticalPosition::initFromScratch(PlayerTypes player, eAggressionLevel eA
 	parentPosition = NULL;
 	iGeneration = 0;
 	iID = 1; //zero doesn't work here
-	movePlotUpdateFlag = 0;
+	movePlotUpdateFlagA = 0;
+	movePlotUpdateFlagB = 0;
 
 	childPositions.clear();
 	tactPlotLookup.clear();
@@ -9606,7 +9108,8 @@ void CvTacticalPosition::initFromParent(const CvTacticalPosition& parent)
 	iTotalScore = parent.iTotalScore;
 	iScoreOverParent = 0;
 	parentPosition = &parent;
-	movePlotUpdateFlag = parent.movePlotUpdateFlag;
+	movePlotUpdateFlagA = parent.movePlotUpdateFlagA;
+	movePlotUpdateFlagB = parent.movePlotUpdateFlagB;
 	iGeneration = parent.iGeneration + 1;
 
 	//clever scheme to encode the tree structure into IDs
@@ -9619,11 +9122,9 @@ void CvTacticalPosition::initFromParent(const CvTacticalPosition& parent)
 	//childPositions stays empty!
 	childPositions.clear();
 
-	//these are cached locally
-	tactPlotLookup.clear();
-	tactPlots.clear();
-
 	//copied from parent, modified when addAssignment is called
+	tactPlotLookup = parent.tactPlotLookup;
+	tactPlots = parent.tactPlots;
 	assignedMoves = parent.assignedMoves;
 	availableUnits = parent.availableUnits;
 	notQuiteFinishedUnits = parent.notQuiteFinishedUnits;
@@ -9632,10 +9133,15 @@ void CvTacticalPosition::initFromParent(const CvTacticalPosition& parent)
 	killedEnemies = parent.killedEnemies;
 }
 
+bool CvTacticalPosition::wantToFight() const
+{
+	return nOriginalEnemies > 0;
+}
+
 void CvTacticalPosition::wipe()
 {
 	//make sure the capacity of these containers doesn't grow too much over time
-	vector<pair<int, size_t>>().swap(tactPlotLookup);
+	vector<pair<unsigned short, unsigned char>>().swap(tactPlotLookup);
 	vector<CvTacticalPlot>().swap(tactPlots);
 	vector<STacticalAssignment>().swap(assignedMoves);
 	vector<SUnitStats>().swap(availableUnits);
@@ -9693,7 +9199,9 @@ void CvTacticalPosition::updateMoveAndAttackPlotsForUnit(SUnitStats unit)
 
 	TCachedMovePlots::iterator itP = gReachablePlotsLookup.find(SPathFinderStartPos(unit, freedPlots));
 	if (itP != gReachablePlotsLookup.end())
+	{
 		gMovePlotsCacheHit++;
+	}
 	else
 	{
 		gMovePlotsCacheMiss++;
@@ -9713,7 +9221,9 @@ void CvTacticalPosition::updateMoveAndAttackPlotsForUnit(SUnitStats unit)
 			CvPlot* pPlot = GC.getMap().plotByIndexUnchecked(it->iPlotIndex);
 
 			//note that if the unit is far away, it won't have any good plots and will be considered blocked
-			if (plotDistance(*pPlot, *pTargetPlot) > TACTICAL_COMBAT_MAX_TARGET_DISTANCE)
+			//this is just a rough check, we check the existance of a corresponding tact plot below
+			//+2 is due to the "maneuver space" around each enemy
+			if (plotDistance(*pPlot, *pTargetPlot) > TACTICAL_COMBAT_MAX_TARGET_DISTANCE+2)
 				continue;
 
 			if (unit.eMoveStrategy == MS_EMBARKED)
@@ -9724,11 +9234,10 @@ void CvTacticalPosition::updateMoveAndAttackPlotsForUnit(SUnitStats unit)
 			}
 			else
 			{
-				//if we want to fight
-				if (eAggression != AL_NONE)
+				if (wantToFight())
 				{
-					//ignore all plots where we cannot fight. allow melee ships to capture cities though!
-					if (!pUnit->isNativeDomain(pPlot) && !pPlot->isEnemyCity(*pUnit))
+					//ignore all plots where we cannot fight. allow ships to capture/garrison cities though!
+					if (!pUnit->isNativeDomain(pPlot) && !pPlot->isCoastalCityOrPassableImprovement(pUnit->getOwner(),false,false))
 						continue;
 				}
 				else
@@ -9747,7 +9256,21 @@ void CvTacticalPosition::updateMoveAndAttackPlotsForUnit(SUnitStats unit)
 				}
 			}
 
-			reachablePlotsPruned.insertNoIndex(*it);
+			//this is a performance fix / logic simplification
+			//all open positions share just one instance of gSafePlotCount
+			//we only update the count once at the start of the sim
+			//if there is no safe plot then, there will never be one!
+			if (!parentPosition)
+			{
+				bool bIsSafe = GET_PLAYER(ePlayer).GetPlotDanger(*pPlot, pUnit, getKilledEnemies(), 0) < pUnit->GetCurrHitPoints();
+				if (bIsSafe && pUnit->canEndTurnAtPlot(pPlot))
+					gSafePlotCount[unit.iUnitID]++;
+			}
+
+			//last (expensive) check, need to have a tact plot for each reachable plot
+			const CvTacticalPlot& plot = getTactPlot(it->iPlotIndex);
+			if (plot.isValid() && !plot.isBlockedByNonSimUnit(DomainForUnit(pUnit)))
+				reachablePlotsPruned.insertNoIndex(*it);
 		}
 
 		reachablePlotsPruned.createIndex();
@@ -9821,7 +9344,7 @@ pair<int,int> CvTacticalPosition::doVisibilityUpdate(const STacticalAssignment& 
 					//make sure that the adjacent unit count is correct
 					//normally it should because adjacent plots are visible from the beginning but ...
 					CvPlot** aNeighbors = GC.getMap().getNeighborsUnchecked(GC.getMap().plotByIndexUnchecked(pPlot->GetPlotIndex()));
-					for (int i = 0; i < 6; i++)
+					for (int i = 0; i < NUM_DIRECTION_TYPES; i++)
 					{
 						CvPlot* pNeighbor = aNeighbors[i];
 						if (!pNeighbor)
@@ -9832,7 +9355,7 @@ pair<int,int> CvTacticalPosition::doVisibilityUpdate(const STacticalAssignment& 
 						{
 							const vector<STacticalUnit>& units = neighborPlot.getUnitsAtPlot();
 							for (size_t j = 0; j < units.size(); j++)
-								FAssert(!isCombatUnit(units[j].eMoveType));
+								ASSERT_DEBUG(!isCombatUnit(units[j].eMoveType));
 						}
 					}
 				}
@@ -9859,7 +9382,7 @@ bool CvTacticalPosition::lastAssignmentIsAfterRestart(int iUnitID) const
 			continue;
 		}
 
-		if (bHaveRestart && a.iUnitID == iUnitID && a.eAssignmentType != A_FINISH && a.eAssignmentType != A_FINISH_TEMP)
+		if (bHaveRestart && a.iUnitID == iUnitID && a.eAssignmentType != A_FINISH)
 			return true;
 	}
 
@@ -9922,8 +9445,12 @@ STacticalAssignment * CvTacticalPosition::getLatestAssignmentMutable(int iUnitID
 	return NULL;
 }
 
-bool CvTacticalPosition::addAssignment(const STacticalAssignment& newAssignment)
+CvTacticalPosition::AddAssignmentResult CvTacticalPosition::addAssignment(const STacticalAssignment& newAssignment)
 {
+	//empty assignment, nothing to do, consider this a good case
+	if (newAssignment.iUnitID == 0)
+		return RESULT_NOOP;
+
 	//if we killed an enemy ZOC will change
 	bool bRecomputeAllMoves = false;
 	//newly visible plots, newly visible enemies
@@ -9931,16 +9458,16 @@ bool CvTacticalPosition::addAssignment(const STacticalAssignment& newAssignment)
 	
 	vector<SUnitStats>::iterator itUnit = find_if(availableUnits.begin(), availableUnits.end(), PrMatchingUnit(newAssignment.iUnitID));
 	if (itUnit == availableUnits.end() || itUnit->iPlotIndex != newAssignment.iFromPlotIndex)
-		return false;
+		return RESULT_NOT_ADDED;
 
 	//tactical plots are only touched for "real" moves. blocked units may be on invalid plots.
 	//a unit may also start out on an invalid plot (eg. too far away)
 	if (newAssignment.eAssignmentType != A_BLOCKED && itUnit->eLastAssignment != A_INITIAL)
 	{
 		if (!getTactPlotMutable(newAssignment.iToPlotIndex).isValid())
-			return false;
+			return RESULT_NOT_ADDED;
 		if (!getTactPlotMutable(newAssignment.iFromPlotIndex).isValid())
-			return false;
+			return RESULT_NOT_ADDED;
 	}
 
 	//i know what you did last summer!
@@ -9960,8 +9487,6 @@ bool CvTacticalPosition::addAssignment(const STacticalAssignment& newAssignment)
 		break;
 	case A_MOVE_FORCED:
 	case A_MOVE_SWAP_REVERSE:
-		bAffectsScore = false;
-		//fall through!
 	case A_MOVE:
 	case A_MOVE_SWAP:
 	case A_CAPTURE:
@@ -10054,6 +9579,10 @@ bool CvTacticalPosition::addAssignment(const STacticalAssignment& newAssignment)
 		if (TacticalAIHelpers::IsOtherPlayerCitadel( GC.getMap().plotByIndexUnchecked(newAssignment.iToPlotIndex), getPlayer(), true))
 			refreshVolatilePlotProperties();
 		break;
+	case A_USE_POWER:
+		itUnit->iMovesLeft = newAssignment.iRemainingMoves;
+		bEndOfSim = true;
+		break;
 	case A_FINISH:
 		OutputDebugString("this should not happen\n");
 	case A_FINISH_TEMP:
@@ -10065,18 +9594,25 @@ bool CvTacticalPosition::addAssignment(const STacticalAssignment& newAssignment)
 		UNREACHABLE();
 	}
 
-	//we don't update the moves plots lazily because it takes a while and we don't know yet if we will ever follow up on this position
+	//we update the moveplots lazily because it takes a while and we don't know yet if we will ever follow up on this position
 	if (bRecomputeAllMoves)
 	{
-		movePlotUpdateFlag = -1; //need to update all
+		movePlotUpdateFlagA = -1;
+		movePlotUpdateFlagB = -1;
 	}
 	else if (itUnit->iMovesLeft>0 && !bEndOfSim)
 	{
 		//make sure we don't regress to a "lower" level
-		if (movePlotUpdateFlag==0) 
-			movePlotUpdateFlag = itUnit->iUnitID; //need to update only this one
-		else if (movePlotUpdateFlag>0)
-			movePlotUpdateFlag = -1; //need to update multiple units, simply do all
+		if (movePlotUpdateFlagA==0) 
+			movePlotUpdateFlagA = itUnit->iUnitID; //need to update only this one
+		else if (movePlotUpdateFlagB==0)
+			movePlotUpdateFlagB = itUnit->iUnitID; //need to update this one as well
+		else
+		{
+			//need to update more than 2 units, simply do all
+			movePlotUpdateFlagA = -1;
+			movePlotUpdateFlagB = -1;
+		}
 	}
 
 	//forced moves don't even affect the score
@@ -10086,8 +9622,12 @@ bool CvTacticalPosition::addAssignment(const STacticalAssignment& newAssignment)
 		iTotalScore += newAssignment.iScore;
 
 		//when in doubt, increasing our visibility is good
-		iScoreOverParent += visibilityResult.first;
-		iTotalScore += visibilityResult.first;
+		//but only for our first line units ... need to be careful with the others
+		if (itUnit->eMoveStrategy == MS_FIRSTLINE)
+		{
+			iScoreOverParent += visibilityResult.first;
+			iTotalScore += visibilityResult.first;
+		}
 	}
 
 	//are we done or can we do further moves with this unit?
@@ -10106,15 +9646,32 @@ bool CvTacticalPosition::addAssignment(const STacticalAssignment& newAssignment)
 	//any new enemies in sight or borders changed?
 	bool bCityCapture = (newAssignment.eAssignmentType == A_MELEEKILL && GC.getMap().plotByIndexUnchecked(newAssignment.iToPlotIndex)->isCity());
 	bool bRestartRequired = (visibilityResult.second > 0) || bCityCapture;
-	if (bRestartRequired && availableUnits.size()>0)
-		assignedMoves.push_back(STacticalAssignment( -1, -1, newAssignment.iUnitID, 0, newAssignment.eMoveType, 0, A_RESTART));
+	if (bRestartRequired && availableUnits.size() > 0)
+		return RESULT_ADDED_W_VIS_CHANGE;
 
-	return true;
+	return RESULT_ADDED;
 }
 
 bool STacticalAssignment::operator==(const STacticalAssignment& rhs) const
 {
 	return memcmp(this, &rhs, sizeof(STacticalAssignment)) == 0;
+}
+
+//do not allow one unit to be present multiple times!
+bool SComboMove::addMove(const STacticalAssignment& move)
+{
+	if (a.iUnitID == 0)
+	{
+		a = move;
+		return true;
+	}
+	else if (b.iUnitID == 0 && a.iUnitID != move.iUnitID)
+	{
+		b = move;
+		return true;
+	}
+	else
+		return false;
 }
 
 //try to detect simple permutations in the unit assigments which result in equivalent results
@@ -10295,47 +9852,37 @@ size_t CvTacticalPosition::getFirstInterestingAssignment() const
 
 struct PairCompareFirst
 {
-    bool operator() (const std::pair<int,size_t>& l, const std::pair<int,size_t>& r) const { return l.first < r.first; }
-    bool operator() (const std::pair<int,int>& l, const std::pair<int,int>& r) const { return l.first < r.first; }
+	bool operator() (const std::pair<unsigned short, unsigned char>& l, const std::pair<unsigned short, unsigned char>& r) const { return l.first < r.first; }
 };
 
 struct EqualRangeComparison
 {
-    bool operator() ( const pair<int,size_t> a, int b ) const { return a.first < b; }
-    bool operator() ( int a, const pair<int,size_t> b ) const { return a < b.first; }
-    bool operator() ( const pair<int,int> a, int b ) const { return a.first < b; }
-    bool operator() ( int a, const pair<int,int> b ) const { return a < b.first; }
+	bool operator() (const pair<unsigned short, unsigned char>& a, unsigned short b) const { return a.first < b; }
+	bool operator() (unsigned short a, const pair<unsigned short, unsigned char>& b) const { return a < b.first; }
 };
 
 vector<CvTacticalPlot>::iterator CvTacticalPosition::findTactPlot(int iPlotIndex)
 {
-	typedef pair<vector<pair<int, size_t>>::iterator, vector<pair<int, size_t>>::iterator>  IteratorPair;
-	IteratorPair it2 = equal_range(tactPlotLookup.begin(), tactPlotLookup.end(), iPlotIndex, EqualRangeComparison());
-	if (it2.first != tactPlotLookup.end() && it2.first != it2.second)
-		return tactPlots.begin() + it2.first->second;
+	if (iPlotIndex >= 0 && iPlotIndex < USHRT_MAX)
+	{
+		pair<TactPlotIndexByPlotIndex::iterator, TactPlotIndexByPlotIndex::iterator> it2 = equal_range(tactPlotLookup.begin(), tactPlotLookup.end(), (unsigned short)iPlotIndex, EqualRangeComparison());
+		if (it2.first != tactPlotLookup.end() && it2.first != it2.second)
+			return tactPlots.begin() + it2.first->second;
+	}
 
 	return tactPlots.end();
 }
 
 vector<CvTacticalPlot>::const_iterator CvTacticalPosition::findTactPlot(int iPlotIndex) const
 {
-	typedef pair<vector<pair<int, size_t>>::const_iterator, vector<pair<int, size_t>>::const_iterator>  IteratorPair;
-	IteratorPair it2 = equal_range(tactPlotLookup.begin(), tactPlotLookup.end(), iPlotIndex, EqualRangeComparison());
-	if (it2.first != tactPlotLookup.end() && it2.first != it2.second)
-		return tactPlots.begin() + it2.first->second;
+	if (iPlotIndex >= 0 && iPlotIndex < USHRT_MAX)
+	{
+		pair<TactPlotIndexByPlotIndex::const_iterator, TactPlotIndexByPlotIndex::const_iterator> it2 = equal_range(tactPlotLookup.begin(), tactPlotLookup.end(), (unsigned short)iPlotIndex, EqualRangeComparison());
+		if (it2.first != tactPlotLookup.end() && it2.first != it2.second)
+			return tactPlots.begin() + it2.first->second;
+	}
 
 	return tactPlots.end();
-}
-
-bool CvTacticalPosition::findTactPlotRecursive(int iPlotIndex) const
-{
-	if (findTactPlot(iPlotIndex) != tactPlots.end())
-		return true;
-
-	if (parentPosition && parentPosition->findTactPlotRecursive(iPlotIndex))
-		return true;
-
-	return false;
 }
 
 bool CvTacticalPosition::addTacticalPlot(const CvPlot* pPlot, const vector<CvUnit*>& allOurUnits)
@@ -10344,13 +9891,19 @@ bool CvTacticalPosition::addTacticalPlot(const CvPlot* pPlot, const vector<CvUni
 	if (!pPlot)
 		return false;
 
-	if (findTactPlotRecursive(pPlot->GetPlotIndex()))
-		return false; //nothing to do
+	//already added?
+	if (getTactPlot(pPlot->GetPlotIndex())!=dummyPlot)
+		return false; 
+
+	//cannot process more than this
+	if (tactPlots.size() == 255)
+		return false;
 
 	CvTacticalPlot newPlot(pPlot, ePlayer, allOurUnits);
 	if (newPlot.isValid())
 	{
-		pair<int, size_t> newEntry(pPlot->GetPlotIndex(), tactPlots.size());
+		//cast to smaller types to save memmory ...
+		TactPlotIndexByPlotIndex::value_type newEntry( (TactPlotIndexByPlotIndex::value_type::first_type)pPlot->GetPlotIndex(), (TactPlotIndexByPlotIndex::value_type::second_type)tactPlots.size());
 		tactPlotLookup.insert(upper_bound(tactPlotLookup.begin(), tactPlotLookup.end(), newEntry, PairCompareFirst()), newEntry);
 		tactPlots.push_back(newPlot);
 
@@ -10387,7 +9940,7 @@ bool CvTacticalPosition::addAvailableUnit(const CvUnit* pUnit)
 	//also, only land units can embark and but melee ships can move into certain land plots (cities) so it's tricky
 
 	//if were not looking to fight but about to embark then keep the unit away from enemies
-	if (eAggression == AL_NONE && !pUnit->isNativeDomain(pTargetPlot) && pUnit->CanEverEmbark())
+	if (!wantToFight() && !pUnit->isNativeDomain(pTargetPlot) && pUnit->CanEverEmbark())
 	{
 		if (pUnit->IsCombatUnit())
 			eStrategy = MS_EMBARKED;
@@ -10414,7 +9967,7 @@ bool CvTacticalPosition::addAvailableUnit(const CvUnit* pUnit)
 		case UNITAI_ASSAULT_SEA:
 		case UNITAI_SKIRMISHER:
 		case UNITAI_SUBMARINE:
-			if (pUnit->GetRange() > 2 || MOD_AI_UNIT_PRODUCTION && pUnit->canIntercept()) // MOD_AI_UNIT_PRODUCTION : AA to back
+			if (pUnit->GetRange() > 2 || (MOD_AI_UNIT_PRODUCTION && pUnit->canIntercept())) // MOD_AI_UNIT_PRODUCTION : AA to back
 				eStrategy = MS_THIRDLINE;
 			else if (pUnit->GetRange() == 2)
 				eStrategy = MS_SECONDLINE;
@@ -10457,14 +10010,23 @@ bool CvTacticalPosition::addAvailableUnit(const CvUnit* pUnit)
 		}
 	}
 
-	//pull back our melee units if they have soaked enough damage
-	if (eStrategy == MS_FIRSTLINE && pUnit->isProjectedToDieNextTurn())
-		eStrategy = MS_THIRDLINE;
+	//careful with damaged units
+	if (pUnit->isProjectedToDieNextTurn())
+	{
+		//do not use for purely defensive moves
+		if (!wantToFight())
+			return false;
+		//pull back our melee units if they have soaked enough damage, but maybe we can still score a kill!
+		if (eStrategy == MS_FIRSTLINE)
+			eStrategy = MS_THIRDLINE;
+	}
 
 	//we will update the importance later, use 0 for now
 	availableUnits.push_back( SUnitStats( pUnit, 0, eStrategy ) );
 
-	movePlotUpdateFlag = -1; //lazy update of move plots later
+	//lazy update of move plots later
+	movePlotUpdateFlagA = -1; 
+	movePlotUpdateFlagB = -1;
 
 #if defined(MOD_CORE_DEBUGGING)
 	if (GC.getLogging() && GC.getAILogging() && MOD_CORE_DEBUGGING)
@@ -10499,50 +10061,42 @@ float CvTacticalPosition::getAggressionBias() const
 {
 	//avoid extreme ratios, use the sqrt
 	float fUnitNumberRatio = sqrtf(nOurOriginalUnits / float(max(1,(int)nOriginalEnemies)));
-
-	int iFlavorOffense = GET_PLAYER(ePlayer).GetGrandStrategyAI()->GetPersonalityAndGrandStrategy((FlavorTypes)GC.getInfoTypeForString("FLAVOR_OFFENSE"));
-	if (iFlavorOffense > 6)
-		fUnitNumberRatio += 0.1f;
-
 	return max( 0.9f, fUnitNumberRatio ); //<1 indicates we're fewer but don't stop attacking because of that
 }
 
-bool CvTacticalPosition::couldEndTurnAfterThisAssignment(const STacticalAssignment& assignment) const
+//this is intended to filter out the no-chance-in-hell moves
+//it's not intended to be the final check, the situation can still change as the sim progresses
+bool CvTacticalPosition::canProbablyEndTurnInPlot(const STacticalAssignment& assignment, const CvTacticalPlot& assumedUnitPlot) const
 {
-	int iEndPlotIndex = -1;
-
-	switch (assignment.eAssignmentType)
-	{
-	case A_MOVE:
-	case A_MELEEKILL:
-	case A_CAPTURE:
-		//unit moves
-		iEndPlotIndex = assignment.iToPlotIndex;
-		break;
-	case A_MELEEATTACK:
-	case A_RANGEATTACK:
-	case A_RANGEKILL:
-	case A_PILLAGE:
-	case A_FINISH_TEMP:
-	case A_MELEEKILL_NO_ADVANCE:
-		//unit stays in place
-		iEndPlotIndex = assignment.iFromPlotIndex;
-		break;
-	case A_BLOCKED:
-		//not our problem ... fingers crossed
-		return true;
-	default:
-		OutputDebugString("unexpected assignment type ...\n");
-		return false;
-	}
-
 	const SUnitStats* unit = getAvailableUnitStats(assignment.iUnitID);
-	const CvTacticalPlot& assumedUnitPlot = getTactPlot(iEndPlotIndex);
-	CvUnit* pUnit = GET_PLAYER(getPlayer()).getUnit(assignment.iUnitID);
+	const CvUnit* pUnit = unit->pUnit;
 	if (!pUnit || !assumedUnitPlot.isValid())
 		return false;
 
-	return ScoreTurnEnd(pUnit, unit->eLastAssignment, assumedUnitPlot, 0, CvTacticalPlot::TD_BOTH, unit->iSelfDamage, *this, EM_FINAL) != INT_MAX;
+	if (pUnit->IsCanDefend())
+	{
+		//if we have nowhere to flee to, we can just as well stay?
+		if (gSafePlotCount[assignment.iUnitID] == 0)
+			return true;
+
+		int iDanger = 0;
+		//first try the cache
+		if (!gTactPosStorage.getDangerCache().findDanger(pUnit->GetID(), assumedUnitPlot.getPlotIndex(), unit->iSelfDamage, getKilledEnemies(), iDanger))
+		{
+			iDanger = pUnit->GetDanger(assumedUnitPlot.getPlot(), getKilledEnemies(), unit->iSelfDamage);
+			//can happen with garrisons, catch this case as it messes up the math
+			if (iDanger == INT_MAX)
+				iDanger = 10 * pUnit->GetMaxHitPoints();
+
+			gTactPosStorage.getDangerCache().storeDanger(pUnit->GetID(), assumedUnitPlot.getPlotIndex(), unit->iSelfDamage, getKilledEnemies(), iDanger);
+		}
+
+		return ScoreCombatUnitTurnEnd(pUnit, unit->eLastAssignment, assumedUnitPlot, iDanger, CvTacticalPlot::TD_BOTH,
+			unit->iSelfDamage + assignment.iSelfDamage, assignment.iKillOrNearKillId, assignment.iRemainingMoves==unit->iMaxMoves, *this, EM_FINAL, availableUnits.size() > 1) != INT_MAX;
+	}
+	else
+		//civilians need cover. full scoring logic in ScorePlotForNonFightingUnitMove is more complex; here we just need a rule of thumb
+		return assumedUnitPlot.isCombatEndTurn();
 }
 
 std::ostream& operator<<(ostream& os, const CvPlot& p)
@@ -10623,44 +10177,7 @@ CvTacticalPlot& CvTacticalPosition::getTactPlotMutable(int plotindex)
 	vector<CvTacticalPlot>::iterator it = findTactPlot(plotindex);
 	if (it != tactPlots.end())
 		return *it;
-
-	if (parentPosition)
-	{
-		const CvTacticalPlot& parentResult = parentPosition->getTactPlot(plotindex);
-		if (parentResult.isValid())
-		{
-			//now cache it locally so that we can modify it
-			tactPlotLookup.push_back( make_pair(plotindex, tactPlots.size()) );
-			std::stable_sort(tactPlotLookup.begin(), tactPlotLookup.end(), PairCompareFirst() );
-			//this is dangerous, may invalidate references if the vector is reallocated
-			//we should really be storing pointers to plots, not the plots themselves ...
-			tactPlots.push_back(parentResult);
-			return tactPlots.back();
-		}
-	}
-
 	return dummyPlot;
-}
-
-//make sure we have all tactical plots in our local cache
-void CvTacticalPosition::cacheAllTactPlotsLocally()
-{
-	const CvTacticalPosition* current = parentPosition;
-	while (current != NULL)
-	{
-		for (vector<CvTacticalPlot>::const_iterator it = current->tactPlots.begin(); it != current->tactPlots.end(); ++it)
-		{
-			int iIndex = it->getPlotIndex();
-			if (findTactPlot(iIndex) == tactPlots.end())
-			{
-				pair<int, size_t> newEntry(iIndex, tactPlots.size());
-				tactPlotLookup.insert(upper_bound(tactPlotLookup.begin(), tactPlotLookup.end(), newEntry, PairCompareFirst()), newEntry);
-				tactPlots.push_back(*it);
-			}
-		}
-
-		current = current->parentPosition;
-	}
 }
 
 const CvTacticalPlot& CvTacticalPosition::getTactPlot(int plotindex) const
@@ -10668,17 +10185,55 @@ const CvTacticalPlot& CvTacticalPosition::getTactPlot(int plotindex) const
 	vector<CvTacticalPlot>::const_iterator it = findTactPlot(plotindex);
 	if (it != tactPlots.end())
 		return *it;
-
-	if (parentPosition)
-		return parentPosition->getTactPlot(plotindex);
-
-	//no caching? unclear what's better
 	return dummyPlot;
 }
 
+bool TacticalAIHelpers::FindAndExecuteBestUnitAssignments(vector<CvUnit*>& vUnits, CvPlot* pTarget, eAggressionLevel eAggLvl)
+{
+	int iCount = 0;
+	bool bSuccess = false;
+	set<int> unuseableUnits;
+	vector<CvUnit*> currentUnits = vUnits;
+	do
+	{
+		iCount++;
+
+		vector<STacticalAssignment> vAssignments = TacticalAIHelpers::FindBestUnitAssignments(currentUnits, pTarget, eAggLvl, gTactPosStorage, unuseableUnits);
+		if (vAssignments.empty())
+		{
+			if (unuseableUnits.size()>0 && currentUnits.size()>unuseableUnits.size())
+			{
+				//drop the offending units and try again
+				vector<CvUnit*> remainingUnits;
+				for (vector<CvUnit*>::iterator it = currentUnits.begin(); it != currentUnits.end(); ++it)
+				{
+					if (unuseableUnits.find((*it)->GetID())==unuseableUnits.end())
+						remainingUnits.push_back(*it);
+				}
+				currentUnits = remainingUnits;
+			}
+			else
+				break; //give up
+		}
+		else
+			//restarts might happen when new enemies become visible
+			bSuccess = TacticalAIHelpers::ExecuteUnitAssignments(vUnits.front()->getOwner(), vAssignments);
+	}
+	while (!bSuccess && iCount < 4);
+
+	return bSuccess;
+}
+
+//make sure our units come in a defined order (important for reproducability, don't want to sort pointers!)
+template<typename T>
+struct PrSortPairBySecondAsc
+{
+	bool operator()(const pair<T, T>& lhs, const pair<T, T>& rhs) const { return lhs.second < rhs.second; }
+};
+
 //try to find a combination of unit actions (move, attack etc) which does maximal damage to the enemy while exposing us to minimal risk
 vector<STacticalAssignment> TacticalAIHelpers::FindBestUnitAssignments(
-	const vector<CvUnit*>& vUnits, CvPlot* pTarget, eAggressionLevel eAggLvl, CvTactPosStorage& storage)
+	const vector<CvUnit*>& vUnits, CvPlot* pTarget, eAggressionLevel eAggLvl, CvTactPosStorage& storage, set<int>& unuseableUnits)
 {
 	/*
 	abstract:
@@ -10722,30 +10277,41 @@ vector<STacticalAssignment> TacticalAIHelpers::FindBestUnitAssignments(
 	static vector<CvTacticalPosition*> openPositionsHeap;
 	static vector<CvTacticalPosition*> completedPositions;
 
-#if defined(MOD_CORE_DEBUGGING)
-	if (false)
+#if defined(VPDEBUG)
+	if (GC.getLogging() && GC.getAILogging())
 	{
-		CvString strMsg = CvString::format("simulating assignments around %d:%d with %d units", pTarget->getX(), pTarget->getY(), vUnits.size());
+		CvString strMsg = CvString::format("simulating assignments around %d:%d with %d units, agg level %d", pTarget->getX(), pTarget->getY(), vUnits.size(), eAggLvl);
 		for (size_t i = 0; i < vUnits.size(); i++)
 			strMsg += CvString::format("; %d", vUnits[i]->GetID());
+
 		GET_PLAYER(ePlayer).GetTacticalAI()->LogTacticalMessage(strMsg);
 
-#if defined(STACKWALKER)
-		gStackWalker.SetLog(GET_PLAYER(ePlayer).GetTacticalAI()->GetLogFile());
-		gStackWalker.ShowCallstack(5);
-		gStackWalker.SetLog(NULL);
-#endif
+		// Additional debug info
+		char szDebugInfo[256];
+		sprintf_s(szDebugInfo, "TacticalAI Debug - Target: (%d,%d), Units: %d, AggLevel: %d\n",
+			pTarget->getX(), pTarget->getY(), vUnits.size(), eAggLvl);
+		OutputDebugString(szDebugInfo);
+
+		// Assertions for critical conditions
+		ASSERT_DEBUG(iMaxBranches >= 2 && iMaxBranches <= 9 && "Invalid branch count");
+		ASSERT_DEBUG(iMaxChoicesPerUnit >= 2 && iMaxChoicesPerUnit <= 9 && "Invalid choices per unit");
 	}
 #endif
 
-	cvStopWatch timer("tactsim",NULL,0,true);
-	timer.StartPerfTest();
-
-	//clean up from the last run
+	//clean up from the last run, more if the player changed to limit memory usage
 	storage.reset(eLastTactSimPlayer!=ePlayer);
 	eLastTactSimPlayer = ePlayer;
+
 	gReachablePlotsLookup.clear();
 	gRangeAttackPlotsLookup.clear();
+	gSafePlotCount.clear();
+	gBadUnitsCount.clear();
+	unuseableUnits.clear();
+
+	//basic leader trait dependence
+	int iOffenseFlavor = range(GET_PLAYER(ePlayer).GetGrandStrategyAI()->GetPersonalityAndGrandStrategy((FlavorTypes)GC.getInfoTypeForString("FLAVOR_OFFENSE")), 0, 10);
+	gDefaultUnitLossThreshold = (iOffenseFlavor>6 && vUnits.size()>6) ? 1 : 0;
+	gMinHpForTactsim = 50 - 2 * iOffenseFlavor;
 	
 	//set up the initial position
 	CvTacticalPosition* initialPosition = storage.peekNext(); storage.consumeOne();
@@ -10755,6 +10321,7 @@ vector<STacticalAssignment> TacticalAIHelpers::FindBestUnitAssignments(
 
 	//first pass: make sure there are no duplicates and other invalid inputs
 	vector<CvUnit*> ourUnits;
+	vector<int> unitXP(vUnits.size());
 	for (size_t i = 0; i < vUnits.size(); i++)
 	{
 		CvUnit* pUnit = vUnits[i];
@@ -10768,44 +10335,71 @@ vector<STacticalAssignment> TacticalAIHelpers::FindBestUnitAssignments(
 		//we accept them only if they are alone in the plot and only allow movement into the native domain.
 		//exception: since we ignore garrisoned units for tactsim, we can still use units (ships) in cities if a (land) garrison is present
 		if (pUnit && pUnit->canUseNow())
-			if (pUnit->isNativeDomain(pUnit->plot()) || pUnit->plot()->getNumUnits()==1 || pUnit->plot()->isCity())
+		{
+			if (pUnit->isNativeDomain(pUnit->plot()) || pUnit->plot()->getNumUnits() == 1 || pUnit->plot()->isCity())
+			{
 				ourUnits.push_back(vUnits[i]);
+				unitXP.push_back(vUnits[i]->getExperienceTimes100());
+			}
+		}
 	}
 
 	if (ourUnits.empty())
 		return result;
 
+	//remember the median xp so that we can protect our experienced units over the rookies
+	std::nth_element(unitXP.begin(), unitXP.begin() + unitXP.size()/2, unitXP.end());
+	gMedianUnitXP = (unitXP[unitXP.size()/2]);
+
 	//create the tactical plots around the target (up to distance 5)
 	//not equivalent to the union of all reachable plots: we need to consider unreachable enemies as well!
 	//some units may have their initial plots outside of this range but that's ok, we'll fix it later
+	vector<CvPlot*> enemyPlots;
 	for (int i = 0; i < RING_PLOTS[TACTICAL_COMBAT_MAX_TARGET_DISTANCE + 1]; i++)
 	{
 		CvPlot* pPlot = iterateRingPlots(pTarget, i);
 		if (pPlot && pPlot->isVisible(ourTeam))
+		{
 			initialPosition->addTacticalPlot(pPlot, ourUnits);
+			//need this for later
+			if (pPlot->isEnemyUnit(initialPosition->getPlayer(), true, false))
+				enemyPlots.push_back(pPlot);
+		}
 	}
 
-	//second pass, now that we know which units will be used, add them to the initial position
+	//second pass, ensure we have space to maneuver around our enemies
+	//this might reveal new enemies but there has to be a line somewhere ...
+	for (size_t j = 0; j < enemyPlots.size(); j++)
+	{
+		for (int i = RING0_PLOTS; i < RING_PLOTS[2]; i++)
+		{
+			CvPlot* pPlot = iterateRingPlots(enemyPlots[j], i);
+			if (pPlot && pPlot->isVisible(ourTeam))
+				initialPosition->addTacticalPlot(pPlot, ourUnits);
+		}
+	}
+
+	//do this once before we start adding units
+	initialPosition->countEnemiesAndCheckVisibility();
+
+	//third pass, now that we know which units will be used, add them to the initial position
 	for(vector<CvUnit*>::iterator it=ourUnits.begin(); it!=ourUnits.end(); ++it)
 	{
 		CvUnit* pUnit = *it;
 		if (initialPosition->addAvailableUnit(pUnit))
 		{
 			//make sure we know the immediate surroundings of every unit
-			for (int j = 0; j < RING2_PLOTS; j++)
+			for (int j = 0; j < RING1_PLOTS; j++)
 			{
 				CvPlot* pPlot = iterateRingPlots(pUnit->plot(), j);
-				if (!pPlot)
-					continue;
-				//there was a strange bug where the plot containing the unit or adjacent plots are not visible? wtf
-				if (j<RING1_PLOTS || pPlot->isVisible(ourTeam))
+				if (pPlot)
 					initialPosition->addTacticalPlot(pPlot, ourUnits);
 			}
 		}
 	}
 
 	//find out which plot is frontline, second line etc
-	initialPosition->refreshVolatilePlotProperties();
+	initialPosition->refreshVolatilePlotProperties(true);
 
 	//now associate our units with their initial plots (after we know the plot types)
 	initialPosition->addInitialAssignments();
@@ -10817,8 +10411,8 @@ vector<STacticalAssignment> TacticalAIHelpers::FindBestUnitAssignments(
 	//small performance optimization
 	initialPosition->setFirstInterestingAssignment(initialPosition->getAssignments().size());
 
-	//around 15 units everythings becomes slow so don't use more
-	initialPosition->dropSuperfluousUnits(15);
+	//around 15 units everything becomes slow so don't use too many
+	initialPosition->dropSuperfluousUnits(TACTSIM_MAX_UNITS);
 
 	openPositionsHeap.clear();
 	completedPositions.clear();
@@ -10830,6 +10424,8 @@ vector<STacticalAssignment> TacticalAIHelpers::FindBestUnitAssignments(
 	//initially we go breadth-first, later switch to depth-first
 	CvTacticalPosition::PrPositionSortHeapGeneration heapSort(false);
 
+	cvStopWatch timer("tactsim", NULL, 0, true);
+	timer.StartPerfTest();
 	while (!openPositionsHeap.empty())
 	{
 		pop_heap( openPositionsHeap.begin(), openPositionsHeap.end(), heapSort);
@@ -10886,34 +10482,23 @@ vector<STacticalAssignment> TacticalAIHelpers::FindBestUnitAssignments(
 				iStartingUnits << " starting units, " <<
 				current->getAvailableUnits().size() << " remaining units";
 				CUSTOMLOG(ss.str().c_str());
-
-			//too risky ...
-			/*
-			//see if we can just take an unfinished position to salvage the situation
-			if (completedPositions.empty())
-			{
-				std::stable_sort(openPositionsHeap.begin(), openPositionsHeap.end(), CvTacticalPosition::PrPositionSortArrayTotalScore());
-				for (size_t i = 0; i < openPositionsHeap.size(); i++)
-				{
-					if (openPositionsHeap[i]->addFinishMovesIfAcceptable(false))
-						completedPositions.push_back(openPositionsHeap[i]);
-				}
-
-				//want at least 3, don't trust the results if we have less
-				if (completedPositions.size() < 3)
-					completedPositions.clear();
-			}
-			*/
 			break;
 		}
 	}
-
 	timer.EndPerfTest();
+	int durationMs = int(timer.GetDeltaInSeconds() * 1000);
 
-	//normally the score for a completed position should be higher than for a finished one
-	//but if there are too many unassigned units it can tip
-	if (!completedPositions.empty())
+	if (completedPositions.empty())
 	{
+		//bad but maybe we can recover ... we should have picked BLOCKED moves for impossible units but that doesn't always happen
+		//since search breadth is limited and it only turns out at the end whether a chosen move was actually impossible
+		//the next best thing is to try again without the problematic units
+		for (map<int,int>::iterator i = gBadUnitsCount.begin(); i != gBadUnitsCount.end(); ++i)
+			unuseableUnits.insert(i->first);
+	}
+	else
+	{
+		//good case, pick the best one
 		//need the predicate, else we sort the pointers by address!
 		std::stable_sort(completedPositions.begin(), completedPositions.end(), CvTacticalPosition::PrPositionSortArrayTotalScore());
 		result = completedPositions.front()->getAssignments();
@@ -10923,8 +10508,8 @@ vector<STacticalAssignment> TacticalAIHelpers::FindBestUnitAssignments(
 	{
 		if (true)
 		{
-			GET_PLAYER(ePlayer).GetTacticalAI()->LogTacticalMessage(CvString::format("tactsim around (%d:%d) finished in %d ms. started with %d units and %d enemies on %d plots. checked %d positions, %d completed.",
-				pTarget->getX(),pTarget->getY(),int(timer.GetDeltaInSeconds()*1000), initialPosition->getAvailableUnits().size(), initialPosition->getNumEnemies(), initialPosition->getNumPlots(), iUsedPositions, completedPositions.size()));
+			GET_PLAYER(ePlayer).GetTacticalAI()->LogTacticalMessage(CvString::format("tactsim around (%d:%d) with agg %d finished in %d ms. started with %d units and %d enemies on %d plots. checked %d positions, %d completed.",
+				pTarget->getX(),pTarget->getY(), eAggLvl, durationMs, initialPosition->getAvailableUnits().size(), initialPosition->getNumEnemies(), initialPosition->getNumPlots(), iUsedPositions, completedPositions.size()));
 		}
 
 		//debug dump
@@ -10952,6 +10537,9 @@ vector<STacticalAssignment> TacticalAIHelpers::FindBestUnitAssignments(
 
 bool TacticalAIHelpers::ExecuteUnitAssignments(PlayerTypes ePlayer, const std::vector<STacticalAssignment>& vAssignments)
 {
+	static const BuildTypes eCitadel = (BuildTypes)GC.getInfoTypeForString("BUILD_CITADEL");
+	static const BuildTypes eOrdo = MOD_BALANCE_VP ? (BuildTypes)GC.getInfoTypeForString("BUILD_MONGOLIA_ORDO") : NO_BUILD;
+
 	//take the assigned moves one by one and try to execute them faithfully. 
 	//may fail if a melee kill unexpectedly happens or does not happen
 
@@ -10992,7 +10580,9 @@ bool TacticalAIHelpers::ExecuteUnitAssignments(PlayerTypes ePlayer, const std::v
 #endif
 			if (bPrecondition)
 				pUnit->PushMission(CvTypes::getMISSION_MOVE_TO(), pToPlot->getX(), pToPlot->getY(), iMoveflags, false, false, MISSIONAI_OPMOVE);
-			bPostcondition = (pUnit->plot() == pToPlot); //plot changed
+
+			//movement may indeed fail if we stumble upon an invisible unit!
+			bPostcondition = (pUnit->plot() == pToPlot);
 
 #ifdef TACTDEBUG
 			//check this only for moves, eg melee kills can fail this check because the pathfinder assumes attacks end the turn!
@@ -11009,8 +10599,8 @@ bool TacticalAIHelpers::ExecuteUnitAssignments(PlayerTypes ePlayer, const std::v
 			break;
 		case A_MOVE_SWAP_REVERSE:
 			//nothing to do, this is just a dummy which always occurs after MOVE_SWAP for bookkeeping
-			bPrecondition = true;
-			bPostcondition = true;
+			bPrecondition = (pUnit->plot() == pToPlot);
+			bPostcondition = (pUnit->plot() == pToPlot);
 			break;
 		case A_RANGEATTACK:
 			bPrecondition = (pUnit->plot() == pFromPlot) && (pToPlot->isEnemyUnit(ePlayer,true,true) || pToPlot->isEnemyCity(*pUnit)); //enemy present
@@ -11068,10 +10658,17 @@ bool TacticalAIHelpers::ExecuteUnitAssignments(PlayerTypes ePlayer, const std::v
 			bPrecondition = true;
 			bPostcondition = true;
 			break;
+		case A_USE_POWER:
+			if (eOrdo != NO_BUILD && pUnit->canBuild(pUnit->plot(), eOrdo))
+				pUnit->PushMission(CvTypes::getMISSION_BUILD(), eOrdo);
+			else if (pUnit->canBuild(pUnit->plot(), eCitadel))
+				pUnit->PushMission(CvTypes::getMISSION_BUILD(), eCitadel);
+			else
+				bPrecondition = false;
 		case A_FINISH:
 			pUnit->PushMission(CvTypes::getMISSION_SKIP());
 			//this is the difference to a blocked unit, we prevent anyone else from moving it unless we want it to heal
-			if (!pUnit->shouldHeal(false) || pUnit->getMoves()==0)
+			if (!pUnit->shouldHeal(false) || pUnit->getMoves()==0 || pUnit->isBarbarian()) //barbarians don't heal
 				//important ... this allows civilian units to use this one as cover!
 				GET_PLAYER(ePlayer).GetTacticalAI()->UnitProcessed(pUnit->GetID());
 			bPrecondition = true;
@@ -11109,7 +10706,9 @@ bool TacticalAIHelpers::ExecuteUnitAssignments(PlayerTypes ePlayer, const std::v
 void CvTactPosStorage::reset(bool bHard)
 { 
 	//this is normally enough
-	iCount = 0; attackCache.clear();
+	iCount = 0; 
+	attackCache.clear(); 
+	dangerCache.clear();
 
 	//in a hard reset we recreate all stl containers from scratch
 	//because their capacity tends to increase over time otherwise
@@ -11193,5 +10792,8 @@ const char* assignmentTypeNames[] =
 	"RESTART",
 	"MELEEKILL_NOADVANCE",
 	"SWAP",
-	"SWAPREVERSE"
+	"SWAPREVERSE",
+	"USEPOWER",
+	"FINISHTEMP"
 };
+

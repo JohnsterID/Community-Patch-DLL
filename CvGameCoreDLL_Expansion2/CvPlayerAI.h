@@ -13,6 +13,7 @@
 #define CIV5_PLAYER_AI_H
 
 #include "CvPlayer.h"
+#include "CvPlot.h"
 
 class CvEventTriggerInfo;
 
@@ -70,7 +71,7 @@ public:
 	CvPlot* FindBestMerchantTargetPlotForPuppet(CvUnit* pMerchant);
 
 	//spaceship planning
-	vector<CvCity*> GetBestCitiesForSpaceshipParts();
+	const vector<CvCity*> GetBestCitiesForSpaceshipParts();
 	void AI_doSpaceshipProduction();
 
 	//For Great Diplomats
@@ -80,7 +81,10 @@ public:
 	int ScoreCityForMessenger(CvCity* pCity, CvUnit* pUnit);
 	CvPlot* ChooseMessengerTargetPlot(CvUnit* pUnit, vector<int>* pvIgnoreCities = NULL);
 
-	CvPlot* FindBestCultureBombPlot(CvUnit* pUnit, BuildTypes eBuild, const std::vector<CvPlot*>& vPlotsToAvoid, bool bMustBeWorkable);
+	priority_queue<SPlotWithScore> GetBestCultureBombPlots(const UnitTypes eUnit, const vector<CvPlot*>& vPlotsToAvoid, bool bCheckDanger);
+	const vector<CvPlot*>& GetTopCitadelPlotsCached();
+	bool IsNicePlotForCitadel(const CvPlot* pPlot);
+	CvPlot* FindBestCultureBombPlot(CvUnit* pUnit, const vector<CvPlot*>& vPlotsToAvoid);
 	CvPlot* FindBestMusicianTargetPlot(CvUnit* pMusician);
 
 	// this are used by a city AI to signal that it is committing to build a unit for one of my operations
@@ -102,6 +106,10 @@ public:
 
 protected:
 	void AI_doResearch();
+
+	//cache these
+	vector<CvPlot*> m_vCurrentCitadelTargets;
+	int m_iCurrentCitadelTargetsTurn;
 };
 
 // helper for accessing static functions

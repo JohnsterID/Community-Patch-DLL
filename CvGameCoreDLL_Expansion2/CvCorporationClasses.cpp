@@ -25,8 +25,8 @@ CvCorporationEntry::CvCorporationEntry(void):
 	m_iBaseSpreadChance(0),
 	m_iTourismMod(0),
 	m_bTradeRoutesInvulnerable(false),
-	m_piResourceMonopolyAnd(NULL),
-	m_piResourceMonopolyOrs(NULL),
+	m_viResourceMonopolyAnds(),
+	m_viResourceMonopolyOrs(),
 	m_piNumFreeResource(NULL),
 	m_piTradeRouteMod(NULL),
 	m_piTradeRouteCityMod(NULL),
@@ -40,8 +40,8 @@ CvCorporationEntry::CvCorporationEntry(void):
 
 CvCorporationEntry::~CvCorporationEntry(void)
 {
-	SAFE_DELETE_ARRAY(m_piResourceMonopolyAnd);
-	SAFE_DELETE_ARRAY(m_piResourceMonopolyOrs);
+	m_viResourceMonopolyAnds.clear();
+	m_viResourceMonopolyOrs.clear();
 	SAFE_DELETE_ARRAY(m_piNumFreeResource);
 	SAFE_DELETE_ARRAY(m_piTradeRouteMod);
 	SAFE_DELETE_ARRAY(m_piTradeRouteCityMod);
@@ -120,83 +120,90 @@ bool CvCorporationEntry::IsTradeRoutesInvulnerable() const
 	return m_bTradeRoutesInvulnerable;
 }
 
-int CvCorporationEntry::GetResourceMonopolyAnd(int i) const
+/// Prerequisite resources with AND
+uint CvCorporationEntry::GetResourceMonopolyAndSize() const
 {
-	CvAssertMsg(i < /*5*/ GD_INT_GET(NUM_BUILDING_RESOURCE_PREREQS), "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
-	return m_piResourceMonopolyAnd ? m_piResourceMonopolyAnd[i] : -1;
+	return m_viResourceMonopolyAnds.size();
+}
+int CvCorporationEntry::GetResourceMonopolyAnd(uint ui) const
+{
+	ASSERT_DEBUG(ui < m_viResourceMonopolyAnds.size(), "Index out of bounds");
+	return m_viResourceMonopolyAnds[ui];
 }
 
 /// Prerequisite resources with OR
-int CvCorporationEntry::GetResourceMonopolyOr(int i) const
+uint CvCorporationEntry::GetResourceMonopolyOrSize() const
 {
-	CvAssertMsg(i < /*5*/ GD_INT_GET(NUM_BUILDING_RESOURCE_PREREQS), "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
-	return m_piResourceMonopolyOrs ? m_piResourceMonopolyOrs[i] : -1;
+	return m_viResourceMonopolyOrs.size();
+}
+int CvCorporationEntry::GetResourceMonopolyOr(uint ui) const
+{
+	ASSERT_DEBUG(ui < m_viResourceMonopolyOrs.size(), "Index out of bounds");
+	return m_viResourceMonopolyOrs[ui];
 }
 
 int CvCorporationEntry::GetNumFreeResource(int i) const
 {
-	CvAssertMsg(i < /*5*/ GD_INT_GET(NUM_BUILDING_RESOURCE_PREREQS), "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < GC.getNumResourceInfos(), "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
 	return m_piNumFreeResource ? m_piNumFreeResource[i] : -1;
 }
 
 int CvCorporationEntry::GetUnitResourceProductionModifier(int i) const
 {
-	CvAssertMsg(i < /*5*/ GD_INT_GET(NUM_BUILDING_RESOURCE_PREREQS), "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < GC.getNumResourceInfos(), "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
 	return m_piUnitResourceProductionModifier ? m_piUnitResourceProductionModifier[i] : -1;
 }
 
 /// Yield Modifier for Trade Routes to cities from an office to cities with a Franchise
 int CvCorporationEntry::GetTradeRouteMod(int i) const
 {
-	CvAssertMsg(i < NUM_YIELD_TYPES, "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < NUM_YIELD_TYPES, "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
 	return m_piTradeRouteMod ? m_piTradeRouteMod[i] : -1;
 }
 
 int CvCorporationEntry::GetTradeRouteCityMod(int i) const
 {
-	CvAssertMsg(i < NUM_YIELD_TYPES, "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < NUM_YIELD_TYPES, "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
 	return m_piTradeRouteCityMod ? m_piTradeRouteCityMod[i] : -1;
 }
 
 /// Change to Resource yield by type
 int CvCorporationEntry::GetResourceYieldChange(int i, int j) const
 {
-	CvAssertMsg(i < GC.getNumResourceInfos(), "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
-	CvAssertMsg(j < NUM_YIELD_TYPES, "Index out of bounds");
-	CvAssertMsg(j > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < GC.getNumResourceInfos(), "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(j < NUM_YIELD_TYPES, "Index out of bounds");
+	ASSERT_DEBUG(j > -1, "Index out of bounds");
 	return m_ppaiResourceYieldChange ? m_ppaiResourceYieldChange[i][j] : -1;
 }
 
 /// Array of changes to Resource yield
 int* CvCorporationEntry::GetResourceYieldChangeArray(int i) const
 {
-	CvAssertMsg(i < GC.getNumResourceInfos(), "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < GC.getNumResourceInfos(), "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
 	return m_ppaiResourceYieldChange[i];
 }
 
 /// Change to specialist yield by type
 int CvCorporationEntry::GetSpecialistYieldChange(int i, int j) const
 {
-	CvAssertMsg(i < GC.getNumSpecialistInfos(), "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
-	CvAssertMsg(j < NUM_YIELD_TYPES, "Index out of bounds");
-	CvAssertMsg(j > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < GC.getNumSpecialistInfos(), "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(j < NUM_YIELD_TYPES, "Index out of bounds");
+	ASSERT_DEBUG(j > -1, "Index out of bounds");
 	return m_ppaiSpecialistYieldChange ? m_ppaiSpecialistYieldChange[i][j] : -1;
 }
 
 /// Array of changes to specialist yield
 int* CvCorporationEntry::GetSpecialistYieldChangeArray(int i) const
 {
-	CvAssertMsg(i < GC.getNumSpecialistInfos(), "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < GC.getNumSpecialistInfos(), "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
 	return m_ppaiSpecialistYieldChange[i];
 }
 
@@ -213,10 +220,10 @@ CvString CvCorporationEntry::GetTradeRouteBenefitHelper() const
 /// Yield change for a specific BuildingClass by yield type
 int CvCorporationEntry::GetBuildingClassYieldChange(int i, int j) const
 {
-	CvAssertMsg(i < GC.getNumBuildingClassInfos(), "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
-	CvAssertMsg(j < NUM_YIELD_TYPES, "Index out of bounds");
-	CvAssertMsg(j > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < GC.getNumBuildingClassInfos(), "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(j < NUM_YIELD_TYPES, "Index out of bounds");
+	ASSERT_DEBUG(j > -1, "Index out of bounds");
 	return m_ppiBuildingClassYieldChanges[i][j];
 }
 
@@ -277,8 +284,8 @@ bool CvCorporationEntry::CacheResults(Database::Results& kResults, CvDatabaseUti
 
 	const char* szCorporationType = GetType();
 
-	kUtility.PopulateArrayByExistence(m_piResourceMonopolyAnd, "Resources", "Corporation_ResourceMonopolyAnds", "ResourceType", "CorporationType", szCorporationType);
-	kUtility.PopulateArrayByExistence(m_piResourceMonopolyOrs, "Resources", "Corporation_ResourceMonopolyOrs", "ResourceType", "CorporationType", szCorporationType);
+	kUtility.PopulateVector(m_viResourceMonopolyAnds, "Resources", "Corporation_ResourceMonopolyAnds", "ResourceType", "CorporationType", szCorporationType);
+	kUtility.PopulateVector(m_viResourceMonopolyOrs, "Resources", "Corporation_ResourceMonopolyOrs", "ResourceType", "CorporationType", szCorporationType);
 	kUtility.PopulateArrayByValue(m_piNumFreeResource, "Resources", "Corporation_NumFreeResource", "ResourceType", "CorporationType", szCorporationType, "NumResource");
 	kUtility.PopulateArrayByValue(m_piUnitResourceProductionModifier, "Resources", "Corporation_UnitResourceProductionModifier", "ResourceType", "CorporationType", szCorporationType, "Modifier");
 	kUtility.SetYields(m_piTradeRouteCityMod, "Corporation_TradeRouteCityYield", "CorporationType", szCorporationType);
@@ -493,8 +500,8 @@ CvPlayerCorporations::CvPlayerCorporations(void):
 	m_iCorporationOfficesAsFranchises(0),
 	m_iCorporationRandomForeignFranchiseMod(0),
 	m_iCorporationFreeFranchiseAbovePopular(0),
-	m_bIsNoForeignCorpsInCities(false),
-	m_bIsNoFranchisesInForeignCities(false),
+	m_iNoForeignCorpsInCities(0),
+	m_iNoFranchisesInForeignCities(0),
 	m_aiFranchisesPerImprovement()
 {
 }
@@ -527,8 +534,8 @@ void CvPlayerCorporations::Uninit()
 	m_iCorporationOfficesAsFranchises = 0;
 	m_iCorporationRandomForeignFranchiseMod = 0;
 	m_iCorporationFreeFranchiseAbovePopular = 0;
-	m_bIsNoForeignCorpsInCities = false;
-	m_bIsNoFranchisesInForeignCities = false;
+	m_iNoForeignCorpsInCities = 0;
+	m_iNoFranchisesInForeignCities = 0;
 }
 
 /// Reset
@@ -549,8 +556,8 @@ void CvPlayerCorporations::Serialize(PlayerCorporations& playerCorporations, Vis
 	visitor(playerCorporations.m_iCorporationOfficesAsFranchises);
 	visitor(playerCorporations.m_iCorporationRandomForeignFranchiseMod);
 	visitor(playerCorporations.m_iCorporationFreeFranchiseAbovePopular);
-	visitor(playerCorporations.m_bIsNoForeignCorpsInCities);
-	visitor(playerCorporations.m_bIsNoFranchisesInForeignCities);
+	visitor(playerCorporations.m_iNoForeignCorpsInCities);
+	visitor(playerCorporations.m_iNoFranchisesInForeignCities);
 	visitor(playerCorporations.m_aiFranchisesPerImprovement);
 }
 
@@ -588,100 +595,78 @@ CvCorporation * CvPlayerCorporations::GetCorporation() const
 // Do not call this function outside of CvGameCorporations::DestroyCorporation()! It will mess things up!
 void CvPlayerCorporations::DestroyCorporation()
 {
-	if(!HasFoundedCorporation())
+	if (!HasFoundedCorporation())
 		return;
 
 	CvCorporationEntry* pkCorporationInfo = GC.getCorporationInfo(m_eFoundedCorporation);
-	if(pkCorporationInfo == NULL)
+	if (!pkCorporationInfo)
 		return;
 
 	BuildingClassTypes eHeadquartersClass = pkCorporationInfo->GetHeadquartersBuildingClass();
 	BuildingClassTypes eOfficeClass = pkCorporationInfo->GetOfficeBuildingClass();
 	BuildingClassTypes eFranchiseClass = pkCorporationInfo->GetFranchiseBuildingClass();
 
-	// Get Corporation Buildings
-	BuildingTypes eHeadquarters = NO_BUILDING;
-	BuildingTypes eOffice = NO_BUILDING;
-	BuildingTypes eFranchise = NO_BUILDING;
-
-	// Get Corporation Buildings
-	// If the option to check for all buildings in a class is enabled, we loop through all buildings in the city. Don't check for Rome as even they don't keep Corporation buildings on conquest
-	if (!MOD_BUILDINGS_THOROUGH_PREREQUISITES)
-	{
-		eHeadquarters = (BuildingTypes)m_pPlayer->getCivilizationInfo().getCivilizationBuildings(eHeadquartersClass);
-		eOffice = (BuildingTypes)m_pPlayer->getCivilizationInfo().getCivilizationBuildings(eOfficeClass);
-		eFranchise = (BuildingTypes)m_pPlayer->getCivilizationInfo().getCivilizationBuildings(eFranchiseClass);
-	}
-
 	int iLoop = 0;
 	// Destroy our headquarters and offices
-	for(CvCity* pCity = m_pPlayer->firstCity(&iLoop); pCity != NULL; pCity = m_pPlayer->nextCity(&iLoop))
+	for (CvCity* pCity = m_pPlayer->firstCity(&iLoop); pCity != NULL; pCity = m_pPlayer->nextCity(&iLoop))
 	{
-		if (MOD_BUILDINGS_THOROUGH_PREREQUISITES)
-		{
-			eHeadquarters = pCity->GetCityBuildings()->GetBuildingTypeFromClass(eHeadquartersClass);
-			eOffice = pCity->GetCityBuildings()->GetBuildingTypeFromClass(eOfficeClass);
-		}
+		BuildingTypes eHeadquarters = pCity->GetBuildingTypeFromClass(eHeadquartersClass);
+		BuildingTypes eOffice = pCity->GetBuildingTypeFromClass(eOfficeClass);
 
 		// City has headquarters?
-		if(eHeadquarters != NO_BUILDING && pCity->HasBuilding(eHeadquarters))
+		if (eHeadquarters != NO_BUILDING && pCity->HasBuilding(eHeadquarters))
 		{
 			pCity->GetCityBuildings()->SetNumRealBuilding(eHeadquarters, 0);
 			GC.getGame().decrementBuildingClassCreatedCount(eHeadquartersClass);
 		}
 
 		// City has office?
-		if(eOffice != NO_BUILDING && pCity->HasBuilding(eOffice))
+		if (eOffice != NO_BUILDING && pCity->HasBuilding(eOffice))
 		{
 			pCity->GetCityBuildings()->SetNumRealBuilding(eOffice, 0);
 		}
 	}
 
-	//and destroy our franchises too!
-	PlayerTypes eLoopPlayer;
-	for(int iPlayerLoop=0; iPlayerLoop < MAX_CIV_PLAYERS; iPlayerLoop++)
+	// And destroy our franchises too!
+	for (int iPlayerLoop = 0; iPlayerLoop < MAX_CIV_PLAYERS; iPlayerLoop++)
 	{
-		eLoopPlayer = (PlayerTypes) iPlayerLoop;
-		if(!GET_PLAYER(eLoopPlayer).isAlive()) continue;
+		PlayerTypes eLoopPlayer = static_cast<PlayerTypes>(iPlayerLoop);
+		CvPlayer& kLoopPlayer = GET_PLAYER(eLoopPlayer);
+		if (!kLoopPlayer.isAlive())
+			continue;
 		
-		iLoop = 0;
-		for(CvCity* pCity = GET_PLAYER(eLoopPlayer).firstCity(&iLoop); pCity != NULL; pCity = GET_PLAYER(eLoopPlayer).nextCity(&iLoop))
+		int iLoop = 0;
+		for (CvCity* pCity = kLoopPlayer.firstCity(&iLoop); pCity != NULL; pCity = kLoopPlayer.nextCity(&iLoop))
 		{
-			if (MOD_BUILDINGS_THOROUGH_PREREQUISITES)
-			{
-				eFranchise = pCity->GetCityBuildings()->GetBuildingTypeFromClass(eFranchiseClass);
-			}
-			if(eFranchise != NO_BUILDING && pCity->HasBuilding(eFranchise))
+			BuildingTypes eFranchise = pCity->GetBuildingTypeFromClass(eFranchiseClass);
+			if (eFranchise != NO_BUILDING && pCity->HasBuilding(eFranchise))
 			{
 				pCity->GetCityBuildings()->SetNumRealBuilding(eFranchise, 0);
 			}
 		}
-	}
 
-	m_pPlayer->processCorporations(m_eFoundedCorporation, -1);
-
-	// Push notification to all players about destroyed Corporation
-	for (int iLoopPlayer = 0; iLoopPlayer < MAX_MAJOR_CIVS; iLoopPlayer++)
-	{
-		PlayerTypes eLoopPlayer = (PlayerTypes)iLoopPlayer;
-		if (GET_PLAYER(eLoopPlayer).isAlive())
+		// Push notification to all players about destroyed Corporation
+		CvNotifications* pNotifications = kLoopPlayer.GetNotifications();
+		if (pNotifications && m_pPlayer->GetID())
 		{
-			CvNotifications* pNotifications = GET_PLAYER(eLoopPlayer).GetNotifications();
-			if (pNotifications && m_pPlayer->GetID())
-			{
-				Localization::String strSummary;
-				Localization::String strMessage;
+			Localization::String strSummary;
+			Localization::String strMessage;
 
-				strSummary = Localization::Lookup("TXT_KEY_NOTIFICATION_CORPORATION_DESTROYED_SUMMARY");
-				strSummary << pkCorporationInfo->GetDescription();
-				strMessage = Localization::Lookup("TXT_KEY_NOTIFICATION_CORPORATION_DESTROYED");
-				strMessage << pkCorporationInfo->GetDescription();
-				pNotifications->Add(NOTIFICATION_GENERIC, strMessage.toUTF8(), strSummary.toUTF8(), -1, -1, -1, -1);
-			}
+			strSummary = Localization::Lookup("TXT_KEY_NOTIFICATION_CORPORATION_DESTROYED_SUMMARY");
+			strSummary << pkCorporationInfo->GetDescription();
+			strMessage = Localization::Lookup("TXT_KEY_NOTIFICATION_CORPORATION_DESTROYED");
+			strMessage << pkCorporationInfo->GetDescription();
+			pNotifications->Add(NOTIFICATION_GENERIC, strMessage.toUTF8(), strSummary.toUTF8(), -1, -1, -1, -1);
 		}
 	}
 
+	m_pPlayer->processCorporations(m_eFoundedCorporation, -1);
 	Uninit();
+}
+
+bool CvPlayerCorporations::IsCorporationOfficesAsFranchises() const
+{
+	return (m_iCorporationOfficesAsFranchises > 0);
 }
 
 int CvPlayerCorporations::GetCorporationOfficesAsFranchises() const
@@ -689,11 +674,12 @@ int CvPlayerCorporations::GetCorporationOfficesAsFranchises() const
 	return m_iCorporationOfficesAsFranchises;
 }
 
-void CvPlayerCorporations::SetCorporationOfficesAsFranchises(int iValue)
+void CvPlayerCorporations::ChangeCorporationOfficesAsFranchises(int iValue)
 {
 	if (iValue != 0)
 	{
 		m_iCorporationOfficesAsFranchises += iValue;
+		RecalculateNumFranchises();
 	}
 }
 
@@ -702,10 +688,9 @@ int CvPlayerCorporations::GetCorporationRandomForeignFranchiseMod() const
 	return m_iCorporationRandomForeignFranchiseMod;
 }
 
-void CvPlayerCorporations::SetCorporationRandomForeignFranchiseMod(int iValue)
+void CvPlayerCorporations::ChangeCorporationRandomForeignFranchiseMod(int iValue)
 {
-	if (iValue != 0)
-		m_iCorporationRandomForeignFranchiseMod += iValue;
+	m_iCorporationRandomForeignFranchiseMod += iValue;
 }
 
 int CvPlayerCorporations::GetCorporationFreeFranchiseAbovePopular() const
@@ -713,65 +698,64 @@ int CvPlayerCorporations::GetCorporationFreeFranchiseAbovePopular() const
 	return m_iCorporationFreeFranchiseAbovePopular;
 }
 
-void CvPlayerCorporations::SetCorporationFreeFranchiseAbovePopular(int iValue)
+void CvPlayerCorporations::ChangeCorporationFreeFranchiseAbovePopular(int iValue)
 {
 	if (iValue != 0)
+	{
 		m_iCorporationFreeFranchiseAbovePopular += iValue;
+		RecalculateNumFranchises();
+	}
 }
 
 bool CvPlayerCorporations::IsNoForeignCorpsInCities() const
 {
-	return m_bIsNoForeignCorpsInCities;
+	return (m_iNoForeignCorpsInCities > 0);
 }
-void CvPlayerCorporations::SetNoForeignCorpsInCities(bool bValue)
+
+void CvPlayerCorporations::ChangeNoForeignCorpsInCities(int iValue)
 {
-	if (bValue != m_bIsNoForeignCorpsInCities)
+	int iOldValue = m_iNoForeignCorpsInCities;
+	m_iNoForeignCorpsInCities += iValue;
+	if (iOldValue <= 0 && m_iNoForeignCorpsInCities > 0)
 	{
-		m_bIsNoForeignCorpsInCities = bValue;
-		if (bValue)
+		int iLoop = 0;
+		for (CvCity* pLoopCity = m_pPlayer->firstCity(&iLoop); pLoopCity != NULL; pLoopCity = m_pPlayer->nextCity(&iLoop))
 		{
-			CvCity* pLoopCity = NULL;
-			int iLoop = 0;
-			for (pLoopCity = m_pPlayer->firstCity(&iLoop); pLoopCity != NULL; pLoopCity = m_pPlayer->nextCity(&iLoop))
-			{
-				if (pLoopCity != NULL)
-				{
-					ClearCorporationFromCity(pLoopCity, GetFoundedCorporation(), true);
-				}
-			}
+			ClearCorporationFromCity(pLoopCity, GetFoundedCorporation(), true);
 		}
 	}
 }
+
 bool CvPlayerCorporations::IsNoFranchisesInForeignCities() const
 {
-	return m_bIsNoFranchisesInForeignCities;
+	return (m_iNoFranchisesInForeignCities > 0);
 }
-void CvPlayerCorporations::SetNoFranchisesInForeignCities(bool bValue)
+
+void CvPlayerCorporations::ChangeNoFranchisesInForeignCities(int iValue)
 {
-	if (bValue != m_bIsNoFranchisesInForeignCities)
+	int iOldValue = m_iNoFranchisesInForeignCities;
+	m_iNoFranchisesInForeignCities += iValue;
+	if (iOldValue <= 0 && m_iNoFranchisesInForeignCities > 0)
 	{
-		m_bIsNoFranchisesInForeignCities = bValue;
-		if (bValue)
-		{
-			ClearCorporationFromForeignCities(false, true);
-		}
+		ClearCorporationFromForeignCities(false, true);
 	}
 }
 
 int CvPlayerCorporations::GetFranchisesPerImprovement(ImprovementTypes eIndex) const
 {
-	CvAssertMsg(eIndex < GC.getNumImprovementInfos(), "Index out of bounds");
-	CvAssertMsg(eIndex > -1, "Index out of bounds");
+	ASSERT_DEBUG(eIndex < GC.getNumImprovementInfos(), "Index out of bounds");
+	ASSERT_DEBUG(eIndex > -1, "Index out of bounds");
 	return m_aiFranchisesPerImprovement[eIndex];
 }
 
 void CvPlayerCorporations::ChangeFranchisesPerImprovement(ImprovementTypes eIndex, int iValue)
 {
-	CvAssertMsg(eIndex < GC.getNumImprovementInfos(), "Index out of bounds");
-	CvAssertMsg(eIndex > -1, "Index out of bounds");
+	ASSERT_DEBUG(eIndex < GC.getNumImprovementInfos(), "Index out of bounds");
+	ASSERT_DEBUG(eIndex > -1, "Index out of bounds");
 	if (iValue != 0)
 	{
 		m_aiFranchisesPerImprovement[eIndex] += iValue;
+		RecalculateNumFranchises();
 	}
 }
 
@@ -863,7 +847,7 @@ void CvPlayerCorporations::RecalculateNumFranchises()
 							iFranchises++;
 
 							// Free franchise above Popular?
-							if (GetCorporationFreeFranchiseAbovePopular() != 0 && m_pPlayer->GetCulture()->GetInfluenceLevel(ePlayer) >= INFLUENCE_LEVEL_POPULAR)
+							if (GetCorporationFreeFranchiseAbovePopular() != 0 && GET_PLAYER(ePlayer).isMajorCiv() && m_pPlayer->GetCulture()->GetInfluenceLevel(ePlayer) >= INFLUENCE_LEVEL_POPULAR)
 							{
 								iFreeFranchises += GetCorporationFreeFranchiseAbovePopular();
 							}
@@ -936,8 +920,6 @@ void CvPlayerCorporations::BuildFranchiseInCity(CvCity* pOriginCity, CvCity* pDe
 		return;
 
 	CvBuildingEntry* pBuildingInfo = GC.getBuildingInfo(eFranchise);
-	if (pBuildingInfo == NULL)
-		return;
 
 	// If we've passed all the checks above, we are ready to go!
 	pDestCity->GetCityBuildings()->SetNumRealBuilding(eFranchise, 1, true);
@@ -1220,9 +1202,10 @@ CvString CvPlayerCorporations::GetCurrentOfficeBenefit()
 	int iNumFranchises = GetNumFranchises();
 
 	BuildingTypes eOffice = (BuildingTypes)m_pPlayer->getCivilizationInfo().getCivilizationBuildings(pkCorporationInfo->GetOfficeBuildingClass());
-	CvBuildingEntry* pkOfficeInfo = GC.getBuildingInfo(eOffice);
-	if (pkOfficeInfo == NULL)
+	if (eOffice == NO_BUILDING)
 		return "";
+
+	CvBuildingEntry* pkOfficeInfo = GC.getBuildingInfo(eOffice);
 
 	// Great Person Rate bonus?
 	if (pkOfficeInfo->GetGPRateModifierPerXFranchises() > 0)
@@ -1329,10 +1312,10 @@ int CvPlayerCorporations::GetMaxNumFranchises() const
 		// Search all players for Franchises (Autocracy)
 		if (GetCorporationFreeFranchiseAbovePopular() > 0)
 		{
-			for (int iLoopPlayer = 0; iLoopPlayer < MAX_CIV_PLAYERS; iLoopPlayer++)
+			for (int iLoopPlayer = 0; iLoopPlayer < MAX_MAJOR_CIVS; iLoopPlayer++)
 			{
 				PlayerTypes ePlayer = (PlayerTypes)iLoopPlayer;
-				if (ePlayer != NO_PLAYER && GET_PLAYER(ePlayer).isAlive() && !GET_PLAYER(ePlayer).isBarbarian())
+				if (ePlayer != NO_PLAYER && GET_PLAYER(ePlayer).isAlive())
 				{
 					if (m_pPlayer->GetCulture()->GetInfluenceLevel(ePlayer) < INFLUENCE_LEVEL_POPULAR)
 						continue;
@@ -1412,7 +1395,8 @@ void CvPlayerCorporations::ClearAllCorporationsFromCity(CvCity* pCity)
 	if (pCity == NULL)
 		return;
 
-	const std::vector<BuildingTypes>& vBuildings = pCity->GetCityBuildings()->GetAllBuildingsHere();
+	// don't use a reference variable here, we're changing which buildings are in the city
+	const std::vector<BuildingTypes> vBuildings = pCity->GetCityBuildings()->GetAllBuildingsHere();
 	for (size_t jJ = 0; jJ < vBuildings.size(); jJ++)
 	{
 		BuildingTypes eBuilding = vBuildings[jJ];
@@ -1448,165 +1432,92 @@ void CvPlayerCorporations::ClearAllCorporationsFromCity(CvCity* pCity)
 // Clear foreign Corporations from pCity
 void CvPlayerCorporations::ClearCorporationFromCity(CvCity* pCity, CorporationTypes eCorporation, bool bAllButThis)
 {
-	if (pCity == NULL)
+	ASSERT_DEBUG(pCity);
+	ASSERT_DEBUG(eCorporation != NO_CORPORATION);
+
+	if (!pCity)
 		return;
 
 	if (eCorporation == NO_CORPORATION)
 		return;
 
 	CvCorporationEntry* pkCorporationInfo = GC.getCorporationInfo(eCorporation);
-	if (pkCorporationInfo == NULL)
+	if (!pkCorporationInfo)
 		return;
 
+	BuildingClassTypes eHeadquartersClass = pkCorporationInfo->GetHeadquartersBuildingClass();
+	BuildingClassTypes eOfficeClass = pkCorporationInfo->GetOfficeBuildingClass();
+	BuildingClassTypes eFranchiseClass = pkCorporationInfo->GetFranchiseBuildingClass();
+
 	// Explicitly destroy all corporation buildings from this city
-	BuildingTypes eHeadquarters = NO_BUILDING;
-	BuildingTypes eOffice = NO_BUILDING;
-	BuildingTypes eFranchise = NO_BUILDING;
-	// If the option to check for all buildings in a class is enabled, we loop through all buildings in the city. Rome check unnecessary as even Rome cannot keep Corporation buildings on conquest.
-	if (MOD_BUILDINGS_THOROUGH_PREREQUISITES)
-	{
-		eHeadquarters = pCity->GetCityBuildings()->GetBuildingTypeFromClass(pkCorporationInfo->GetHeadquartersBuildingClass());
-		eOffice = pCity->GetCityBuildings()->GetBuildingTypeFromClass(pkCorporationInfo->GetOfficeBuildingClass());
-		eFranchise = pCity->GetCityBuildings()->GetBuildingTypeFromClass(pkCorporationInfo->GetFranchiseBuildingClass());
-	}
-	else
-	{
-		eHeadquarters = (BuildingTypes)m_pPlayer->getCivilizationInfo().getCivilizationBuildings(pkCorporationInfo->GetHeadquartersBuildingClass());
-		eOffice = (BuildingTypes)m_pPlayer->getCivilizationInfo().getCivilizationBuildings(pkCorporationInfo->GetOfficeBuildingClass());
-		eFranchise = (BuildingTypes)m_pPlayer->getCivilizationInfo().getCivilizationBuildings(pkCorporationInfo->GetFranchiseBuildingClass());
-	}
+	BuildingTypes eHeadquarters = pCity->GetBuildingTypeFromClass(eHeadquartersClass);
+	BuildingTypes eOffice = pCity->GetBuildingTypeFromClass(eOfficeClass);
+	BuildingTypes eFranchise = pCity->GetBuildingTypeFromClass(eFranchiseClass);
 
-	const std::vector<BuildingTypes>& vBuildings = pCity->GetCityBuildings()->GetAllBuildingsHere();
-	for (size_t jJ = 0; jJ < vBuildings.size(); jJ++)
+	// don't use a reference variable here, we're changing which buildings are in the city
+	const std::vector<BuildingTypes> veBuildings = pCity->GetCityBuildings()->GetAllBuildingsHere(); 
+	for (vector<BuildingTypes>::const_iterator it = veBuildings.begin(); it != veBuildings.end(); ++it)
 	{
-		BuildingTypes eBuilding = vBuildings[jJ];
-
-		if (pCity->GetCityBuildings()->GetNumBuilding(eBuilding) <= 0)
+		if (pCity->GetCityBuildings()->GetNumBuilding(*it) <= 0)
 			continue;
 
-		CvBuildingEntry* pkBuilding = GC.getBuildingInfo(eBuilding);
-		if (!pkBuilding)
+		CvBuildingEntry* pkBuildingInfo = GC.getBuildingInfo(*it);
+		if (!pkBuildingInfo)
 			continue;
 
-		if (!pkBuilding->IsCorp())
+		if (!pkBuildingInfo->IsCorp())
 			continue;
 
-		if (bAllButThis)
+		if (bAllButThis && (*it == eHeadquarters || *it == eOffice || *it == eFranchise))
+			continue;
+
+		if (!bAllButThis && *it != eHeadquarters && *it != eOffice && *it != eFranchise)
+			continue;
+
+		pCity->GetCityBuildings()->SetNumRealBuilding(*it, 0);
+		const CvBuildingClassInfo& kBuildingClassInfo = pkBuildingInfo->GetBuildingClassInfo();
+		CorporationTypes eThisCorporation = kBuildingClassInfo.getCorporationType();
+
+		if (kBuildingClassInfo.IsHeadquarters())
+			GC.getGame().GetGameCorporations()->DestroyCorporation(eThisCorporation);
+
+		PlayerTypes eFounder = GC.getGame().GetCorporationFounder(eThisCorporation);
+		if (eFounder != NO_PLAYER)
 		{
-			if (eBuilding == eHeadquarters || eBuilding == eOffice || eFranchise == eBuilding)
-				continue;
-
-			pCity->GetCityBuildings()->SetNumRealBuilding(eBuilding, 0);
-
-			if (pkBuilding->GetBuildingClassInfo().IsHeadquarters())
+			CvNotifications* pNotifications = m_pPlayer->GetNotifications();
+			CvNotifications* pOtherNotifications = GET_PLAYER(eFounder).GetNotifications();
+			if (pNotifications || pOtherNotifications)
 			{
-				GC.getGame().GetGameCorporations()->DestroyCorporation(pkBuilding->GetBuildingClassInfo().getCorporationType());
+				Localization::String strSummary;
+				Localization::String strMessage;
+
+				strSummary = Localization::Lookup("TXT_KEY_NOTIFICATION_CORPORATION_BUILDINGS_REMOVED_CITY_S");
+				strSummary << pkBuildingInfo->GetTextKey();
+				strSummary << pCity->getNameKey();
+				strMessage = Localization::Lookup("TXT_KEY_NOTIFICATION_CORPORATION_BUILDINGS_REMOVED_CITY");
+				strMessage << pkBuildingInfo->GetTextKey();
+				strMessage << pCity->getNameKey();
+				strMessage << m_pPlayer->getCivilizationShortDescriptionKey();
+
+				if (pNotifications)
+					pNotifications->Add(NOTIFICATION_GENERIC, strMessage.toUTF8(), strSummary.toUTF8(), pCity->getX(), pCity->getY(), -1, -1);
+
+				// Skip if we are the founder (already sent above)
+				if (eFounder != m_pPlayer->GetID() && pOtherNotifications)
+					pOtherNotifications->Add(NOTIFICATION_GENERIC, strMessage.toUTF8(), strSummary.toUTF8(), pCity->getX(), pCity->getY(), -1, -1);
 			}
 
-			PlayerTypes eFounder = GC.getGame().GetCorporationFounder(pkBuilding->GetBuildingClassInfo().getCorporationType());
-			if (eFounder != NO_PLAYER && eFounder != m_pPlayer->GetID())
-			{
-				CvNotifications* pNotifications = GET_PLAYER(eFounder).GetNotifications();
-				if (pNotifications)
-				{
-					Localization::String strSummary;
-					Localization::String strMessage;
-
-					strSummary = Localization::Lookup("TXT_KEY_NOTIFICATION_CORPORATION_BUILDINGS_REMOVED_CITY_S");
-					strSummary << pkBuilding->GetTextKey();
-					strSummary << pCity->getNameKey();
-					strSummary << m_pPlayer->getCivilizationShortDescriptionKey();
-					strMessage = Localization::Lookup("TXT_KEY_NOTIFICATION_CORPORATION_BUILDINGS_REMOVED_CITY");
-					strMessage << pkBuilding->GetTextKey();
-					strMessage << pCity->getNameKey();
-					strMessage << m_pPlayer->getCivilizationShortDescriptionKey();
-					pNotifications->Add(NOTIFICATION_GENERIC, strMessage.toUTF8(), strSummary.toUTF8(), pCity->getX(), pCity->getY(), -1, -1);
-				}
-
-				pNotifications = m_pPlayer->GetNotifications();
-				if (pNotifications)
-				{
-					Localization::String strSummary;
-					Localization::String strMessage;
-
-					strSummary = Localization::Lookup("TXT_KEY_NOTIFICATION_CORPORATION_BUILDINGS_REMOVED_CITY_S");
-					strSummary << pkBuilding->GetTextKey();
-					strSummary << pCity->getNameKey();
-					strSummary << m_pPlayer->getCivilizationShortDescriptionKey();
-					strMessage = Localization::Lookup("TXT_KEY_NOTIFICATION_CORPORATION_BUILDINGS_REMOVED_CITY");
-					strMessage << pkBuilding->GetTextKey();
-					strMessage << pCity->getNameKey();
-					strMessage << m_pPlayer->getCivilizationShortDescriptionKey();
-					pNotifications->Add(NOTIFICATION_GENERIC, strMessage.toUTF8(), strSummary.toUTF8(), pCity->getX(), pCity->getY(), -1, -1);
-				}
-
-				GET_PLAYER(eFounder).GetCorporations()->RecalculateNumFranchises();
-
-				if (GC.getLogging() && GC.getAILogging())
-				{
-					CvString strLogString;
-					strLogString.Format("Corporation Building Removed from City: %s. Building: %s.", pCity->getName().c_str(), pkBuilding->GetText());
-					LogCorporationMessage(strLogString);
-				}
-			}
+			GET_PLAYER(eFounder).GetCorporations()->RecalculateNumFranchises();
 		}
-		else
+
+		if (GC.getLogging() && GC.getAILogging())
 		{
-			if (eBuilding == eHeadquarters || eBuilding == eOffice || eFranchise == eBuilding)
-			{
-				pCity->GetCityBuildings()->SetNumRealBuilding(eBuilding, 0);
-
-				if (eBuilding == eHeadquarters)
-					GC.getGame().GetGameCorporations()->DestroyCorporation(eCorporation);
-
-				PlayerTypes eFounder = GC.getGame().GetCorporationFounder(pkBuilding->GetBuildingClassInfo().getCorporationType());
-				if (eFounder != NO_PLAYER && eFounder != m_pPlayer->GetID())
-				{
-					CvNotifications* pNotifications = GET_PLAYER(eFounder).GetNotifications();
-					if (pNotifications)
-					{
-						Localization::String strSummary;
-						Localization::String strMessage;
-
-						strSummary = Localization::Lookup("TXT_KEY_NOTIFICATION_CORPORATION_BUILDINGS_REMOVED_CITY_S");
-						strSummary << pkBuilding->GetTextKey();
-						strSummary << pCity->getNameKey();
-						strSummary << m_pPlayer->getCivilizationShortDescriptionKey();
-						strMessage = Localization::Lookup("TXT_KEY_NOTIFICATION_CORPORATION_BUILDINGS_REMOVED_CITY");
-						strMessage << pkBuilding->GetTextKey();
-						strMessage << pCity->getNameKey();
-						strMessage << m_pPlayer->getCivilizationShortDescriptionKey();
-						pNotifications->Add(NOTIFICATION_GENERIC, strMessage.toUTF8(), strSummary.toUTF8(), pCity->getX(), pCity->getY(), -1, -1);
-					}
-					pNotifications = m_pPlayer->GetNotifications();
-					if (pNotifications)
-					{
-						Localization::String strSummary;
-						Localization::String strMessage;
-
-						strSummary = Localization::Lookup("TXT_KEY_NOTIFICATION_CORPORATION_BUILDINGS_REMOVED_CITY_S");
-						strSummary << pkBuilding->GetTextKey();
-						strSummary << pCity->getNameKey();
-						strSummary << m_pPlayer->getCivilizationShortDescriptionKey();
-						strMessage = Localization::Lookup("TXT_KEY_NOTIFICATION_CORPORATION_BUILDINGS_REMOVED_CITY");
-						strMessage << pkBuilding->GetTextKey();
-						strMessage << pCity->getNameKey();
-						strMessage << m_pPlayer->getCivilizationShortDescriptionKey();
-						pNotifications->Add(NOTIFICATION_GENERIC, strMessage.toUTF8(), strSummary.toUTF8(), pCity->getX(), pCity->getY(), -1, -1);
-					}
-
-					if (GC.getLogging() && GC.getAILogging())
-					{
-						CvString strLogString;
-						strLogString.Format("Corporation Building Removed from City: %s. Building: %s.", pCity->getName().c_str(), pkBuilding->GetText());
-						LogCorporationMessage(strLogString);
-					}
-
-					GET_PLAYER(eFounder).GetCorporations()->RecalculateNumFranchises();
-				}
-			}
+			CvString strLogString;
+			strLogString.Format("Corporation Building Removed from City: %s. Building: %s.", pCity->getName().c_str(), pkBuildingInfo->GetText());
+			LogCorporationMessage(strLogString);
 		}
 	}
+
 	RecalculateNumFranchises();
 }
 
@@ -1617,109 +1528,79 @@ void CvPlayerCorporations::ClearCorporationFromForeignCities(bool bMinorsOnly, b
 		return;
 
 	CvCorporationEntry* pkCorporationInfo = GC.getCorporationInfo(m_eFoundedCorporation);
-	if (pkCorporationInfo == NULL)
+	if (!pkCorporationInfo)
 		return;
 
 	BuildingClassTypes eFranchiseClass = pkCorporationInfo->GetFranchiseBuildingClass();
 
-	// Get Corporation Buildings
-	BuildingTypes eFranchise = NO_BUILDING;
-	CvBuildingEntry* pkBuilding = NULL;
-	// If the option to check for all buildings in a class is enabled, we loop through all buildings in the city. Rome check unnecessary as even Rome cannot keep Corporation buildings on conquest.
-	if (!MOD_BUILDINGS_THOROUGH_PREREQUISITES)
-	{
-		eFranchise = (BuildingTypes)m_pPlayer->getCivilizationInfo().getCivilizationBuildings(eFranchiseClass);
-
-		if (eFranchise == NO_BUILDING)
-			return;
-
-		pkBuilding = GC.getBuildingInfo(eFranchise);
-		if (!pkBuilding || !pkBuilding->IsCorp())
-			return;
-	}
-
-	//and destroy our franchises!
+	// Loop all foreign cities and destroy our franchises!
 	for (int iPlayerLoop = 0; iPlayerLoop < MAX_CIV_PLAYERS; iPlayerLoop++)
 	{
-		PlayerTypes eLoopPlayer = (PlayerTypes) iPlayerLoop;
+		PlayerTypes ePlayer = static_cast<PlayerTypes>(iPlayerLoop);
+		CvPlayer& kPlayer = GET_PLAYER(ePlayer);
 
-		if (!GET_PLAYER(eLoopPlayer).isAlive()) 
-			continue;
-
-		if (bMinorsOnly && !GET_PLAYER(eLoopPlayer).isMinorCiv())
+		if (!kPlayer.isAlive())
 			continue;
 
-		if (bExcludeVassals && GET_TEAM(GET_PLAYER(eLoopPlayer).getTeam()).IsVassal(m_pPlayer->getTeam()))
-		{
+		if (ePlayer == m_pPlayer->GetID())
 			continue;
-		}
-		if (bExcludeMasters && GET_TEAM(m_pPlayer->getTeam()).IsVassal(GET_PLAYER(eLoopPlayer).getTeam()))
-		{
+
+		if (bMinorsOnly && !kPlayer.isMinorCiv())
 			continue;
-		}
+
+		if (bExcludeVassals && GET_TEAM(kPlayer.getTeam()).IsVassal(m_pPlayer->getTeam()))
+			continue;
+
+		if (bExcludeMasters && GET_TEAM(m_pPlayer->getTeam()).IsVassal(kPlayer.getTeam()))
+			continue;
 
 		int iLoop = 0;
-		for (CvCity* pCity = GET_PLAYER(eLoopPlayer).firstCity(&iLoop); pCity != NULL; pCity = GET_PLAYER(eLoopPlayer).nextCity(&iLoop))
+		for (CvCity* pCity = kPlayer.firstCity(&iLoop); pCity != NULL; pCity = kPlayer.nextCity(&iLoop))
 		{
-			// If the option to check for all buildings in a class is enabled, we loop through all buildings in the city. Rome check unnecessary as even Rome cannot keep Corporation buildings on conquest.
-			if(MOD_BUILDINGS_THOROUGH_PREREQUISITES)
-			{
-				eFranchise = pCity->GetCityBuildings()->GetBuildingTypeFromClass(pkCorporationInfo->GetFranchiseBuildingClass());
+			BuildingTypes eFranchise = pCity->GetBuildingTypeFromClass(eFranchiseClass);
+			if (eFranchise == NO_BUILDING)
+				continue;
 
-				if (eFranchise == NO_BUILDING)
-					continue;
+			CvBuildingEntry* pkBuildingInfo = GC.getBuildingInfo(eFranchise);
+			if (!pkBuildingInfo)
+				continue;
 
-				pkBuilding = GC.getBuildingInfo(eFranchise);
-				if (!pkBuilding || !pkBuilding->IsCorp())
-					return;
-			}
-			if (MOD_BUILDINGS_THOROUGH_PREREQUISITES || pCity->HasBuilding(eFranchise))
+			if (pCity->HasBuilding(eFranchise))
 			{
 				pCity->GetCityBuildings()->SetNumRealBuilding(eFranchise, 0);
 
-				CvNotifications* pNotifications = GET_PLAYER(pCity->getOwner()).GetNotifications();
-				if (pNotifications)
+				CvNotifications* pNotifications = m_pPlayer->GetNotifications();
+				CvNotifications* pOtherNotifications = kPlayer.GetNotifications();
+				if (pNotifications || pOtherNotifications)
 				{
 					Localization::String strSummary;
 					Localization::String strMessage;
 
 					strSummary = Localization::Lookup("TXT_KEY_NOTIFICATION_CORPORATION_BUILDINGS_REMOVED_CITY_S");
-					strSummary << pkBuilding->GetTextKey();
+					strSummary << pkBuildingInfo->GetTextKey();
 					strSummary << pCity->getNameKey();
-					strSummary << m_pPlayer->getCivilizationShortDescriptionKey();
 					strMessage = Localization::Lookup("TXT_KEY_NOTIFICATION_CORPORATION_BUILDINGS_REMOVED_CITY");
-					strMessage << pkBuilding->GetTextKey();
+					strMessage << pkBuildingInfo->GetTextKey();
 					strMessage << pCity->getNameKey();
 					strMessage << m_pPlayer->getCivilizationShortDescriptionKey();
-					pNotifications->Add(NOTIFICATION_GENERIC, strMessage.toUTF8(), strSummary.toUTF8(), pCity->getX(), pCity->getY(), -1, -1);
-				}
 
-				pNotifications = m_pPlayer->GetNotifications();
-				if (pNotifications)
-				{
-					Localization::String strSummary;
-					Localization::String strMessage;
+					if (pNotifications)
+						pNotifications->Add(NOTIFICATION_GENERIC, strMessage.toUTF8(), strSummary.toUTF8(), pCity->getX(), pCity->getY(), -1, -1);
 
-					strSummary = Localization::Lookup("TXT_KEY_NOTIFICATION_CORPORATION_BUILDINGS_REMOVED_CITY_S");
-					strSummary << pkBuilding->GetTextKey();
-					strSummary << pCity->getNameKey();
-					strSummary << m_pPlayer->getCivilizationShortDescriptionKey();
-					strMessage = Localization::Lookup("TXT_KEY_NOTIFICATION_CORPORATION_BUILDINGS_REMOVED_CITY");
-					strMessage << pkBuilding->GetTextKey();
-					strMessage << pCity->getNameKey();
-					strMessage << m_pPlayer->getCivilizationShortDescriptionKey();
-					pNotifications->Add(NOTIFICATION_GENERIC, strMessage.toUTF8(), strSummary.toUTF8(), pCity->getX(), pCity->getY(), -1, -1);
+					if (pOtherNotifications)
+						pOtherNotifications->Add(NOTIFICATION_GENERIC, strMessage.toUTF8(), strSummary.toUTF8(), pCity->getX(), pCity->getY(), -1, -1);
 				}
 
 				if (GC.getLogging() && GC.getAILogging())
 				{
 					CvString strLogString;
-					strLogString.Format("Corporation Cleared from Foreign City: %s. Building: %s.", pCity->getName().c_str(), pkBuilding->GetText());
+					strLogString.Format("Corporation Cleared from Foreign City: %s. Building: %s.", pCity->getName().c_str(), pkBuildingInfo->GetText());
 					LogCorporationMessage(strLogString);
 				}
 			}
 		}
 	}
+
 	RecalculateNumFranchises();
 }
 
@@ -1811,7 +1692,7 @@ int CvPlayerCorporations::GetFranchiseTourismMod(PlayerTypes ePlayer, bool bJust
 					return iNumFranchises;
 
 				// Free franchise above Popular?
-				if (GetCorporationFreeFranchiseAbovePopular() != 0 && m_pPlayer->GetCulture()->GetInfluenceLevel(ePlayer) >= INFLUENCE_LEVEL_POPULAR)
+				if (GetCorporationFreeFranchiseAbovePopular() != 0 && GET_PLAYER(ePlayer).isMajorCiv() && m_pPlayer->GetCulture()->GetInfluenceLevel(ePlayer) >= INFLUENCE_LEVEL_POPULAR)
 				{
 					iNumFranchises += GetCorporationFreeFranchiseAbovePopular();
 				}
@@ -1871,7 +1752,7 @@ void CvGameCorporations::DoTurn()
 CvCorporation* CvGameCorporations::GetCorporation(CorporationTypes eCorporation)
 {
 	CorporationList::iterator it;
-	for(it = m_ActiveCorporations.begin(); it != m_ActiveCorporations.end(); it++)
+	for(it = m_ActiveCorporations.begin(); it != m_ActiveCorporations.end(); ++it)
 	{
 		if(it->m_eCorporation == eCorporation)
 		{
@@ -1899,7 +1780,7 @@ void CvGameCorporations::DestroyCorporation(CorporationTypes eCorporation)
 		return;
 
 	CorporationList::iterator it;
-	for(it = m_ActiveCorporations.begin(); it != m_ActiveCorporations.end(); it++)
+	for(it = m_ActiveCorporations.begin(); it != m_ActiveCorporations.end(); ++it)
 	{
 		CvCorporation kCorporation = (*it);
 		if(kCorporation.m_eCorporation == eCorporation)
@@ -1943,11 +1824,14 @@ void CvGameCorporations::FoundCorporation(PlayerTypes ePlayer, CorporationTypes 
 	// Free office in headquarters
 	CvCorporationEntry* pkCorporationInfo = GC.getCorporationInfo(eCorporation);
 	BuildingClassTypes eOfficeClass = pkCorporationInfo->GetOfficeBuildingClass();
-	if(eOfficeClass != NO_BUILDINGCLASS)
+	if (eOfficeClass != NO_BUILDINGCLASS)
 	{
-		BuildingTypes eOffice = (BuildingTypes) GET_PLAYER(ePlayer).getCivilizationInfo().getCivilizationBuildings(eOfficeClass);
-		pHeadquarters->GetCityBuildings()->SetNumFreeBuilding(eOffice, 1);
-		kPlayer.GetCorporations()->RecalculateNumOffices();
+		BuildingTypes eOffice = pHeadquarters->GetBuildingTypeFromClass(eOfficeClass, true);
+		if (eOffice != NO_BUILDING)
+		{
+			pHeadquarters->SetNumFreeBuilding(eOffice, 1, true, false);
+			kPlayer.GetCorporations()->RecalculateNumOffices();
+		}
 	}
 
 	kPlayer.processCorporations(eCorporation, 1);
@@ -2054,7 +1938,7 @@ bool CvGameCorporations::CanFoundCorporation(PlayerTypes ePlayer, CorporationTyp
 bool CvGameCorporations::IsCorporationFounded(CorporationTypes eCorporation) const
 {
 	CorporationList::const_iterator it;
-	for(it = m_ActiveCorporations.begin(); it != m_ActiveCorporations.end(); it++)
+	for(it = m_ActiveCorporations.begin(); it != m_ActiveCorporations.end(); ++it)
 	{
 		if((*it).m_eCorporation == eCorporation)
 			return true;
@@ -2070,7 +1954,7 @@ bool CvGameCorporations::IsCorporationHeadquarters(CvCity* pCity) const
 		return false;
 
 	CorporationList::const_iterator it;
-	for(it = m_ActiveCorporations.begin(); it != m_ActiveCorporations.end(); it++)
+	for(it = m_ActiveCorporations.begin(); it != m_ActiveCorporations.end(); ++it)
 	{
 		if((*it).m_iHeadquartersCityX == pCity->getX() &&
 			(*it).m_iHeadquartersCityY == pCity->getY())

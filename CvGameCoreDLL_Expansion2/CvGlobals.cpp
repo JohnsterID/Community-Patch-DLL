@@ -18,7 +18,6 @@
 #include "CvTeam.h"
 #include "CvInfos.h"
 #include "ICvDLLUtility.h"
-#include "CvPlayerAI.h"
 #include "CvGameTextMgr.h"
 #include "CvDiplomacyAI.h"
 #include "CvEconomicAI.h"
@@ -31,6 +30,7 @@
 #include "cvStopWatch.h"
 #include "CvReplayInfo.h"
 #include "CvTypes.h"
+#include "FCrc32.h"
 
 #include "CvDllDatabaseUtility.h"
 #include "CvDllScriptSystemUtility.h"
@@ -44,8 +44,11 @@
 #include "CvDllUnit.h"
 
 #if defined(MOD_DEBUG_MINIDUMP)
+#ifdef WIN32
+#include "../commit_id.inc"
 #include <dbghelp.h>
-#endif
+#endif // WIN32
+#endif // defined(MOD_DEBUG_MINIDUMP)
 
 // must be included after all other headers
 #include "LintFree.h"
@@ -59,6 +62,18 @@ void deleteInfoArray(std::vector<T*>& array)
 	}
 
 	array.clear();
+}
+
+// Calculates a hash value for the string
+uint FStringHash(LPCWSTR pszStr)
+{
+	int len = (pszStr ? (int)wcslen(pszStr) : 0);
+	return (g_CRC32.Calc((void*)pszStr, len * sizeof(wchar)));
+}
+uint FStringHash(LPCSTR pszStr)
+{
+	int len = (pszStr ? (int)strlen(pszStr) : 0);
+	return (g_CRC32.Calc((void*)pszStr, len * sizeof(char)));
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////
@@ -178,12 +193,15 @@ CvGlobals::CvGlobals() :
 	GD_INT_INIT(BUILDER_TASKING_BASELINE_BUILD_ROUTES, 750),
 	GD_INT_INIT(BUILDER_TASKING_BASELINE_REPAIR, 1000),
 	GD_INT_INIT(BUILDER_TASKING_BASELINE_SCRUB_FALLOUT, 20000),
-	GD_INT_INIT(BUILDER_TASKING_BASELINE_ADDS_FOOD, 200),
-	GD_INT_INIT(BUILDER_TASKING_BASELINE_ADDS_GOLD, 40),
-	GD_INT_INIT(BUILDER_TASKING_BASELINE_ADDS_FAITH, 150),
-	GD_INT_INIT(BUILDER_TASKING_BASELINE_ADDS_PRODUCTION, 200),
-	GD_INT_INIT(BUILDER_TASKING_BASELINE_ADDS_SCIENCE, 200),
-	GD_INT_INIT(BUILDER_TASKING_BASELINE_ADDS_CULTURE, 200),
+	GD_INT_INIT(BUILDER_TASKING_BASELINE_ADDS_FOOD, 180),
+	GD_INT_INIT(BUILDER_TASKING_BASELINE_ADDS_GOLD, 90),
+	GD_INT_INIT(BUILDER_TASKING_BASELINE_ADDS_FAITH, 240),
+	GD_INT_INIT(BUILDER_TASKING_BASELINE_ADDS_PRODUCTION, 180),
+	GD_INT_INIT(BUILDER_TASKING_BASELINE_ADDS_SCIENCE, 240),
+	GD_INT_INIT(BUILDER_TASKING_BASELINE_ADDS_TOURISM, 240),
+	GD_INT_INIT(BUILDER_TASKING_BASELINE_ADDS_CULTURE_LOCAL, 80),
+	GD_INT_INIT(BUILDER_TASKING_BASELINE_ADDS_GOLDEN_AGE_POINTS, 200),
+	GD_INT_INIT(BUILDER_TASKING_BASELINE_ADDS_CULTURE, 240),
 	GD_INT_INIT(AI_STRATEGY_DEFEND_MY_LANDS_BASE_UNITS, 3),
 	GD_INT_INIT(AI_MILITARY_CITY_THREAT_WEIGHT_CAPITAL, 125),
 	GD_INT_INIT(AI_MILITARY_RECAPTURING_OWN_CITY, 150),
@@ -216,13 +234,21 @@ CvGlobals::CvGlobals() :
 	GD_INT_INIT(AI_CITY_HIGH_VALUE_THRESHOLD, 80),
 	GD_INT_INIT(AI_CITY_SOME_VALUE_THRESHOLD, 40),
 	GD_INT_INIT(AI_CITY_PUPPET_BONUS_THRESHOLD, 25),
-	GD_INT_INIT(AI_CITIZEN_VALUE_FOOD, 12),
+	GD_INT_INIT(AI_CITIZEN_VALUE_FOOD, 8),
+	GD_INT_INIT(AI_CITIZEN_VALUE_FOOD_NEED_GROWTH, 32),
+	GD_INT_INIT(AI_CITIZEN_VALUE_FOOD_STARVING, 500),
 	GD_INT_INIT(AI_CITIZEN_VALUE_PRODUCTION, 12),
 	GD_INT_INIT(AI_CITIZEN_VALUE_GOLD, 12),
-	GD_INT_INIT(AI_CITIZEN_VALUE_SCIENCE, 16),
-	GD_INT_INIT(AI_CITIZEN_VALUE_CULTURE, 16),
-	GD_INT_INIT(AI_CITIZEN_VALUE_FAITH, 12),
-	GD_INT_INIT(AI_CITIZEN_VALUE_GPP, 4),
+	GD_INT_INIT(AI_CITIZEN_VALUE_SCIENCE, 20),
+	GD_INT_INIT(AI_CITIZEN_VALUE_CULTURE, 20),
+	GD_INT_INIT(AI_CITIZEN_VALUE_FAITH, 20),
+	GD_INT_INIT(AI_CITIZEN_VALUE_GPP, 8),
+	GD_INT_INIT(AI_CITIZEN_VALUE_GOLD_IN_DEBT, 24),
+	GD_INT_INIT(AI_CITIZEN_SPECIALIST_COMBO_BONUS, 1000),
+	GD_INT_INIT(AI_CITIZEN_UNHAPPINESS_VALUE_EMPIRE_VERY_UNHAPPY, -50000),
+	GD_INT_INIT(AI_CITIZEN_UNHAPPINESS_VALUE_EMPIRE_UNHAPPY, -15000),
+	GD_INT_INIT(AI_CITIZEN_UNHAPPINESS_VALUE_CITY_UNHAPPY, -5000),
+	GD_INT_INIT(AI_CITIZEN_UNHAPPINESS_VALUE_EMPIRE_HAPPY, -2000),
 	GD_INT_INIT(AI_NUM_CORE_CITIES_FOR_SPACESHIP, 4),
 	GD_INT_INIT(AI_OPERATIONAL_PERCENT_HEALTH_FOR_OPERATION, 70),
 	GD_INT_INIT(AI_TACTICAL_MAP_DOMINANCE_PERCENTAGE, 40),
@@ -335,6 +361,7 @@ CvGlobals::CvGlobals() :
 	GD_INT_INIT(MINOR_LIBERATION_FRIENDSHIP, 105),
 	GD_INT_INIT(MINOR_REMOVE_SPHERE_FRIENDSHIP, 0),
 	GD_INT_INIT(MINOR_LIBERATION_RESTING_INFLUENCE, 0),
+	GD_INT_INIT(MINOR_LANDMARK_RESTING_INFLUENCE, 0),
 	GD_INT_INIT(RETURN_CIVILIAN_FRIENDSHIP, 45),
 	GD_INT_INIT(MINOR_CIV_GLOBAL_QUEST_FIRST_POSSIBLE_TURN, 30),
 	GD_INT_INIT(MINOR_CIV_GLOBAL_QUEST_FIRST_POSSIBLE_TURN_RAND, 20),
@@ -770,9 +797,8 @@ CvGlobals::CvGlobals() :
 	GD_INT_INIT(MINOR_FRIENDSHIP_DROP_PER_TURN_DAMAGED_CAPITAL_MULTIPLIER, 300),
 	GD_INT_INIT(LEAGUE_AID_MAX, 30),
 	GD_INT_INIT(CSD_GOLD_GIFT_DISABLED, 0),
+	GD_INT_INIT(MAX_TURNS_OBSERVER_MODE, 0),
 	GD_INT_INIT(RELIGION_BELIEF_SCORE_CITY_MULTIPLIER, 6),
-	GD_INT_INIT(RELIGION_BELIEF_SCORE_OWNED_PLOT_MULTIPLIER, 8),
-	GD_INT_INIT(RELIGION_BELIEF_SCORE_UNOWNED_PLOT_MULTIPLIER, 4),
 	GD_INT_INIT(RELIGION_MISSIONARY_RANGE_IN_TURNS, 20),
 	GD_INT_INIT(RELIGION_MAX_MISSIONARIES, 2),
 	GD_INT_INIT(MC_GIFT_WEIGHT_THRESHOLD, 100),
@@ -811,10 +837,10 @@ CvGlobals::CvGlobals() :
 	GD_INT_INIT(OPINION_WEIGHT_VICTORY_WEAK, 20),
 	GD_INT_INIT(OPINION_WEIGHT_VICTORY_NONE, 0),
 	GD_INT_INIT(OPINION_WEIGHT_VICTORY_PER_ERA, 4),
+	GD_INT_INIT(OPINION_WEIGHT_VICTORY_NONE_PER_ERA, 0),
 	GD_INT_INIT(OPINION_WEIGHT_VICTORY_BLOCK_FIERCE, 40),
 	GD_INT_INIT(OPINION_WEIGHT_VICTORY_BLOCK_STRONG, 30),
 	GD_INT_INIT(OPINION_WEIGHT_VICTORY_BLOCK_WEAK, 20),
-	GD_INT_INIT(OPINION_WEIGHT_VICTORY_BLOCK_NONE, 0),
 	GD_INT_INIT(OPINION_WEIGHT_VICTORY_BLOCK_PER_ERA, 4),
 	GD_INT_INIT(OPINION_WEIGHT_WONDER_FIERCE, 50),
 	GD_INT_INIT(OPINION_WEIGHT_WONDER_STRONG, 35),
@@ -844,6 +870,9 @@ CvGlobals::CvGlobals() :
 	GD_INT_INIT(OPINION_WEIGHT_ASKED_STOP_SPYING, 10),
 	GD_INT_INIT(OPINION_WEIGHT_MADE_DEMAND_OF_US, 20),
 	GD_INT_INIT(OPINION_WEIGHT_MADE_DEMAND_OF_US_SUBSEQUENT, 10),
+	GD_INT_INIT(OPINION_WEIGHT_MADE_DEMAND_YOU_NO_TAKE_DIVISOR, 200),
+	GD_INT_INIT(OPINION_WEIGHT_MADE_DEMAND_BANKRUPT_MULTIPLIER, 300),
+	GD_INT_INIT(OPINION_WEIGHT_MADE_DEMAND_BANKRUPT_MULTIPLIER_TURNS, 20),
 	GD_INT_INIT(OPINION_WEIGHT_RETURNED_CIVILIAN, -10),
 	GD_INT_INIT(OPINION_WEIGHT_RETURNED_CIVILIAN_SUBSEQUENT, -5),
 	GD_INT_INIT(OPINION_WEIGHT_BUILT_LANDMARK, -20),
@@ -960,7 +989,8 @@ CvGlobals::CvGlobals() :
 	GD_INT_INIT(OPINION_WEIGHT_COMMON_FOE_MAX, -100),
 	GD_INT_INIT(COMMON_FOE_VALUE_PER_TURN_DECAY, 25),
 	GD_INT_INIT(COMMON_FOE_VALUE_PER_OPINION_WEIGHT, 50),
-	GD_INT_INIT(OPINION_WEIGHT_ASSIST_MAX, 30),
+	GD_INT_INIT(OPINION_WEIGHT_ASSIST_MAX, -30),
+	GD_INT_INIT(OPINION_WEIGHT_FAILED_ASSIST_MAX, 30),
 	GD_INT_INIT(ASSIST_VALUE_PER_TURN_DECAY, 3),
 	GD_INT_INIT(ASSIST_VALUE_PER_OPINION_WEIGHT, 5),
 	GD_INT_INIT(OPINION_WEIGHT_LIBERATED_CAPITAL, -120),
@@ -1077,8 +1107,6 @@ CvGlobals::CvGlobals() :
 	GD_INT_INIT(VASSALAGE_PROTECTED_PER_TURN_DECAY, 25),
 	GD_INT_INIT(VASSALAGE_PROTECTED_CITY_DISTANCE, 6),
 	GD_INT_INIT(OPINION_WEIGHT_VASSALAGE_FAILED_PROTECT_MAX, 50),
-	GD_INT_INIT(VASSALAGE_FAILED_PROTECT_VALUE_PER_OPINION_WEIGHT, 50),
-	GD_INT_INIT(VASSALAGE_FAILED_PROTECT_PER_TURN_DECAY, 25),
 	GD_INT_INIT(VASSALAGE_FAILED_PROTECT_CITY_DISTANCE, 0),
 	GD_INT_INIT(OPINION_WEIGHT_VASSAL_TRADE_ROUTE, -15),
 	GD_INT_INIT(OPINION_WEIGHT_VASSAL_TRADE_ROUTE_SUBSEQUENT, -10),
@@ -1102,6 +1130,13 @@ CvGlobals::CvGlobals() :
 	GD_INT_INIT(APPROACH_MULTIPLIER_PROXIMITY_CLOSE, 125),
 	GD_INT_INIT(APPROACH_MULTIPLIER_PROXIMITY_FAR, 75),
 	GD_INT_INIT(APPROACH_MULTIPLIER_PROXIMITY_DISTANT, 50),
+	GD_INT_INIT(CONQUEST_WAR_MULTIPLIER_TARGET_CAKEWALK, 250),
+	GD_INT_INIT(CONQUEST_WAR_MULTIPLIER_TARGET_SOFT, 200),
+	GD_INT_INIT(CONQUEST_WAR_MULTIPLIER_TARGET_FAVORABLE, 150),
+	GD_INT_INIT(CONQUEST_WAR_MULTIPLIER_TARGET_AVERAGE, 125),
+	GD_INT_INIT(CONQUEST_WAR_MULTIPLIER_TARGET_DIFFICULT, 100),
+	GD_INT_INIT(CONQUEST_WAR_MULTIPLIER_TARGET_BAD, 75),
+	GD_INT_INIT(CONQUEST_WAR_MULTIPLIER_TARGET_IMPOSSIBLE, 50),
 	GD_INT_INIT(MAJOR_WAR_MULTIPLIER_TARGET_CAKEWALK, 200),
 	GD_INT_INIT(MAJOR_WAR_MULTIPLIER_TARGET_SOFT, 150),
 	GD_INT_INIT(MAJOR_WAR_MULTIPLIER_TARGET_FAVORABLE, 125),
@@ -1116,17 +1151,11 @@ CvGlobals::CvGlobals() :
 	GD_INT_INIT(MINOR_APPROACH_WAR_TARGET_DIFFICULT, 50),
 	GD_INT_INIT(MINOR_APPROACH_WAR_TARGET_BAD, 33),
 	GD_INT_INIT(MINOR_APPROACH_WAR_TARGET_IMPOSSIBLE, 25),
-	GD_INT_INIT(CONQUEST_WAR_MULTIPLIER_TARGET_CAKEWALK, 250),
-	GD_INT_INIT(CONQUEST_WAR_MULTIPLIER_TARGET_SOFT, 200),
-	GD_INT_INIT(CONQUEST_WAR_MULTIPLIER_TARGET_FAVORABLE, 150),
-	GD_INT_INIT(CONQUEST_WAR_MULTIPLIER_TARGET_AVERAGE, 125),
-	GD_INT_INIT(CONQUEST_WAR_MULTIPLIER_TARGET_DIFFICULT, 100),
-	GD_INT_INIT(CONQUEST_WAR_MULTIPLIER_TARGET_BAD, 75),
-	GD_INT_INIT(CONQUEST_WAR_MULTIPLIER_TARGET_IMPOSSIBLE, 50),
 	GD_INT_INIT(APPROACH_NEUTRAL_DEFAULT, 3),
 	GD_INT_INIT(APPROACH_BIAS_FOR_CURRENT, 2),
 	GD_INT_INIT(APPROACH_WAR_CURRENTLY_WAR, 4),
-	GD_INT_INIT(APPROACH_RANDOM_PERCENT, 0),
+	GD_INT_INIT(APPROACH_RANDOM_PERCENT, 5),
+	GD_INT_INIT(APPROACH_RANDOM_PERSONALITIES_PERCENT, 10),
 	GD_INT_INIT(MINOR_APPROACH_IGNORE_DEFAULT, 2),
 	GD_INT_INIT(APPROACH_WAR_VASSAL_PEACEFULLY_REVOKED, -4),
 	GD_INT_INIT(APPROACH_DECEPTIVE_VASSAL_PEACEFULLY_REVOKED, 2),
@@ -1136,6 +1165,16 @@ CvGlobals::CvGlobals() :
 	GD_INT_INIT(APPROACH_FRIENDLY_VASSAL_FORCEFULLY_REVOKED, -10),
 	GD_INT_INIT(APPROACH_WAR_TOO_MANY_VASSALS, 20),
 	GD_INT_INIT(APPROACH_GUARDED_TOO_MANY_VASSALS, 20),
+	GD_INT_INIT(APPROACH_HOSTILE_BUYING_PRICE_MODIFIER, 50),
+	GD_INT_INIT(APPROACH_GUARDED_BUYING_PRICE_MODIFIER, 80),
+	GD_INT_INIT(APPROACH_AFRAID_BUYING_PRICE_MODIFIER, 125),
+	GD_INT_INIT(APPROACH_NEUTRAL_BUYING_PRICE_MODIFIER, 100),
+	GD_INT_INIT(APPROACH_FRIENDLY_BUYING_PRICE_MODIFIER, 125),
+	GD_INT_INIT(APPROACH_HOSTILE_SELLING_PRICE_MODIFIER, 200),
+	GD_INT_INIT(APPROACH_GUARDED_SELLING_PRICE_MODIFIER, 125),
+	GD_INT_INIT(APPROACH_AFRAID_SELLING_PRICE_MODIFIER, 80),
+	GD_INT_INIT(APPROACH_NEUTRAL_SELLING_PRICE_MODIFIER, 100),
+	GD_INT_INIT(APPROACH_FRIENDLY_SELLING_PRICE_MODIFIER, 80),
 	GD_INT_INIT(CLOSE_TO_DOMINATION_VICTORY_THRESHOLD, 50),
 	GD_INT_INIT(CLOSE_TO_DIPLOMATIC_VICTORY_THRESHOLD, 55),
 	GD_INT_INIT(CLOSE_TO_SCIENCE_VICTORY_THRESHOLD, 80),
@@ -1361,7 +1400,7 @@ CvGlobals::CvGlobals() :
 	GD_INT_INIT(DOF_TURN_BUFFER, 50),
 	GD_INT_INIT(DOF_TURN_BUFFER_REDUCTION_PER_ERA, -5),
 	GD_INT_INIT(EACH_GOLD_VALUE_PERCENT, 100),
-	GD_INT_INIT(EACH_GOLD_PER_TURN_VALUE_PERCENT, 5),
+	GD_INT_INIT(EACH_GOLD_PER_TURN_VALUE_PERCENT, 25),
 	GD_INT_INIT(DEMAND_LIMIT_MAX_VALUE, 200),
 	GD_INT_INIT(DEMAND_LIMIT_GAMEPROGRESS_SCALING, 20),
 	GD_INT_INIT(MOVE_TROOPS_MEMORY_TURN_EXPIRATION, 20),
@@ -1393,7 +1432,7 @@ CvGlobals::CvGlobals() :
 	GD_INT_INIT(DOF_BROKEN_BACKSTAB_TIMER, 10),
 	GD_INT_INIT(FRIEND_DENOUNCED_US_TURNS_UNTIL_FORGIVEN, 75),
 	GD_INT_INIT(FRIEND_DECLARED_WAR_ON_US_TURNS_UNTIL_FORGIVEN, 100),
-	GD_INT_INIT(PLUNDERED_TRADE_ROUTE_TURNS_UNTIL_FORGIVEN, 25),
+	GD_INT_INIT(PLUNDERED_TRADE_ROUTE_TURNS_UNTIL_FORGIVEN, 15),
 	GD_INT_INIT(RETURNED_CIVILIAN_TURNS_UNTIL_FORGOTTEN, 50),
 	GD_INT_INIT(BUILT_LANDMARK_TURNS_UNTIL_FORGOTTEN, 50),
 	GD_INT_INIT(LIBERATED_CITY_TURNS_UNTIL_FORGOTTEN, 75),
@@ -1401,8 +1440,8 @@ CvGlobals::CvGlobals() :
 	GD_INT_INIT(SHARED_INTRIGUE_TURNS_UNTIL_FORGOTTEN, 50),
 	GD_INT_INIT(ROBBED_US_TURNS_UNTIL_FORGIVEN, 50),
 	GD_INT_INIT(PLOTTED_AGAINST_US_TURNS_UNTIL_FORGIVEN, 14),
-	GD_INT_INIT(BEATEN_TO_WONDER_TURNS_UNTIL_FORGIVEN, 75),
-	GD_INT_INIT(LOWERED_OUR_INFLUENCE_TURNS_UNTIL_FORGIVEN, 50),
+	GD_INT_INIT(BEATEN_TO_WONDER_TURNS_UNTIL_FORGIVEN, 60),
+	GD_INT_INIT(LOWERED_OUR_INFLUENCE_TURNS_UNTIL_FORGIVEN, 40),
 	GD_INT_INIT(PERFORMED_COUP_TURNS_UNTIL_FORGIVEN, 50),
 	GD_INT_INIT(EXCAVATED_ARTIFACT_TURNS_UNTIL_FORGIVEN, 50),
 	GD_INT_INIT(MADE_DEMAND_TURNS_UNTIL_FORGIVEN, 50),
@@ -1429,7 +1468,6 @@ CvGlobals::CvGlobals() :
 	GD_INT_INIT(MIN_CITY_RANGE, 3),
 	GD_INT_INIT(CITY_STARTING_RINGS, 1),
 	GD_INT_INIT(OWNERSHIP_SCORE_DURATION_THRESHOLD, 20),
-	GD_INT_INIT(NUM_POLICY_BRANCHES_ALLOWED, 2),
 	GD_INT_INIT(NUM_VICTORY_POINT_AWARDS, 5),
 	GD_INT_INIT(NUM_OR_TECH_PREREQS, 3),
 	GD_INT_INIT(NUM_AND_TECH_PREREQS, 6),
@@ -1484,6 +1522,7 @@ CvGlobals::CvGlobals() :
 	GD_INT_INIT(CITY_SIZE_NEED_MODIFIER, 0),
 	GD_INT_INIT(EMPIRE_SIZE_NEED_MODIFIER_CITIES, 500),
 	GD_INT_INIT(EMPIRE_SIZE_NEED_MODIFIER_POP, 125),
+	GD_INT_INIT(EMPIRE_SIZE_NEED_MODIFIER_CAP, 100000),
 	GD_INT_INIT(UNHAPPINESS_PER_SPECIALIST, 100),
 	GD_INT_INIT(UNHAPPINESS_PER_X_PUPPET_CITIZENS, 4),
 	GD_INT_INIT(WAR_WEARINESS_POPULATION_PERCENT_CAP, 34),
@@ -1498,13 +1537,10 @@ CvGlobals::CvGlobals() :
 	GD_INT_INIT(RESOURCE_DEMAND_COUNTDOWN_BASE, 15),
 	GD_INT_INIT(RESOURCE_DEMAND_COUNTDOWN_CAPITAL_ADD, 25),
 	GD_INT_INIT(RESOURCE_DEMAND_COUNTDOWN_RAND, 10),
-	GD_INT_INIT(NEW_HURRY_MODIFIER, 50),
 	GD_INT_INIT(GREAT_GENERAL_RANGE, 2),
 	GD_INT_INIT(GREAT_GENERAL_STRENGTH_MOD, 15),
 	GD_INT_INIT(BONUS_PER_ADJACENT_FRIEND, 10),
 	GD_INT_INIT(POLICY_ATTACK_BONUS_MOD, 25),
-	GD_INT_INIT(CONSCRIPT_MIN_CITY_POPULATION, 5),
-	GD_INT_INIT(CONSCRIPT_POPULATION_PER_COST, 60),
 	GD_INT_INIT(COMBAT_DAMAGE, 20),
 	GD_INT_INIT(NONCOMBAT_UNIT_RANGED_DAMAGE, 40),
 	GD_INT_INIT(NAVAL_COMBAT_DEFENDER_STRENGTH_MULTIPLIER, 100),
@@ -1580,7 +1616,6 @@ CvGlobals::CvGlobals() :
 	GD_INT_INIT(MAX_UNIT_SUPPLY_GROWTH_MOD, 70),
 	GD_INT_INIT(UNIT_SUPPLY_BASE_TECH_REDUCTION_PER_ERA, 0),
 	GD_INT_INIT(UNIT_SUPPLY_CITIES_TECH_REDUCTION_MULTIPLIER, 0),
-	GD_INT_INIT(UNIT_SUPPLY_CITIES_TECH_REDUCTION_DIVISOR, 1),
 	GD_INT_INIT(UNIT_SUPPLY_POPULATION_TECH_REDUCTION_MULTIPLIER, 0),
 	GD_INT_INIT(UNIT_SUPPLY_WAR_WEARINESS_PERCENT_REDUCTION, 34),
 	GD_INT_INIT(UNIT_SUPPLY_POPULATION_PUPPET_PERCENT, 100),
@@ -1658,7 +1693,7 @@ CvGlobals::CvGlobals() :
 	GD_INT_INIT(BALANCE_BARBARIAN_HEAL_RATE, 0),
 	GD_INT_INIT(BARBARIAN_CAMP_FIRST_TURN_PERCENT_OF_TARGET_TO_ADD, 33),
 	GD_INT_INIT(BARBARIAN_CAMP_FIRST_TURN_PERCENT_PER_ERA, 0),
-	GD_INT_INIT(BARBARIAN_CAMP_MINIMUM_ISLAND_SIZE, 1),
+	GD_INT_INIT(BARBARIAN_CAMP_MINIMUM_ISLAND_SIZE, 2),
 	GD_INT_INIT(BARBARIAN_CAMP_MINIMUM_DISTANCE_CAPITAL, 4),
 	GD_INT_INIT(BARBARIAN_CAMP_MINIMUM_DISTANCE_ANOTHER_CAMP, 4),
 	GD_INT_INIT(BARBARIAN_CAMP_MINIMUM_DISTANCE_RECENTLY_CLEARED_CAMP, 2),
@@ -1789,11 +1824,14 @@ CvGlobals::CvGlobals() :
 	GD_INT_INIT(MINOR_CIV_CONTACT_GOLD_OTHER, 15),
 	GD_INT_INIT(COMBAT_AI_OFFENSE_DAMAGEWEIGHT, 100),
 	GD_INT_INIT(COMBAT_AI_OFFENSE_DANGERWEIGHT, 100),
-	GD_INT_INIT(COMBAT_AI_OFFENSE_SCORE_BIAS, 20),
-	GD_INT_INIT(COMBAT_AI_DEFENSE_SCORE_BIAS, 200),
 	GD_INT_INIT(MAJORS_CAN_MOVE_STARTING_SETTLER, 1),
 	GD_INT_INIT(CS_CAN_MOVE_STARTING_SETTLER, 0),
-	GD_INT_INIT(IGNORE_TERRAIN_COST_INCLUDES_RIVERS, 1),
+	GD_INT_INIT(COMPLETE_KILLS_TURN_TIMER, -1),
+	GD_INT_INIT(MAX_NUM_TENETS_LEVEL_1, 7),
+	GD_INT_INIT(MAX_NUM_TENETS_LEVEL_2, 4),
+	GD_INT_INIT(MAX_NUM_TENETS_LEVEL_3, 3),
+	GD_INT_INIT(IGNORE_GLOBAL_TERRAIN_COSTS_INCLUDES_RIVERS, 1),
+	GD_INT_INIT(IGNORE_SPECIFIC_TERRAIN_COSTS_INCLUDES_RIVERS, 0),
 	GD_INT_INIT(DIPLOAI_LIMIT_VICTORY_PURSUIT_RANDOMIZATION, 0),
 	GD_INT_INIT(DIPLOAI_ENABLE_NUCLEAR_GANDHI, 1),
 	GD_INT_INIT(DIPLOAI_DISABLE_WAR_BRIBES, 0),
@@ -1912,6 +1950,7 @@ CvGlobals::CvGlobals() :
 	GD_INT_INIT(CITY_STRENGTH_TECH_MULTIPLIER, 1),
 	GD_INT_INIT(CITY_STRENGTH_UNIT_DIVISOR, 500),
 	GD_INT_INIT(CITY_STRENGTH_HILL_CHANGE, 500),
+	GD_INT_INIT(CITY_STRENGTH_THRESHOLD_FOR_BONUSES, 10),
 	GD_INT_INIT(CITY_ATTACKING_DAMAGE_MOD, 0),
 	GD_INT_INIT(ATTACKING_CITY_MELEE_DAMAGE_MOD, 0),
 	GD_INT_INIT(MAX_CITY_ATTACK_RANGE, 2),
@@ -2025,18 +2064,13 @@ CvGlobals::CvGlobals() :
 	GD_INT_INIT(BALANCE_CS_PLEDGE_TO_PROTECT_DEFENSE_BONUS_MAX, 25),
 	GD_INT_INIT(BALANCE_CS_ALLIANCE_DEFENSE_BONUS, 25),
 	GD_INT_INIT(UNIT_AUTO_EXTRA_AUTOMATIONS_DISABLED, 0),
-	GD_INT_INIT(BALANCE_MARRIAGE_GP_RATE, 15),
+	GD_INT_INIT(BALANCE_GPP_RATE_IN_CAPITAL_PER_MARRIAGE, 15),
 	GD_INT_INIT(BALANCE_MARRIAGE_RESTING_POINT_INCREASE, 75),
 	GD_INT_INIT(BALANCE_SPY_RESPAWN_TIMER, 5),
 	GD_INT_INIT(BALANCE_SPY_TO_PLAYER_RATIO, 20),
 	GD_INT_INIT(BALANCE_SPY_POINT_THRESHOLD_MAX, 100),
 	GD_INT_INIT(BALANCE_SPY_POINT_THRESHOLD_MIN, 33),
 	GD_INT_INIT(BALANCE_SPY_POINT_MAJOR_PLAYER_MULTIPLIER, 2),
-	GD_INT_INIT(BALANCE_SPY_BOOST_INFLUENCE_EXOTIC, 5),
-	GD_INT_INIT(BALANCE_SPY_BOOST_INFLUENCE_FAMILIAR, 4),
-	GD_INT_INIT(BALANCE_SPY_BOOST_INFLUENCE_POPULAR, 3),
-	GD_INT_INIT(BALANCE_SPY_BOOST_INFLUENCE_INFLUENTIAL, 2),
-	GD_INT_INIT(BALANCE_SPY_BOOST_INFLUENCE_DOMINANT, 1),
 	GD_INT_INIT(BALANCE_BASIC_ATTACK_ARMY_SIZE, 6),
 	GD_INT_INIT(BALANCE_ARMY_NAVY_START_SIZE, 3),
 	GD_INT_INIT(BALANCE_FAITH_PERCENTAGE_VALUE, 10),
@@ -2137,31 +2171,31 @@ CvGlobals::CvGlobals() :
 	GD_INT_INIT(ESPIONAGE_SURVEILLANCE_SIGHT_RANGE, 1),
 	GD_INT_INIT(ESPIONAGE_COUP_OTHER_PLAYERS_INFLUENCE_DROP, 20),
 	GD_INT_INIT(ESPIONAGE_COUP_MULTIPLY_CONSTANT, 3),
+	GD_INT_INIT(ESPIONAGE_CONSECUTIVE_RIGGING_INFLUENCE_MODIFIER, 40),
 	GD_INT_INIT(ESPIONAGE_NP_BASE, 20),
 	GD_INT_INIT(ESPIONAGE_NP_PER_SPY_RANK, 10),
 	GD_INT_INIT(ESPIONAGE_NP_CULTURAL_INFLUENCE, 10),
 	GD_INT_INIT(ESPIONAGE_NP_PER_TECHNOLOGY_BEHIND, 2),
 	GD_INT_INIT(ESPIONAGE_NP_MAX_NUM_TECH, 10),
-	GD_INT_INIT(ESPIONAGE_NP_COUNTERSPY_NETWORK, -10),
-	GD_INT_INIT(ESPIONAGE_NP_COUNTERSPY_PER_RANK, -10),
 	GD_INT_INIT(ESPIONAGE_NP_REDUCTION_PER_SECURITY_POINT, 160),
 	GD_INT_INIT(ESPIONAGE_MAX_NUM_SECURITY_POINTS, 50),
 	GD_INT_INIT(ESPIONAGE_SECURITY_BASE, 10),
 	GD_INT_INIT(ESPIONAGE_SECURITY_NOT_ALL_HAVE_SPIES, 1000),
 	GD_INT_INIT(ESPIONAGE_SECURITY_PREVIOUS_CITY_MISSIONS, 2),
 	GD_INT_INIT(ESPIONAGE_SECURITY_PER_POPULATION, -2),
+	GD_INT_INIT(ESPIONAGE_SECURITY_PER_POPULATION_BUILDING_SCALER, 360),
 	GD_INT_INIT(ESPIONAGE_SECURITY_PER_TRADE_ROUTE, -1),
 	GD_INT_INIT(ESPIONAGE_SECURITY_PER_EXCESS_UNHAPPINESS, -4),
 	GD_INT_INIT(ESPIONAGE_SPY_EXPERIENCE_DENOMINATOR, 100),
-	GD_INT_INIT(ESPIONAGE_XP_PER_TURN_COUNTERSPY, 2),
-	GD_INT_INIT(ESPIONAGE_XP_PER_TURN_DIPLOMAT, 1),
-	GD_INT_INIT(ESPIONAGE_XP_PER_TURN_OFFENSIVE, 1),
+	GD_INT_INIT(ESPIONAGE_XP_PER_TURN_COUNTERSPY, 0),
+	GD_INT_INIT(ESPIONAGE_XP_PER_TURN_DIPLOMAT, 0),
+	GD_INT_INIT(ESPIONAGE_XP_PER_TURN_OFFENSIVE, 0),
 	GD_INT_INIT(ESPIONAGE_XP_PER_TURN_CITYSTATE, 0),
-	GD_INT_INIT(ESPIONAGE_XP_RIGGING_SUCCESS, 20),
-	GD_INT_INIT(ESPIONAGE_XP_UNCOVER_INTRIGUE, 15),
-	GD_INT_INIT(ESPIONAGE_XP_MISSION_SUCCESS_DENOMINATOR, 50),
+	GD_INT_INIT(ESPIONAGE_XP_RIGGING_SUCCESS, 0),
+	GD_INT_INIT(ESPIONAGE_XP_UNCOVER_INTRIGUE, 0),
+	GD_INT_INIT(ESPIONAGE_SPY_XP_MISSION_SUCCESS_PERCENT, 0),
 	GD_INT_INIT(ESPIONAGE_COUNTERSPY_CHANGE_FOCUS_COOLDOWN, 5),
-	GD_INT_INIT(ESPIONAGE_IMPRISONMENT_COOLDOWN, 5),
+	GD_INT_INIT(ESPIONAGE_SPY_POINT_UNIT, 100),
 	GD_INT_INIT(INTERNATIONAL_TRADE_BASE, 100),
 	GD_INT_INIT(INTERNATIONAL_TRADE_EXCLUSIVE_CONNECTION, 0),
 	GD_INT_INIT(INTERNATIONAL_TRADE_CITY_GPT_DIVISOR, 20),
@@ -2170,10 +2204,13 @@ CvGlobals::CvGlobals() :
 	GD_INT_INIT(BASE_CULTURE_PER_GREAT_WORK, 2),
 	GD_INT_INIT(BASE_TOURISM_PER_GREAT_WORK, 2),
 	GD_INT_INIT(TOURISM_MODIFIER_SHARED_RELIGION, 25),
+	GD_INT_INIT(TOURISM_MODIFIER_SHARED_RELIGION_MAX, 0),
+	GD_INT_INIT(TOURISM_MODIFIER_SHARED_RELIGION_TYPE, 0),
 	GD_INT_INIT(TOURISM_MODIFIER_TRADE_ROUTE, 25),
 	GD_INT_INIT(TOURISM_MODIFIER_OPEN_BORDERS, 25),
 	GD_INT_INIT(TOURISM_MODIFIER_DIFFERENT_IDEOLOGIES, -34),
 	GD_INT_INIT(TOURISM_MODIFIER_DIPLOMAT, 25),
+	GD_INT_INIT(MINIMUM_TOURISM_MODIFIER, -100),
 	GD_INT_INIT(MINIMUM_TOURISM_BLAST_STRENGTH, 100),
 	GD_INT_INIT(CULTURE_LEVEL_EXOTIC, 10),
 	GD_INT_INIT(CULTURE_LEVEL_FAMILIAR, 30),
@@ -2223,6 +2260,7 @@ CvGlobals::CvGlobals() :
 	GD_INT_INIT(VASSALAGE_VASSAL_MASTER_CITY_PERCENT_THRESHOLD, 60),
 	GD_INT_INIT(VASSALAGE_VASSAL_MASTER_POP_PERCENT_THRESHOLD, 60),
 	GD_INT_INIT(VASSALAGE_CAPITULATE_BASE_THRESHOLD, 100),
+	GD_INT_INIT(VASSALAGE_LIBERATE_BASE_THRESHOLD, 100),
 	GD_INT_INIT(VASSALAGE_TREATMENT_THRESHOLD_DISAGREE, 1),
 	GD_INT_INIT(VASSALAGE_TREATMENT_THRESHOLD_MISTREATED, 25),
 	GD_INT_INIT(VASSALAGE_TREATMENT_THRESHOLD_UNHAPPY, 50),
@@ -2269,8 +2307,6 @@ CvGlobals::CvGlobals() :
 	GD_FLOAT_INIT(AI_STRATEGY_DEFEND_MY_LANDS_UNITS_PER_CITY, 1.0f),
 	GD_FLOAT_INIT(GOLD_GIFT_FRIENDSHIP_EXPONENT, 1.01f),
 	GD_FLOAT_INIT(GOLD_GIFT_FRIENDSHIP_DIVISOR, 9.8f),
-	GD_FLOAT_INIT(HURRY_GOLD_TECH_EXPONENT, 1.10f),
-	GD_FLOAT_INIT(HURRY_GOLD_CULTURE_EXPONENT, 1.10f),
 	GD_FLOAT_INIT(CITY_GROWTH_MULTIPLIER, 8.0f),
 	GD_FLOAT_INIT(CITY_GROWTH_EXPONENT, 1.5f),
 	GD_FLOAT_INIT(POLICY_COST_EXPONENT, 2.01f),
@@ -2300,6 +2336,7 @@ CvGlobals::CvGlobals() :
 	GD_INT_INIT(CAPITAL_BUILDINGCLASS, 28),
 	GD_INT_INIT(WALLS_BUILDINGCLASS, -1),
 	GD_INT_INIT(DEFAULT_SPECIALIST, 0),
+	GD_INT_INIT(NUKE_TRIGGER_PROJECT, -1),
 	GD_INT_INIT(SPACE_RACE_TRIGGER_PROJECT, 1),
 	GD_INT_INIT(SPACESHIP_CAPSULE, 2),
 	GD_INT_INIT(SPACESHIP_BOOSTER, 5),
@@ -2330,7 +2367,7 @@ CvGlobals::CvGlobals() :
 	GD_INT_INIT(PROMOTION_ONLY_DEFENSIVE, -1),
 	GD_INT_INIT(PROMOTION_UNWELCOME_EVANGELIST, -1),
 	GD_INT_INIT(BARBARIAN_CAMP_IMPROVEMENT, 1),
-	GD_INT_INIT(EMBASSY_IMPROVEMENT, 1),
+	GD_INT_INIT(EMBASSY_IMPROVEMENT, -1),
 	GD_INT_INIT(PROMOTION_GOODY_HUT_PICKER, -1),
 	GD_INT_INIT(POLICY_BRANCH_FREEDOM, -1),
 	GD_INT_INIT(POLICY_BRANCH_AUTOCRACY, -1),
@@ -2340,10 +2377,19 @@ CvGlobals::CvGlobals() :
 	GD_INT_INIT(RELIGION_GP_FAITH_PURCHASE_ERA, 4),
 	GD_INT_INIT(IDEOLOGY_START_ERA, 4),
 	GD_INT_INIT(IDEOLOGY_PREREQ_ERA, 4),
+	GD_INT_INIT(ANCIENT_ERA, -1),
+	GD_INT_INIT(CLASSICAL_ERA, -1),
+	GD_INT_INIT(MEDIEVAL_ERA, -1),
+	GD_INT_INIT(RENAISSANCE_ERA, -1),
+	GD_INT_INIT(INDUSTRIAL_ERA, -1),
+	GD_INT_INIT(MODERN_ERA, -1),
+	GD_INT_INIT(ATOMIC_ERA, -1),
+	GD_INT_INIT(INFORMATION_ERA, -1),
 	GD_INT_INIT(TOURISM_START_TECH, 0),
 	GD_INT_INIT(TOURISM_START_ERA, 0),
 	GD_INT_INIT(JUGGERNAUT_PROMOTION, -1),
 	GD_INT_INIT(MARCH_PROMOTION, -1),
+	GD_INT_INIT(MARCH_SKIRMISHER_PROMOTION, -1),
 	GD_INT_INIT(MORALE_PROMOTION, -1),
 	GD_INT_INIT(INQUISITION_EFFECTIVENESS, 100),
 	GD_INT_INIT(INQUISITOR_CONVERSION_REDUCTION_FACTOR, 2),
@@ -2384,11 +2430,6 @@ CvGlobals::~CvGlobals()
 	uninit();
 }
 
-#ifdef STACKWALKER
-MyStackWalker gStackWalker;
-lua_State* gLuaState = NULL;
-#endif
-
 //cannot use GC.getGame().getActivePlayer() in observer mode
 PlayerTypes GetCurrentPlayer()
 {
@@ -2402,6 +2443,7 @@ PlayerTypes GetCurrentPlayer()
 }
 
 #if defined(MOD_DEBUG_MINIDUMP)
+#ifdef WIN32
 /************************************************************************************************/
 /* MINIDUMP_MOD                           04/10/11                                terkhen       */
 /* See http://www.debuginfo.com/articles/effminidumps.html                                      */
@@ -2410,51 +2452,131 @@ PlayerTypes GetCurrentPlayer()
 /* See http://forums.civfanatics.com/showthread.php?t=498919                                    */
 /************************************************************************************************/
 
-#pragma comment (lib, "dbghelp.lib")
-void CreateMiniDump(EXCEPTION_POINTERS *pep)
+#pragma comment(lib, "dbghelp.lib")
+void CreateMiniDump(EXCEPTION_POINTERS* pep)
 {
-#ifdef STACKWALKER
-	{
-		/* Try to log the callstack */
-		FILogFile* pLog=LOGFILEMGR.GetLog( "Callstack.log", FILogFile::kDontTimeStamp );
-		if (pLog)
-		{
-			pLog->Msg("Gamecore Callstack\n");
+	// Initialize debug symbols
+	HANDLE hProcess = GetCurrentProcess();
+	SymInitialize(hProcess, NULL, TRUE);
 
-			gStackWalker.SetLog(pLog);	
-			gStackWalker.ShowCallstack(INT_MAX, GetCurrentThread(), pep ? pep->ContextRecord : NULL );
-			gStackWalker.SetLog(NULL);
+	// Get timestamp
+	SYSTEMTIME st;
+	GetLocalTime(&st);
+	TCHAR szTimestamp[64];
+	_stprintf_s(szTimestamp, sizeof(szTimestamp) / sizeof(TCHAR),
+		_T("%04d%02d%02d_%02d%02d%02d"),
+		st.wYear, st.wMonth, st.wDay,
+		st.wHour, st.wMinute, st.wSecond);
 
-			pLog->Msg("\nLua Callstack\n");
-			if (gLuaState)
-				LuaSupport::DumpCallStack(gLuaState,pLog);
+	// Extract just version number and commit hash from CURRENT_GAMECORE_VERSION
+	char shortVersion[64];
+	const char* fullVersion = CURRENT_GAMECORE_VERSION;
+	const char* versionStart = strchr(fullVersion, '-');
+	if (versionStart) {
+		versionStart++; // Skip the '-'
+		const char* spaceAfterVersion = strchr(versionStart, ' ');
+		if (spaceAfterVersion) {
+			// Copy just the version number (e.g. "4.16")
+			size_t versionLen = spaceAfterVersion - versionStart;
+			strncpy_s(shortVersion, sizeof(shortVersion), versionStart, versionLen);
+			shortVersion[versionLen] = '\0';
 
-			pLog->Close();
+			// Add the commit hash if present
+			const char* commitHash = spaceAfterVersion + 1;
+			const char* nextSpace = strchr(commitHash, ' ');
+			if (nextSpace) {
+				strcat_s(shortVersion, sizeof(shortVersion), "_");
+				strncat_s(shortVersion, sizeof(shortVersion), commitHash, nextSpace - commitHash);
+			}
 		}
 	}
-#endif
+	else {
+		strcpy_s(shortVersion, sizeof(shortVersion), "unknown");
+	}
 
-	/* Open a file to store the minidump. */
-	HANDLE hFile = CreateFile(_T("CvMiniDump.dmp"), GENERIC_READ | GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-	if((hFile == NULL) || (hFile == INVALID_HANDLE_VALUE)) {
-		_tprintf(_T("CreateFile failed. Error: %lu \n"), GetLastError());
+	// Generate dump filename with version, commit hash and build type
+	TCHAR szDumpPath[MAX_PATH];
+	_stprintf_s(szDumpPath, MAX_PATH, _T("CvMiniDump_%s_%hs_%s.dmp"),
+		szTimestamp,
+		shortVersion,
+#ifdef VPDEBUG
+		_T("Debug")
+#else
+		_T("Release")
+#endif
+	);
+
+	HANDLE hFile = CreateFile(szDumpPath, GENERIC_READ | GENERIC_WRITE,
+		0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+
+	if ((hFile == NULL) || (hFile == INVALID_HANDLE_VALUE)) {
 		return;
 	}
 
-	/* Create the minidump. */
 	MINIDUMP_EXCEPTION_INFORMATION mdei;
-	mdei.ThreadId           = GetCurrentThreadId();
-	mdei.ExceptionPointers  = pep;
-	mdei.ClientPointers     = FALSE;
+	mdei.ThreadId = GetCurrentThreadId();
+	mdei.ExceptionPointers = pep;
+	mdei.ClientPointers = FALSE;
 
-	MINIDUMP_TYPE mdt       = MiniDumpNormal;
+	// Configure dump type based on build
+	MINIDUMP_TYPE mdt;
+#ifdef VPDEBUG
+	OutputDebugString(_T("Creating Debug minidump\n"));
+	mdt = (MINIDUMP_TYPE)(
+		MiniDumpWithFullMemory |             // Complete memory snapshot
+		MiniDumpWithFullMemoryInfo |         // Memory state information
+		MiniDumpWithHandleData |             // Handle usage
+		MiniDumpWithUnloadedModules |        // Track unloaded DLLs
+		MiniDumpWithThreadInfo |             // Extended thread information
+		MiniDumpWithProcessThreadData |      // Process thread data
+		MiniDumpWithCodeSegs |               // Code segments
+		MiniDumpWithDataSegs |               // Data segments
+		MiniDumpWithPrivateReadWriteMemory | // Private memory
+		MiniDumpWithFullAuxiliaryState |     // Auxiliary state (handles, GDI objects)
+		MINIDUMP_TYPE(0x00000040) |          // MiniDumpWithTokenInformation
+		MINIDUMP_TYPE(0x00000400) |          // MiniDumpWithPrivateWriteCopyMemory
+		MINIDUMP_TYPE(0x00020000) |          // MiniDumpIgnoreInaccessibleMemory
+		MiniDumpWithIndirectlyReferencedMemory | // Memory referenced by locals
+		MINIDUMP_TYPE(0x00000800)            // MiniDumpWithModuleHeaders
+		);
+#else
+	OutputDebugString(_T("Creating Release minidump\n"));
+	mdt = (MINIDUMP_TYPE)(
+		MiniDumpNormal |                    // Basic info
+		MiniDumpWithThreadInfo |            // Thread information
+		MINIDUMP_TYPE(0x00020000)           // MiniDumpIgnoreInaccessibleMemory
+		);
+#endif
 
-	MiniDumpWriteDump(GetCurrentProcess(), GetCurrentProcessId(), hFile, mdt, (pep != NULL) ? &mdei : NULL, NULL, NULL);
+	// Add version info
+	MINIDUMP_USER_STREAM_INFORMATION additional_streams;
+	MINIDUMP_USER_STREAM user_streams[1];
+	char version_info[256];
+
+	sprintf_s(version_info, sizeof(version_info),
+		"Version: %s", CURRENT_GAMECORE_VERSION);
+
+	user_streams[0].Type = 0x00000003;  // MinidumpCommentStreamA
+	user_streams[0].Buffer = version_info;
+	user_streams[0].BufferSize = static_cast<ULONG>(strlen(version_info) + 1);
+
+	additional_streams.UserStreamCount = 1;
+	additional_streams.UserStreamArray = user_streams;
+
+	// Write the dump
+	MiniDumpWriteDump(
+		GetCurrentProcess(),
+		GetCurrentProcessId(),
+		hFile,
+		mdt,
+		(pep != NULL) ? &mdei : NULL,
+		&additional_streams,
+		NULL);
 
 	CloseHandle(hFile);
 }
 
-LONG WINAPI CustomFilter(EXCEPTION_POINTERS *ExceptionInfo)
+LONG WINAPI CustomFilter(EXCEPTION_POINTERS* ExceptionInfo)
 {
 	CreateMiniDump(ExceptionInfo);
 	return EXCEPTION_EXECUTE_HANDLER;
@@ -2467,16 +2589,19 @@ LONG WINAPI CustomFilter(EXCEPTION_POINTERS *ExceptionInfo)
 void CvGlobals::init()
 {
 #if defined(MOD_DEBUG_MINIDUMP)
-	/* Enable our custom exception that will write the minidump for us. */
 	SetUnhandledExceptionFilter(CustomFilter);
-	CUSTOMLOG("MiniDump exception handler installed");
+#ifdef VPDEBUG
+	OutputDebugString(_T("Debug MiniDump handler installed\n"));
+#else
+	OutputDebugString(_T("Release MiniDump handler installed\n"));
 #endif
+#endif // WIN32
+#endif // defined(MOD_DEBUG_MINIDUMP)
 
 	//
 	// These vars are used to initialize the globals.
 	//
-#if defined(MOD_BALANCE_CORE)
-	int aiPlotDirectionX[NUM_DIRECTION_TYPES+2] =
+	int aiPlotDirectionX[NUM_DIRECTION_TYPES + 2] =
 	{
 		0,	// DIRECTION_NORTHEAST
 		1,	// DIRECTION_EAST
@@ -2486,19 +2611,9 @@ void CvGlobals::init()
 		-1,	// DIRECTION_NORTHWEST
 		0,	// DUMMY
 		0,	// NONE
-#else
-	int aiPlotDirectionX[NUM_DIRECTION_TYPES] =
-	{
-		0,	// DIRECTION_NORTHEAST
-		1,	// DIRECTION_EAST
-		1,	// DIRECTION_SOUTHEAST
-		0,	// DIRECTION_SOUTHWEST
-		-1,	// DIRECTION_WEST
-		-1,	// DIRECTION_NORTHWEST
-#endif
 	};
-#if defined(MOD_BALANCE_CORE)
-	int aiPlotDirectionY[NUM_DIRECTION_TYPES+2] =
+
+	int aiPlotDirectionY[NUM_DIRECTION_TYPES + 2] =
 	{
 		1,	// DIRECTION_NORTHEAST
 		0,	// DIRECTION_EAST
@@ -2508,16 +2623,6 @@ void CvGlobals::init()
 		1,	// DIRECTION_NORTHWEST
 		0,	// DUMMY
 		0,	// NONE
-#else
-	int aiPlotDirectionY[NUM_DIRECTION_TYPES] =
-	{
-		1,	// DIRECTION_NORTHEAST
-		0,	// DIRECTION_EAST
-		-1,	// DIRECTION_SOUTHEAST
-		-1,	// DIRECTION_SOUTHWEST
-		0,	// DIRECTION_WEST
-		1,	// DIRECTION_NORTHWEST
-#endif
 	};
 
 	// these are now in hex-space coords
@@ -2608,7 +2713,7 @@ void CvGlobals::init()
 		DIRECTION_WEST,			// DIRECTION_NORTHWEST
 	};
 
-	CvAssertMsg(gDLL != NULL, "Civ app needs to set gDLL");
+	ASSERT_DEBUG(gDLL != NULL, "Civ app needs to set gDLL");
 	m_asyncRand = FNEW(CvRandom("UiRng"), c_eCiv5GameplayDLL, 0);
 
 	gDLL->InitGlobals();	// some globals need to be allocated outside the dll
@@ -2829,8 +2934,8 @@ std::vector<CvInterfaceModeInfo*>& CvGlobals::getInterfaceModeInfo()
 
 CvInterfaceModeInfo* CvGlobals::getInterfaceModeInfo(InterfaceModeTypes e)
 {
-	CvAssert(e > -1);
-	CvAssert(e < NUM_INTERFACEMODE_TYPES);
+	ASSERT_DEBUG(e > -1);
+	ASSERT_DEBUG(e < NUM_INTERFACEMODE_TYPES);
 	if(e > -1 && e < (int)m_paInterfaceModeInfo.size())
 		return m_paInterfaceModeInfo[e];
 	else
@@ -2897,6 +3002,26 @@ void CvGlobals::setPlayerAndCityAILogSplit(bool bEnable)
 	m_bPlayerAndCityAILogSplit = bEnable;
 }
 
+const CvString CvGlobals::getDiploMinorLogFileName(const CvPlayer* pPlayer) const
+{
+	// Open the log file
+	if (GC.getPlayerAndCityAILogSplit())
+		return CvString("DiplomacyAI_MinorCiv_Log_") + pPlayer->getCivilizationShortDescription() + ".csv";
+
+	//default
+	return CvString("DiplomacyAI_MinorCiv_Log.csv");
+}
+
+const CvString CvGlobals::getDiploPeaceLogFileName(const CvPlayer* pPlayer) const
+{
+	// Open the log file
+	if (GC.getPlayerAndCityAILogSplit())
+		return CvString("DiplomacyAI_Peace_Log_") + pPlayer->getCivilizationShortDescription() + ".csv";
+
+	//default
+	return CvString("DiplomacyAI_Peace_Log.csv");
+}
+
 bool CvGlobals::GetTutorialLogging() const
 {
 	return m_bTutorialLogging;
@@ -2945,12 +3070,12 @@ int* CvGlobals::getRingFromLinearOffset()
 
 int CvGlobals::getRingIterationIndexHex(int i, int j)
 {
-	CvAssertMsg(i < (2*MAX_CITY_RADIUS+1), "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < (2*MAX_CITY_RADIUS+1), "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
 	if(i < 0 || i >= (2*MAX_CITY_RADIUS+1)) return -1;
 
-	CvAssertMsg(j < (2*MAX_CITY_RADIUS+1), "Index out of bounds");
-	CvAssertMsg(j > -1, "Index out of bounds");
+	ASSERT_DEBUG(j < (2*MAX_CITY_RADIUS+1), "Index out of bounds");
+	ASSERT_DEBUG(j > -1, "Index out of bounds");
 	if(j < 0 || j >= (2*MAX_CITY_RADIUS+1)) return -1;
 
 	return m_aaiRingPlotIndex[i][j];
@@ -2963,8 +3088,8 @@ DirectionTypes* CvGlobals::getTurnLeftDirection()
 
 DirectionTypes CvGlobals::getTurnLeftDirection(int i)
 {
-	CvAssertMsg(i < NUM_DIRECTION_TYPES, "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < NUM_DIRECTION_TYPES, "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
 
 	if(i < 0 || i >= NUM_DIRECTION_TYPES) return NO_DIRECTION;
 
@@ -2978,8 +3103,8 @@ DirectionTypes* CvGlobals::getTurnRightDirection()
 
 DirectionTypes CvGlobals::getTurnRightDirection(int i)
 {
-	CvAssertMsg(i < NUM_DIRECTION_TYPES, "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < NUM_DIRECTION_TYPES, "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
 
 	if(i < 0 || i >= NUM_DIRECTION_TYPES) return NO_DIRECTION;
 
@@ -3013,8 +3138,8 @@ std::vector<CvColorInfo*>& CvGlobals::GetColorInfo()
 
 CvColorInfo* CvGlobals::GetColorInfo(ColorTypes e)
 {
-	CvAssert(e > -1);
-	CvAssert(e < GetNumColorInfos());
+	ASSERT_DEBUG(e > -1);
+	ASSERT_DEBUG(e < GetNumColorInfos());
 	if(e > -1 && e < (int)m_paColorInfo.size())
 		return m_paColorInfo[e];
 	else
@@ -3034,8 +3159,8 @@ std::vector<CvPlayerColorInfo*>& CvGlobals::GetPlayerColorInfo()
 
 CvPlayerColorInfo* CvGlobals::GetPlayerColorInfo(PlayerColorTypes e)
 {
-	CvAssert(e > -1);
-	CvAssert(e < GetNumPlayerColorInfos());
+	ASSERT_DEBUG(e > -1);
+	ASSERT_DEBUG(e < GetNumPlayerColorInfos());
 	if(e > -1 && e < (int)m_paPlayerColorInfo.size())
 		return m_paPlayerColorInfo[e];
 	else
@@ -3054,8 +3179,8 @@ std::vector<CvEntityEventInfo*>& CvGlobals::getEntityEventInfo()
 
 CvEntityEventInfo* CvGlobals::getEntityEventInfo(EntityEventTypes e)
 {
-	CvAssert(e > -1);
-	CvAssert(e < GC.getNumEntityEventInfos());
+	ASSERT_DEBUG(e > -1);
+	ASSERT_DEBUG(e < GC.getNumEntityEventInfos());
 	if(e > -1 && e < (int)m_paEntityEventInfo.size())
 		return m_paEntityEventInfo[e];
 	else
@@ -3074,8 +3199,8 @@ std::vector<CvMultiUnitFormationInfo*>& CvGlobals::getMultiUnitFormationInfo()
 
 CvMultiUnitFormationInfo* CvGlobals::getMultiUnitFormationInfo(int i)
 {
-	CvAssert(i > -1);
-	CvAssert(i < GC.getNumMultiUnitFormationInfos());
+	ASSERT_DEBUG(i > -1);
+	ASSERT_DEBUG(i < GC.getNumMultiUnitFormationInfos());
 	if(i > -1 && i < (int)m_paMultiUnitFormationInfo.size())
 		return m_paMultiUnitFormationInfo[i];
 	else
@@ -3094,8 +3219,8 @@ std::vector<CvPlotInfo*>& CvGlobals::getPlotInfo()
 
 CvPlotInfo* CvGlobals::getPlotInfo(PlotTypes ePlotNum)
 {
-	CvAssert(ePlotNum > -1);
-	CvAssert(ePlotNum < GC.getNumPlotInfos());
+	ASSERT_DEBUG(ePlotNum > -1);
+	ASSERT_DEBUG(ePlotNum < GC.getNumPlotInfos());
 	if(ePlotNum > -1 && ePlotNum < (int)m_paPlotInfo.size())
 		return m_paPlotInfo[ePlotNum];
 	else
@@ -3114,8 +3239,8 @@ std::vector<CvGreatPersonInfo*>& CvGlobals::getGreatPersonInfo()
 
 CvGreatPersonInfo* CvGlobals::getGreatPersonInfo(GreatPersonTypes eGreatPersonNum)
 {
-	CvAssert(eGreatPersonNum > -1);
-	CvAssert(eGreatPersonNum < GC.getNumGreatPersonInfos());
+	ASSERT_DEBUG(eGreatPersonNum > -1);
+	ASSERT_DEBUG(eGreatPersonNum < GC.getNumGreatPersonInfos());
 	if (eGreatPersonNum > -1 && eGreatPersonNum < (int)m_paGreatPersonInfo.size())
 		return m_paGreatPersonInfo[eGreatPersonNum];
 	else
@@ -3134,8 +3259,8 @@ std::vector<CvTerrainInfo*>& CvGlobals::getTerrainInfo()
 
 CvTerrainInfo* CvGlobals::getTerrainInfo(TerrainTypes eTerrainNum)
 {
-	CvAssert(eTerrainNum > -1);
-	CvAssert(eTerrainNum < GC.getNumTerrainInfos());
+	ASSERT_DEBUG(eTerrainNum > -1);
+	ASSERT_DEBUG(eTerrainNum < GC.getNumTerrainInfos());
 	if(eTerrainNum > -1 && eTerrainNum < (int)m_paTerrainInfo.size())
 		return m_paTerrainInfo[eTerrainNum];
 	else
@@ -3154,8 +3279,8 @@ std::vector<CvResourceClassInfo*>& CvGlobals::getResourceClassInfo()
 
 CvResourceClassInfo* CvGlobals::getResourceClassInfo(ResourceClassTypes eResourceNum)
 {
-	CvAssert(eResourceNum > -1);
-	CvAssert(eResourceNum < GC.getNumResourceClassInfos());
+	ASSERT_DEBUG(eResourceNum > -1);
+	ASSERT_DEBUG(eResourceNum < GC.getNumResourceClassInfos());
 	if(eResourceNum > -1 && eResourceNum < (int)m_paResourceClassInfo.size())
 		return m_paResourceClassInfo[eResourceNum];
 	else
@@ -3175,8 +3300,8 @@ std::vector<CvResourceInfo*>& CvGlobals::getResourceInfo()
 
 CvResourceInfo* CvGlobals::getResourceInfo(ResourceTypes eResourceNum)
 {
-	CvAssert(eResourceNum > -1);
-	CvAssert(eResourceNum < GC.getNumResourceInfos());
+	ASSERT_DEBUG(eResourceNum > -1);
+	ASSERT_DEBUG(eResourceNum < GC.getNumResourceInfos());
 	if(eResourceNum > -1 && eResourceNum < (int)m_paResourceInfo.size())
 		return m_paResourceInfo[eResourceNum];
 	else
@@ -3195,8 +3320,8 @@ std::vector<CvFeatureInfo*>& CvGlobals::getFeatureInfo()
 
 CvFeatureInfo* CvGlobals::getFeatureInfo(FeatureTypes eFeatureNum)
 {
-	CvAssert(eFeatureNum > -1);
-	CvAssert(eFeatureNum < GC.getNumFeatureInfos());
+	ASSERT_DEBUG(eFeatureNum > -1);
+	ASSERT_DEBUG(eFeatureNum < GC.getNumFeatureInfos());
 	if(eFeatureNum > -1 && eFeatureNum < (int)m_paFeatureInfo.size())
 		return m_paFeatureInfo[eFeatureNum];
 	else
@@ -3225,8 +3350,8 @@ std::vector<CvCivilizationInfo*>& CvGlobals::getCivilizationInfo()
 
 CvCivilizationInfo* CvGlobals::getCivilizationInfo(CivilizationTypes eCivilizationNum)
 {
-	CvAssert(eCivilizationNum > -1);
-	CvAssert(eCivilizationNum < GC.getNumCivilizationInfos());
+	ASSERT_DEBUG(eCivilizationNum > -1);
+	ASSERT_DEBUG(eCivilizationNum < GC.getNumCivilizationInfos());
 	if(eCivilizationNum > -1 && eCivilizationNum < (int)m_paCivilizationInfo.size())
 		return m_paCivilizationInfo[eCivilizationNum];
 	else
@@ -3235,7 +3360,7 @@ CvCivilizationInfo* CvGlobals::getCivilizationInfo(CivilizationTypes eCivilizati
 
 CivilizationTypes CvGlobals::getCivilizationInfoIndex(const char* pszType)
 {
-	CvAssert(pszType != NULL);
+	ASSERT_DEBUG(pszType != NULL);
 	if(pszType != NULL)
 	{
 		int iIndex = 0;
@@ -3277,8 +3402,8 @@ std::vector<CvMinorCivInfo*>& CvGlobals::getMinorCivInfo()
 
 CvMinorCivInfo* CvGlobals::getMinorCivInfo(MinorCivTypes eMinorCivNum)
 {
-	CvAssert(eMinorCivNum > -1);
-	CvAssert(eMinorCivNum < GC.getNumMinorCivInfos());
+	ASSERT_DEBUG(eMinorCivNum > -1);
+	ASSERT_DEBUG(eMinorCivNum < GC.getNumMinorCivInfos());
 	if(eMinorCivNum > -1 && eMinorCivNum < (int)m_paMinorCivInfo.size())
 		return m_paMinorCivInfo[eMinorCivNum];
 	else
@@ -3297,8 +3422,8 @@ std::vector<CvLeaderHeadInfo*>& CvGlobals::getLeaderHeadInfo()
 
 CvLeaderHeadInfo* CvGlobals::getLeaderHeadInfo(LeaderHeadTypes eLeaderHeadNum)
 {
-	CvAssert(eLeaderHeadNum > -1);
-	CvAssert(eLeaderHeadNum < GC.getNumLeaderHeadInfos());
+	ASSERT_DEBUG(eLeaderHeadNum > -1);
+	ASSERT_DEBUG(eLeaderHeadNum < GC.getNumLeaderHeadInfos());
 	if(eLeaderHeadNum > -1 && eLeaderHeadNum < (int)m_paLeaderHeadInfo.size())
 		return m_paLeaderHeadInfo[eLeaderHeadNum];
 	else
@@ -3317,8 +3442,8 @@ std::vector<CvUnitEntry*>& CvGlobals::getUnitInfo()
 
 CvUnitEntry* CvGlobals::getUnitInfo(UnitTypes eUnitNum)
 {
-	CvAssert(eUnitNum > -1);
-	CvAssert(eUnitNum < GC.getNumUnitInfos());
+	ASSERT_DEBUG(eUnitNum > -1);
+	ASSERT_DEBUG(eUnitNum < GC.getNumUnitInfos());
 	if(eUnitNum > -1 && eUnitNum < GC.getNumUnitInfos())
 		return m_pUnits->GetUnitEntries()[eUnitNum];
 	else
@@ -3342,8 +3467,8 @@ std::vector<CvSpecialUnitInfo*>& CvGlobals::getSpecialUnitInfo()
 
 CvSpecialUnitInfo* CvGlobals::getSpecialUnitInfo(SpecialUnitTypes eSpecialUnitNum)
 {
-	CvAssert(eSpecialUnitNum > -1);
-	CvAssert(eSpecialUnitNum < GC.getNumSpecialUnitInfos());
+	ASSERT_DEBUG(eSpecialUnitNum > -1);
+	ASSERT_DEBUG(eSpecialUnitNum < GC.getNumSpecialUnitInfos());
 	if(eSpecialUnitNum > -1 && eSpecialUnitNum < (int)m_paSpecialUnitInfo.size())
 		return m_paSpecialUnitInfo[eSpecialUnitNum];
 	else
@@ -3362,8 +3487,8 @@ std::vector<CvVoteSourceInfo*>& CvGlobals::getVoteSourceInfo()
 
 CvVoteSourceInfo* CvGlobals::getVoteSourceInfo(VoteSourceTypes e)
 {
-	CvAssert(e > -1);
-	CvAssert(e < GC.getNumVoteSourceInfos());
+	ASSERT_DEBUG(e > -1);
+	ASSERT_DEBUG(e < GC.getNumVoteSourceInfos());
 	if(e > -1 && e < (int)m_paVoteSourceInfo.size())
 		return m_paVoteSourceInfo[e];
 	else
@@ -3383,8 +3508,8 @@ std::vector<CvModEventInfo*>& CvGlobals::getEventInfo()
 
 CvModEventInfo* CvGlobals::getEventInfo(EventTypes e)
 {
-	CvAssert(e > -1);
-	CvAssert(e < GC.getNumEventInfos());
+	ASSERT_DEBUG(e > -1);
+	ASSERT_DEBUG(e < GC.getNumEventInfos());
 	if(e > -1 && e < (int)m_paEventInfo.size())
 		return m_paEventInfo[e];
 	else
@@ -3403,8 +3528,8 @@ std::vector<CvModEventChoiceInfo*>& CvGlobals::getEventChoiceInfo()
 
 CvModEventChoiceInfo* CvGlobals::getEventChoiceInfo(EventChoiceTypes e)
 {
-	CvAssert(e > -1);
-	CvAssert(e < GC.getNumEventChoiceInfos());
+	ASSERT_DEBUG(e > -1);
+	ASSERT_DEBUG(e < GC.getNumEventChoiceInfos());
 	if(e > -1 && e < (int)m_paEventChoiceInfo.size())
 		return m_paEventChoiceInfo[e];
 	else
@@ -3422,8 +3547,8 @@ std::vector<CvModCityEventInfo*>& CvGlobals::getCityEventInfo()
 
 CvModCityEventInfo* CvGlobals::getCityEventInfo(CityEventTypes e)
 {
-	CvAssert(e > -1);
-	CvAssert(e < GC.getNumCityEventInfos());
+	ASSERT_DEBUG(e > -1);
+	ASSERT_DEBUG(e < GC.getNumCityEventInfos());
 	if(e > -1 && e < (int)m_paCityEventInfo.size())
 		return m_paCityEventInfo[e];
 	else
@@ -3442,8 +3567,8 @@ std::vector<CvModEventCityChoiceInfo*>& CvGlobals::getCityEventChoiceInfo()
 
 CvModEventCityChoiceInfo* CvGlobals::getCityEventChoiceInfo(CityEventChoiceTypes e)
 {
-	CvAssert(e > -1);
-	CvAssert(e < GC.getNumCityEventChoiceInfos());
+	ASSERT_DEBUG(e > -1);
+	ASSERT_DEBUG(e < GC.getNumCityEventChoiceInfos());
 	if(e > -1 && e < (int)m_paCityEventChoiceInfo.size())
 		return m_paCityEventChoiceInfo[e];
 	else
@@ -3462,8 +3587,8 @@ std::vector<CvEventLinkingInfo*>& CvGlobals::getEventLinkingInfo()
 
 CvEventLinkingInfo* CvGlobals::getEventLinkingInfo(EventTypes e)
 {
-	CvAssert(e > -1);
-	CvAssert(e < GC.getNumEventLinkingInfos());
+	ASSERT_DEBUG(e > -1);
+	ASSERT_DEBUG(e < GC.getNumEventLinkingInfos());
 	if(e > -1 && e < (int)m_paEventLinkingInfo.size())
 		return m_paEventLinkingInfo[e];
 	else
@@ -3482,8 +3607,8 @@ std::vector<CvEventChoiceLinkingInfo*>& CvGlobals::getEventChoiceLinkingInfo()
 
 CvEventChoiceLinkingInfo* CvGlobals::getEventChoiceLinkingInfo(EventChoiceTypes e)
 {
-	CvAssert(e > -1);
-	CvAssert(e < GC.getNumEventChoiceLinkingInfos());
+	ASSERT_DEBUG(e > -1);
+	ASSERT_DEBUG(e < GC.getNumEventChoiceLinkingInfos());
 	if(e > -1 && e < (int)m_paEventChoiceLinkingInfo.size())
 		return m_paEventChoiceLinkingInfo[e];
 	else
@@ -3502,8 +3627,8 @@ std::vector<CvCityEventLinkingInfo*>& CvGlobals::getCityEventLinkingInfo()
 
 CvCityEventLinkingInfo* CvGlobals::getCityEventLinkingInfo(CityEventTypes e)
 {
-	CvAssert(e > -1);
-	CvAssert(e < GC.getNumCityEventLinkingInfos());
+	ASSERT_DEBUG(e > -1);
+	ASSERT_DEBUG(e < GC.getNumCityEventLinkingInfos());
 	if(e > -1 && e < (int)m_paCityEventLinkingInfo.size())
 		return m_paCityEventLinkingInfo[e];
 	else
@@ -3522,8 +3647,8 @@ std::vector<CvCityEventChoiceLinkingInfo*>& CvGlobals::getCityEventChoiceLinking
 
 CvCityEventChoiceLinkingInfo* CvGlobals::getCityEventChoiceLinkingInfo(CityEventChoiceTypes e)
 {
-	CvAssert(e > -1);
-	CvAssert(e < GC.getNumCityEventChoiceLinkingInfos());
+	ASSERT_DEBUG(e > -1);
+	ASSERT_DEBUG(e < GC.getNumCityEventChoiceLinkingInfos());
 	if(e > -1 && e < (int)m_paCityEventChoiceLinkingInfo.size())
 		return m_paCityEventChoiceLinkingInfo[e];
 	else
@@ -3543,8 +3668,8 @@ std::vector<CvBaseInfo*>& CvGlobals::getUnitCombatClassInfo()
 
 CvBaseInfo* CvGlobals::getUnitCombatClassInfo(UnitCombatTypes e)
 {
-	CvAssert(e > -1);
-	CvAssert(e < GC.getNumUnitCombatClassInfos());
+	ASSERT_DEBUG(e > -1);
+	ASSERT_DEBUG(e < GC.getNumUnitCombatClassInfos());
 	if(e > -1 && e < (int)m_paUnitCombatClassInfo.size())
 		return m_paUnitCombatClassInfo[e];
 	else
@@ -3558,8 +3683,8 @@ std::vector<CvBaseInfo*>& CvGlobals::getUnitAIInfo()
 
 CvBaseInfo* CvGlobals::getUnitAIInfo(UnitAITypes eUnitAINum)
 {
-	CvAssert(eUnitAINum >= 0);
-	CvAssert(eUnitAINum < NUM_UNITAI_TYPES);
+	ASSERT_DEBUG(eUnitAINum >= 0);
+	ASSERT_DEBUG(eUnitAINum < NUM_UNITAI_TYPES);
 	if(eUnitAINum > -1 && eUnitAINum < (int)m_paUnitAIInfos.size())
 		return m_paUnitAIInfos[eUnitAINum];
 	else
@@ -3578,8 +3703,8 @@ std::vector<CvGameOptionInfo*>& CvGlobals::getGameOptionInfo()
 
 CvGameOptionInfo* CvGlobals::getGameOptionInfo(GameOptionTypes eGameOptionNum)
 {
-	CvAssert(eGameOptionNum >= 0);
-	CvAssert(eGameOptionNum < GC.getNumGameOptionInfos());
+	ASSERT_DEBUG(eGameOptionNum >= 0);
+	ASSERT_DEBUG(eGameOptionNum < GC.getNumGameOptionInfos());
 	if(eGameOptionNum > -1 && eGameOptionNum < (int)m_paGameOptionInfos.size())
 		return m_paGameOptionInfos[eGameOptionNum];
 	else
@@ -3598,8 +3723,8 @@ std::vector<CvMPOptionInfo*>& CvGlobals::getMPOptionInfo()
 
 CvMPOptionInfo* CvGlobals::getMPOptionInfo(MultiplayerOptionTypes eMPOptionNum)
 {
-	CvAssert(eMPOptionNum >= 0);
-	CvAssert(eMPOptionNum < GC.getNumMPOptionInfos());
+	ASSERT_DEBUG(eMPOptionNum >= 0);
+	ASSERT_DEBUG(eMPOptionNum < GC.getNumMPOptionInfos());
 	if(eMPOptionNum > -1 && eMPOptionNum < (int)m_paMPOptionInfos.size())
 		return m_paMPOptionInfos[eMPOptionNum];
 	else
@@ -3613,7 +3738,7 @@ std::vector<CvPlayerOptionInfo*>& CvGlobals::getPlayerOptionInfo()
 
 CvPlayerOptionInfo* CvGlobals::getPlayerOptionInfo(PlayerOptionTypes ePlayerOptionNum)
 {
-	CvAssert(ePlayerOptionNum >= 0);
+	ASSERT_DEBUG(ePlayerOptionNum >= 0);
 	if(ePlayerOptionNum > -1 && ePlayerOptionNum < (int)m_paPlayerOptionInfos.size())
 		return m_paPlayerOptionInfos[ePlayerOptionNum];
 	else
@@ -3627,8 +3752,8 @@ std::vector<CvYieldInfo*>& CvGlobals::getYieldInfo()
 
 CvYieldInfo* CvGlobals::getYieldInfo(YieldTypes eYieldNum)
 {
-	CvAssert(eYieldNum > -1);
-	CvAssert(eYieldNum < NUM_YIELD_TYPES);
+	ASSERT_DEBUG(eYieldNum > -1);
+	ASSERT_DEBUG(eYieldNum < NUM_YIELD_TYPES);
 	if(eYieldNum > -1 && eYieldNum < (int)m_paYieldInfo.size())
 		return m_paYieldInfo[eYieldNum];
 	else
@@ -3647,8 +3772,8 @@ std::vector<CvRouteInfo*>& CvGlobals::getRouteInfo()
 
 CvRouteInfo* CvGlobals::getRouteInfo(RouteTypes eRouteNum)
 {
-	CvAssert(eRouteNum > -1);
-	CvAssert(eRouteNum < GC.getNumRouteInfos());
+	ASSERT_DEBUG(eRouteNum > -1);
+	ASSERT_DEBUG(eRouteNum < GC.getNumRouteInfos());
 	if(eRouteNum > -1 && eRouteNum < (int)m_paRouteInfo.size())
 		return m_paRouteInfo[eRouteNum];
 	else
@@ -3667,8 +3792,8 @@ std::vector<CvImprovementEntry*>& CvGlobals::getImprovementInfo()
 
 CvImprovementEntry* CvGlobals::getImprovementInfo(ImprovementTypes eImprovementNum)
 {
-	CvAssert(eImprovementNum > -1);
-	CvAssert(eImprovementNum < GC.getNumImprovementInfos());
+	ASSERT_DEBUG(eImprovementNum > -1);
+	ASSERT_DEBUG(eImprovementNum < GC.getNumImprovementInfos());
 	if(eImprovementNum > -1 && eImprovementNum < GC.getNumImprovementInfos())
 		return m_pImprovements->GetImprovementEntries()[eImprovementNum];
 	else
@@ -3692,8 +3817,8 @@ std::vector<CvBuildInfo*>& CvGlobals::getBuildInfo()
 
 CvBuildInfo* CvGlobals::getBuildInfo(BuildTypes eBuildNum)
 {
-	CvAssert(eBuildNum > -1);
-	CvAssert(eBuildNum < GC.getNumBuildInfos());
+	ASSERT_DEBUG(eBuildNum > -1);
+	ASSERT_DEBUG(eBuildNum < GC.getNumBuildInfos());
 	if(eBuildNum > -1 && eBuildNum < (int)m_paBuildInfo.size())
 		return m_paBuildInfo[eBuildNum];
 	else
@@ -3712,8 +3837,8 @@ std::vector<CvHandicapInfo*>& CvGlobals::getHandicapInfo()
 
 CvHandicapInfo* CvGlobals::getHandicapInfo(HandicapTypes eHandicapNum)
 {
-	CvAssert(eHandicapNum > -1);
-	CvAssert(eHandicapNum < GC.getNumHandicapInfos());
+	ASSERT_DEBUG(eHandicapNum > -1);
+	ASSERT_DEBUG(eHandicapNum < GC.getNumHandicapInfos());
 	if(eHandicapNum > -1 && eHandicapNum < (int)m_paHandicapInfo.size())
 		return m_paHandicapInfo[eHandicapNum];
 	else
@@ -3732,8 +3857,8 @@ std::vector<CvGameSpeedInfo*>& CvGlobals::getGameSpeedInfo()
 
 CvGameSpeedInfo* CvGlobals::getGameSpeedInfo(GameSpeedTypes eGameSpeedNum)
 {
-	CvAssert(eGameSpeedNum > -1);
-	CvAssert(eGameSpeedNum < GC.getNumGameSpeedInfos());
+	ASSERT_DEBUG(eGameSpeedNum > -1);
+	ASSERT_DEBUG(eGameSpeedNum < GC.getNumGameSpeedInfos());
 	if(eGameSpeedNum > -1 && eGameSpeedNum < (int)m_paGameSpeedInfo.size())
 		return m_paGameSpeedInfo[eGameSpeedNum];
 	else
@@ -3753,8 +3878,8 @@ std::vector<CvDiploModifierInfo*>& CvGlobals::getDiploModifierInfo()
 
 CvDiploModifierInfo* CvGlobals::getDiploModifierInfo(DiploModifierTypes eDiploModifierNum)
 {
-	CvAssert(eDiploModifierNum > -1);
-	CvAssert(eDiploModifierNum < GC.getNumDiploModifierInfos());
+	ASSERT_DEBUG(eDiploModifierNum > -1);
+	ASSERT_DEBUG(eDiploModifierNum < GC.getNumDiploModifierInfos());
 	if(eDiploModifierNum > -1 && eDiploModifierNum < (int)m_paDiploModifierInfo.size())
 		return m_paDiploModifierInfo[eDiploModifierNum];
 	else
@@ -3775,8 +3900,8 @@ std::vector<CvProcessInfo*>& CvGlobals::getProcessInfo()
 
 CvProcessInfo* CvGlobals::getProcessInfo(ProcessTypes e)
 {
-	CvAssert(e > -1);
-	CvAssert(e < GC.getNumProcessInfos());
+	ASSERT_DEBUG(e > -1);
+	ASSERT_DEBUG(e < GC.getNumProcessInfos());
 	if(e > -1 && e < (int)m_paProcessInfo.size())
 		return m_paProcessInfo[e];
 	else
@@ -3795,8 +3920,8 @@ std::vector<CvVoteInfo*>& CvGlobals::getVoteInfo()
 
 CvVoteInfo* CvGlobals::getVoteInfo(VoteTypes e)
 {
-	CvAssert(e > -1);
-	CvAssert(e < GC.getNumVoteInfos());
+	ASSERT_DEBUG(e > -1);
+	ASSERT_DEBUG(e < GC.getNumVoteInfos());
 	if(e > -1 && e < (int)m_paVoteInfo.size())
 		return m_paVoteInfo[e];
 	else
@@ -3815,8 +3940,8 @@ std::vector<CvProjectEntry*>& CvGlobals::getProjectInfo()
 
 CvProjectEntry* CvGlobals::getProjectInfo(ProjectTypes e)
 {
-	CvAssert(e > -1);
-	CvAssert(e < GC.getNumProjectInfos());
+	ASSERT_DEBUG(e > -1);
+	ASSERT_DEBUG(e < GC.getNumProjectInfos());
 	if(e > -1 && e < GC.getNumProjectInfos())
 		return m_pProjects->GetProjectEntries()[e];
 	else
@@ -3840,15 +3965,15 @@ std::vector<CvBuildingClassInfo*>& CvGlobals::getBuildingClassInfo()
 
 CvBuildingClassInfo* CvGlobals::getBuildingClassInfo(BuildingClassTypes eBuildingClassNum)
 {
-	CvAssert(eBuildingClassNum > -1);
-	CvAssert(eBuildingClassNum < GC.getNumBuildingClassInfos());
+	ASSERT_DEBUG(eBuildingClassNum > -1);
+	ASSERT_DEBUG(eBuildingClassNum < GC.getNumBuildingClassInfos());
 	if(eBuildingClassNum > -1 && eBuildingClassNum < (int)m_paBuildingClassInfo.size())
 		return m_paBuildingClassInfo[eBuildingClassNum];
 	else
 		return NULL;
 }
 
-inline int CvGlobals::getNumBuildingInfos()
+int CvGlobals::getNumBuildingInfos()
 {
 	return m_pBuildings->GetNumBuildings();
 }
@@ -3858,10 +3983,10 @@ std::vector<CvBuildingEntry*>& CvGlobals::getBuildingInfo()
 	return m_pBuildings->GetBuildingEntries();
 }
 
-inline CvBuildingEntry* CvGlobals::getBuildingInfo(BuildingTypes eBuildingNum)
+CvBuildingEntry* CvGlobals::getBuildingInfo(BuildingTypes eBuildingNum)
 {
-	CvAssert(eBuildingNum > -1);
-	CvAssert(eBuildingNum < GC.getNumBuildingInfos());
+	ASSERT_DEBUG(eBuildingNum > -1);
+	ASSERT_DEBUG(eBuildingNum < GC.getNumBuildingInfos());
 	if(eBuildingNum > -1 && eBuildingNum < GC.getNumBuildingInfos())
 		return m_pBuildings->GetBuildingEntries()[eBuildingNum];
 	else
@@ -3936,7 +4061,7 @@ static void HashGameDataCombine(CvGlobals::GameDataHash& seed, std::size_t& word
 		if (*it == 0)
 			infoHash = fnv_offset_basis;
 		else
-			infoHash = FString::Hash((*it)->GetType());
+			infoHash = FStringHash((*it)->GetType());
 		seed[word] ^= (infoHash ^ fnv_offset_basis) * fnv_prime;
 		if (++word >= 4)
 			word = 0;
@@ -4059,8 +4184,8 @@ std::vector<CvUnitClassInfo*>& CvGlobals::getUnitClassInfo()
 
 CvUnitClassInfo* CvGlobals::getUnitClassInfo(UnitClassTypes eUnitClassNum)
 {
-	CvAssert(eUnitClassNum > -1);
-	CvAssert(eUnitClassNum < GC.getNumUnitClassInfos());
+	ASSERT_DEBUG(eUnitClassNum > -1);
+	ASSERT_DEBUG(eUnitClassNum < GC.getNumUnitClassInfos());
 	if(eUnitClassNum > -1 && eUnitClassNum < (int)m_paUnitClassInfo.size())
 		return m_paUnitClassInfo[eUnitClassNum];
 	else
@@ -4079,8 +4204,8 @@ std::vector<CvActionInfo*>& CvGlobals::getActionInfo()
 
 CvActionInfo* CvGlobals::getActionInfo(int i)
 {
-	CvAssertMsg(i < getNumActionInfos(), "Index out of bounds");
-	CvAssertMsg(i > -1, "Index out of bounds");
+	ASSERT_DEBUG(i < getNumActionInfos(), "Index out of bounds");
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
 	if(i > -1 && i < (int)m_paActionInfo.size())
 		return m_paActionInfo[i];
 	else
@@ -4094,8 +4219,8 @@ std::vector<CvMissionInfo*>& CvGlobals::getMissionInfo()
 
 CvMissionInfo* CvGlobals::getMissionInfo(MissionTypes eMissionNum)
 {
-	CvAssert(eMissionNum > -1);
-	CvAssert(static_cast<unsigned int>(eMissionNum) < CvTypes::getNUM_MISSION_TYPES());
+	ASSERT_DEBUG(eMissionNum > -1);
+	ASSERT_DEBUG(static_cast<unsigned int>(eMissionNum) < CvTypes::getNUM_MISSION_TYPES());
 	if(eMissionNum > -1 && eMissionNum < (int)m_paMissionInfo.size())
 		return m_paMissionInfo[eMissionNum];
 	else
@@ -4109,8 +4234,8 @@ std::vector<CvControlInfo*>& CvGlobals::getControlInfo()
 
 CvControlInfo* CvGlobals::getControlInfo(ControlTypes eControlNum)
 {
-	CvAssert(eControlNum > -1);
-	CvAssert(eControlNum < NUM_CONTROL_TYPES);
+	ASSERT_DEBUG(eControlNum > -1);
+	ASSERT_DEBUG(eControlNum < NUM_CONTROL_TYPES);
 	if(eControlNum > -1 && eControlNum < (int)m_paControlInfo.size())
 		return m_paControlInfo[eControlNum];
 	else
@@ -4124,8 +4249,8 @@ std::vector<CvCommandInfo*>& CvGlobals::getCommandInfo()
 
 CvCommandInfo* CvGlobals::getCommandInfo(CommandTypes eCommandNum)
 {
-	CvAssert(eCommandNum > -1);
-	CvAssert(eCommandNum < NUM_COMMAND_TYPES);
+	ASSERT_DEBUG(eCommandNum > -1);
+	ASSERT_DEBUG(eCommandNum < NUM_COMMAND_TYPES);
 	if(eCommandNum > -1 && eCommandNum < (int)m_paCommandInfo.size())
 		return m_paCommandInfo[eCommandNum];
 	else
@@ -4144,8 +4269,8 @@ std::vector<CvAutomateInfo*>& CvGlobals::getAutomateInfo()
 
 CvAutomateInfo* CvGlobals::getAutomateInfo(int iAutomateNum)
 {
-	CvAssertMsg(iAutomateNum < getNumAutomateInfos(), "Index out of bounds");
-	CvAssertMsg(iAutomateNum > -1, "Index out of bounds");
+	ASSERT_DEBUG(iAutomateNum < getNumAutomateInfos(), "Index out of bounds");
+	ASSERT_DEBUG(iAutomateNum > -1, "Index out of bounds");
 	if(iAutomateNum > -1 && iAutomateNum < (int)m_paAutomateInfo.size())
 		return m_paAutomateInfo[iAutomateNum];
 	else
@@ -4164,8 +4289,8 @@ std::vector<CvPromotionEntry*>& CvGlobals::getPromotionInfo()
 
 CvPromotionEntry* CvGlobals::getPromotionInfo(PromotionTypes ePromotionNum)
 {
-	CvAssert(ePromotionNum > -1);
-	CvAssert(ePromotionNum < GC.getNumPromotionInfos());
+	ASSERT_DEBUG(ePromotionNum > -1);
+	ASSERT_DEBUG(ePromotionNum < GC.getNumPromotionInfos());
 	if(ePromotionNum > -1 && ePromotionNum < GC.getNumPromotionInfos())
 		return m_pPromotions->GetPromotionEntries()[ePromotionNum];
 	else
@@ -4189,8 +4314,8 @@ std::vector<CvSpecialistInfo*>& CvGlobals::getSpecialistInfo()
 
 CvSpecialistInfo* CvGlobals::getSpecialistInfo(SpecialistTypes eSpecialistNum)
 {
-	CvAssert(eSpecialistNum > -1);
-	CvAssert(eSpecialistNum < GC.getNumSpecialistInfos());
+	ASSERT_DEBUG(eSpecialistNum > -1);
+	ASSERT_DEBUG(eSpecialistNum < GC.getNumSpecialistInfos());
 	if(eSpecialistNum > -1 && eSpecialistNum < (int)m_paSpecialistInfo.size())
 		return m_paSpecialistInfo[eSpecialistNum];
 	else
@@ -4234,8 +4359,8 @@ std::vector<CvCitySpecializationXMLEntry*>& CvGlobals::getCitySpecializationInfo
 
 CvCitySpecializationXMLEntry* CvGlobals::getCitySpecializationInfo(CitySpecializationTypes eCitySpecialization)
 {
-	CvAssert(eCitySpecialization > -1);
-	CvAssert(eCitySpecialization < GC.getNumCitySpecializationInfos());
+	ASSERT_DEBUG(eCitySpecialization > -1);
+	ASSERT_DEBUG(eCitySpecialization < GC.getNumCitySpecializationInfos());
 	if(eCitySpecialization > -1 && eCitySpecialization < GC.getNumCitySpecializationInfos())
 		return m_pCitySpecializations->GetCitySpecializationEntries()[eCitySpecialization];
 	else
@@ -4303,8 +4428,8 @@ std::vector<CvAICityStrategyEntry*>& CvGlobals::getAICityStrategyInfo()
 
 CvAICityStrategyEntry* CvGlobals::getAICityStrategyInfo(AICityStrategyTypes eAICityStrategyNum)
 {
-	CvAssert(eAICityStrategyNum > -1);
-	CvAssert(eAICityStrategyNum < GC.getNumAICityStrategyInfos());
+	ASSERT_DEBUG(eAICityStrategyNum > -1);
+	ASSERT_DEBUG(eAICityStrategyNum < GC.getNumAICityStrategyInfos());
 	return m_pAICityStrategies->GetAICityStrategyEntries()[eAICityStrategyNum];
 }
 
@@ -4325,8 +4450,8 @@ std::vector<CvPolicyEntry*>& CvGlobals::getPolicyInfo()
 
 CvPolicyEntry* CvGlobals::getPolicyInfo(PolicyTypes ePolicyNum)
 {
-	CvAssert(ePolicyNum > -1);
-	CvAssert(ePolicyNum < GC.getNumPolicyInfos());
+	ASSERT_DEBUG(ePolicyNum > -1);
+	ASSERT_DEBUG(ePolicyNum < GC.getNumPolicyInfos());
 	return m_pPolicies->GetPolicyEntries()[ePolicyNum];
 }
 
@@ -4347,8 +4472,8 @@ std::vector<CvPolicyBranchEntry*>& CvGlobals::getPolicyBranchInfo()
 
 CvPolicyBranchEntry* CvGlobals::getPolicyBranchInfo(PolicyBranchTypes ePolicyBranchNum)
 {
-	CvAssert(ePolicyBranchNum > -1);
-	CvAssert(ePolicyBranchNum < GC.getNumPolicyBranchInfos());
+	ASSERT_DEBUG(ePolicyBranchNum > -1);
+	ASSERT_DEBUG(ePolicyBranchNum < GC.getNumPolicyBranchInfos());
 	return m_pPolicies->GetPolicyBranchEntries()[ePolicyBranchNum];
 }
 
@@ -4364,8 +4489,8 @@ std::vector<CvEmphasisEntry*>& CvGlobals::getEmphasisInfo()
 
 CvEmphasisEntry* CvGlobals::getEmphasisInfo(EmphasizeTypes eEmphasisNum)
 {
-	CvAssert(eEmphasisNum > -1);
-	CvAssert(eEmphasisNum < GC.getNumEmphasisInfos());
+	ASSERT_DEBUG(eEmphasisNum > -1);
+	ASSERT_DEBUG(eEmphasisNum < GC.getNumEmphasisInfos());
 	return m_pEmphases->GetEmphasisEntries()[eEmphasisNum];
 }
 
@@ -4386,8 +4511,8 @@ std::vector<CvTraitEntry*>& CvGlobals::getTraitInfo()
 
 CvTraitEntry* CvGlobals::getTraitInfo(TraitTypes eTraitNum)
 {
-	CvAssert(eTraitNum > -1);
-	CvAssert(eTraitNum < GC.getNumTraitInfos());
+	ASSERT_DEBUG(eTraitNum > -1);
+	ASSERT_DEBUG(eTraitNum < GC.getNumTraitInfos());
 	return m_pTraits->GetTraitEntries()[eTraitNum];
 }
 
@@ -4408,8 +4533,8 @@ std::vector<CvReligionEntry*>& CvGlobals::getReligionInfo()
 
 CvReligionEntry* CvGlobals::getReligionInfo(ReligionTypes eReligionNum)
 {
-	CvAssert(eReligionNum > -1);
-	CvAssert(eReligionNum < GC.getNumReligionInfos());
+	ASSERT_DEBUG(eReligionNum > -1);
+	ASSERT_DEBUG(eReligionNum < GC.getNumReligionInfos());
 	return m_pReligions->GetReligionEntries()[eReligionNum];
 }
 
@@ -4430,8 +4555,8 @@ std::vector<CvBeliefEntry*>& CvGlobals::getBeliefInfo()
 
 CvBeliefEntry* CvGlobals::getBeliefInfo(BeliefTypes eBeliefNum)
 {
-	CvAssert(eBeliefNum > -1);
-	CvAssert(eBeliefNum < GC.getNumBeliefInfos());
+	ASSERT_DEBUG(eBeliefNum > -1);
+	ASSERT_DEBUG(eBeliefNum < GC.getNumBeliefInfos());
 	return m_pBeliefs->GetBeliefEntries()[eBeliefNum];
 }
 
@@ -4453,8 +4578,8 @@ std::vector<CvCorporationEntry*>& CvGlobals::getCorporationInfo()
 
 CvCorporationEntry* CvGlobals::getCorporationInfo(CorporationTypes eCorporationNum)
 {
-	CvAssert(eCorporationNum > -1);
-	CvAssert(eCorporationNum < GC.getNumCorporationInfos());
+	ASSERT_DEBUG(eCorporationNum > -1);
+	ASSERT_DEBUG(eCorporationNum < GC.getNumCorporationInfos());
 	return m_pCorporations->GetCorporationEntries()[eCorporationNum];
 }
 
@@ -4475,8 +4600,8 @@ std::vector<CvContractEntry*>& CvGlobals::getContractInfo()
 
 CvContractEntry* CvGlobals::getContractInfo(ContractTypes eContract)
 {
-	CvAssert(eContract > -1);
-	CvAssert(eContract < GC.getNumContractInfos());
+	ASSERT_DEBUG(eContract > -1);
+	ASSERT_DEBUG(eContract < GC.getNumContractInfos());
 	return m_paContractInfo[eContract];
 }
 
@@ -4498,8 +4623,8 @@ std::vector<CvSpyPassiveBonusEntry*>& CvGlobals::getSpyPassiveBonusInfo()
 
 _Ret_maybenull_ CvSpyPassiveBonusEntry* CvGlobals::getSpyPassiveBonusInfo(SpyPassiveBonusTypes eSpyPassiveBonusNum)
 {
-	CvAssert(eSpyPassiveBonusNum > -1);
-	CvAssert(eSpyPassiveBonusNum < GC.getNumSpyPassiveBonusInfos());
+	ASSERT_DEBUG(eSpyPassiveBonusNum > -1);
+	ASSERT_DEBUG(eSpyPassiveBonusNum < GC.getNumSpyPassiveBonusInfos());
 	return m_pSpyPassiveBonuses->GetSpyPassiveBonusEntries()[eSpyPassiveBonusNum];
 }
 
@@ -4520,8 +4645,8 @@ std::vector<CvSpyPassiveBonusDiplomatEntry*>& CvGlobals::getSpyPassiveBonusDiplo
 
 _Ret_maybenull_ CvSpyPassiveBonusDiplomatEntry* CvGlobals::getSpyPassiveBonusDiplomatInfo(SpyPassiveBonusDiplomatTypes eSpyPassiveBonusDiplomatNum)
 {
-	CvAssert(eSpyPassiveBonusDiplomatNum > -1);
-	CvAssert(eSpyPassiveBonusDiplomatNum < GC.getNumSpyPassiveBonusDiplomatInfos());
+	ASSERT_DEBUG(eSpyPassiveBonusDiplomatNum > -1);
+	ASSERT_DEBUG(eSpyPassiveBonusDiplomatNum < GC.getNumSpyPassiveBonusDiplomatInfos());
 	return m_pSpyPassiveBonusesDiplomat->GetSpyPassiveBonusDiplomatEntries()[eSpyPassiveBonusDiplomatNum];
 }
 
@@ -4542,8 +4667,8 @@ std::vector<CvLeagueSpecialSessionEntry*>& CvGlobals::getLeagueSpecialSessionInf
 
 _Ret_maybenull_ CvLeagueSpecialSessionEntry* CvGlobals::getLeagueSpecialSessionInfo(LeagueSpecialSessionTypes eLeagueSpecialSessionNum)
 {
-	CvAssert(eLeagueSpecialSessionNum > -1);
-	CvAssert(eLeagueSpecialSessionNum < GC.getNumLeagueSpecialSessionInfos());
+	ASSERT_DEBUG(eLeagueSpecialSessionNum > -1);
+	ASSERT_DEBUG(eLeagueSpecialSessionNum < GC.getNumLeagueSpecialSessionInfos());
 	return m_pLeagueSpecialSessions->GetLeagueSpecialSessionEntries()[eLeagueSpecialSessionNum];
 }
 
@@ -4564,8 +4689,8 @@ std::vector<CvLeagueNameEntry*>& CvGlobals::getLeagueNameInfo()
 
 CvLeagueNameEntry* CvGlobals::getLeagueNameInfo(LeagueNameTypes eLeagueNameNum)
 {
-	CvAssert(eLeagueNameNum > -1);
-	CvAssert(eLeagueNameNum < GC.getNumLeagueNameInfos());
+	ASSERT_DEBUG(eLeagueNameNum > -1);
+	ASSERT_DEBUG(eLeagueNameNum < GC.getNumLeagueNameInfos());
 	return m_pLeagueNames->GetLeagueNameEntries()[eLeagueNameNum];
 }
 
@@ -4586,8 +4711,8 @@ std::vector<CvLeagueProjectEntry*>& CvGlobals::getLeagueProjectInfo()
 
 CvLeagueProjectEntry* CvGlobals::getLeagueProjectInfo(LeagueProjectTypes eLeagueProjectNum)
 {
-	CvAssert(eLeagueProjectNum > -1);
-	CvAssert(eLeagueProjectNum < GC.getNumLeagueProjectInfos());
+	ASSERT_DEBUG(eLeagueProjectNum > -1);
+	ASSERT_DEBUG(eLeagueProjectNum < GC.getNumLeagueProjectInfos());
 	return m_pLeagueProjects->GetLeagueProjectEntries()[eLeagueProjectNum];
 }
 
@@ -4608,8 +4733,8 @@ std::vector<CvLeagueProjectRewardEntry*>& CvGlobals::getLeagueProjectRewardInfo(
 
 CvLeagueProjectRewardEntry* CvGlobals::getLeagueProjectRewardInfo(LeagueProjectRewardTypes eLeagueProjectRewardNum)
 {
-	CvAssert(eLeagueProjectRewardNum > -1);
-	CvAssert(eLeagueProjectRewardNum < GC.getNumLeagueProjectRewardInfos());
+	ASSERT_DEBUG(eLeagueProjectRewardNum > -1);
+	ASSERT_DEBUG(eLeagueProjectRewardNum < GC.getNumLeagueProjectRewardInfos());
 	return m_pLeagueProjectRewards->GetLeagueProjectRewardEntries()[eLeagueProjectRewardNum];
 }
 
@@ -4653,8 +4778,8 @@ std::vector<CvTechEntry*>& CvGlobals::getTechInfo()
 
 CvTechEntry* CvGlobals::getTechInfo(TechTypes eTechNum)
 {
-	CvAssert(eTechNum > -1);
-	CvAssert(eTechNum < GC.getNumTechInfos());
+	ASSERT_DEBUG(eTechNum > -1);
+	ASSERT_DEBUG(eTechNum < GC.getNumTechInfos());
 	return m_pTechs->GetTechEntries()[eTechNum];
 }
 
@@ -4675,8 +4800,8 @@ std::vector<CvEraInfo*>& CvGlobals::getEraInfo()
 
 CvEraInfo* CvGlobals::getEraInfo(EraTypes eEraNum)
 {
-	CvAssert(eEraNum > -1);
-	CvAssert(eEraNum < GC.getNumEraInfos());
+	ASSERT_DEBUG(eEraNum > -1);
+	ASSERT_DEBUG(eEraNum < GC.getNumEraInfos());
 	return m_aEraInfo[eEraNum];
 }
 
@@ -4692,8 +4817,8 @@ std::vector<CvHurryInfo*>& CvGlobals::getHurryInfo()
 
 CvHurryInfo* CvGlobals::getHurryInfo(HurryTypes eHurryNum)
 {
-	CvAssert(eHurryNum > -1);
-	CvAssert(eHurryNum < GC.getNumHurryInfos());
+	ASSERT_DEBUG(eHurryNum > -1);
+	ASSERT_DEBUG(eHurryNum < GC.getNumHurryInfos());
 	return m_paHurryInfo[eHurryNum];
 }
 
@@ -4709,8 +4834,8 @@ std::vector<CvVictoryInfo*>& CvGlobals::getVictoryInfo()
 
 CvVictoryInfo* CvGlobals::getVictoryInfo(VictoryTypes eVictoryNum)
 {
-	CvAssert(eVictoryNum > -1);
-	CvAssert(eVictoryNum < GC.getNumVictoryInfos());
+	ASSERT_DEBUG(eVictoryNum > -1);
+	ASSERT_DEBUG(eVictoryNum < GC.getNumVictoryInfos());
 	return m_paVictoryInfo[eVictoryNum];
 }
 
@@ -4726,8 +4851,8 @@ std::vector<CvSmallAwardInfo*>& CvGlobals::getSmallAwardInfo()	// For Moose - XM
 
 CvSmallAwardInfo* CvGlobals::getSmallAwardInfo(SmallAwardTypes eSmallAwardNum)
 {
-	CvAssert(eSmallAwardNum > -1);
-	CvAssert(eSmallAwardNum < GC.getNumSmallAwardInfos());
+	ASSERT_DEBUG(eSmallAwardNum > -1);
+	ASSERT_DEBUG(eSmallAwardNum < GC.getNumSmallAwardInfos());
 	return m_paSmallAwardInfo[eSmallAwardNum];
 }
 
@@ -4744,8 +4869,8 @@ std::vector<CvDomainInfo*>& CvGlobals::getUnitDomainInfo()
 
 CvDomainInfo* CvGlobals::getUnitDomainInfo(DomainTypes eDomainNum)
 {
-	CvAssert(eDomainNum > -1);
-	CvAssert(eDomainNum < GC.getNumUnitDomainInfos());
+	ASSERT_DEBUG(eDomainNum > -1);
+	ASSERT_DEBUG(eDomainNum < GC.getNumUnitDomainInfos());
 	return m_paUnitDomainInfo[eDomainNum];
 }
 
@@ -4777,8 +4902,8 @@ std::vector<CvAchievementInfo*>& CvGlobals::getAchievementInfo()
 
 CvAchievementInfo* CvGlobals::getAchievementInfo(EAchievement eAchievementNum)
 {
-	CvAssert(eAchievementNum > -1);
-	CvAssert(eAchievementNum < GC.getNumAchievementInfos());
+	ASSERT_DEBUG(eAchievementNum > -1);
+	ASSERT_DEBUG(eAchievementNum < GC.getNumAchievementInfos());
 	if(eAchievementNum > -1 && eAchievementNum < GC.getNumAchievementInfos())
 		return m_pAchievements->GetAchievementEntries()[eAchievementNum];
 	else
@@ -4797,8 +4922,8 @@ CvString*& CvGlobals::getFootstepAudioTags()
 
 CvString& CvGlobals::getFootstepAudioTags(int i)
 {
-//	CvAssertMsg(i < getNumFootstepAudioTags(), "Index out of bounds")
-	CvAssertMsg(i > -1, "Index out of bounds");
+//	ASSERT_DEBUG(i < getNumFootstepAudioTags(), "Index out of bounds")
+	ASSERT_DEBUG(i > -1, "Index out of bounds");
 	return m_paszFootstepAudioTags[i];
 }
 
@@ -5001,6 +5126,9 @@ void CvGlobals::cacheGlobals()
 	GD_INT_CACHE(BUILDER_TASKING_BASELINE_ADDS_FAITH);
 	GD_INT_CACHE(BUILDER_TASKING_BASELINE_ADDS_PRODUCTION);
 	GD_INT_CACHE(BUILDER_TASKING_BASELINE_ADDS_SCIENCE);
+	GD_INT_CACHE(BUILDER_TASKING_BASELINE_ADDS_TOURISM);
+	GD_INT_CACHE(BUILDER_TASKING_BASELINE_ADDS_CULTURE_LOCAL);
+	GD_INT_CACHE(BUILDER_TASKING_BASELINE_ADDS_GOLDEN_AGE_POINTS);
 	GD_INT_CACHE(BUILDER_TASKING_BASELINE_ADDS_CULTURE);
 	GD_INT_CACHE(AI_STRATEGY_DEFEND_MY_LANDS_BASE_UNITS);
 	GD_INT_CACHE(AI_MILITARY_CITY_THREAT_WEIGHT_CAPITAL);
@@ -5035,12 +5163,20 @@ void CvGlobals::cacheGlobals()
 	GD_INT_CACHE(AI_CITY_SOME_VALUE_THRESHOLD);
 	GD_INT_CACHE(AI_CITY_PUPPET_BONUS_THRESHOLD);
 	GD_INT_CACHE(AI_CITIZEN_VALUE_FOOD);
+	GD_INT_CACHE(AI_CITIZEN_VALUE_FOOD_NEED_GROWTH);
+	GD_INT_CACHE(AI_CITIZEN_VALUE_FOOD_STARVING);
 	GD_INT_CACHE(AI_CITIZEN_VALUE_PRODUCTION);
 	GD_INT_CACHE(AI_CITIZEN_VALUE_GOLD);
 	GD_INT_CACHE(AI_CITIZEN_VALUE_SCIENCE);
 	GD_INT_CACHE(AI_CITIZEN_VALUE_CULTURE);
 	GD_INT_CACHE(AI_CITIZEN_VALUE_FAITH);
 	GD_INT_CACHE(AI_CITIZEN_VALUE_GPP);
+	GD_INT_CACHE(AI_CITIZEN_VALUE_GOLD_IN_DEBT);
+	GD_INT_CACHE(AI_CITIZEN_SPECIALIST_COMBO_BONUS);
+	GD_INT_CACHE(AI_CITIZEN_UNHAPPINESS_VALUE_EMPIRE_VERY_UNHAPPY);
+	GD_INT_CACHE(AI_CITIZEN_UNHAPPINESS_VALUE_EMPIRE_UNHAPPY);
+	GD_INT_CACHE(AI_CITIZEN_UNHAPPINESS_VALUE_CITY_UNHAPPY);
+	GD_INT_CACHE(AI_CITIZEN_UNHAPPINESS_VALUE_EMPIRE_HAPPY);
 	GD_INT_CACHE(AI_NUM_CORE_CITIES_FOR_SPACESHIP);
 	GD_INT_CACHE(AI_OPERATIONAL_PERCENT_HEALTH_FOR_OPERATION);
 	GD_INT_CACHE(AI_TACTICAL_MAP_DOMINANCE_PERCENTAGE);
@@ -5153,6 +5289,7 @@ void CvGlobals::cacheGlobals()
 	GD_INT_CACHE(MINOR_LIBERATION_FRIENDSHIP);
 	GD_INT_CACHE(MINOR_REMOVE_SPHERE_FRIENDSHIP);
 	GD_INT_CACHE(MINOR_LIBERATION_RESTING_INFLUENCE);
+	GD_INT_CACHE(MINOR_LANDMARK_RESTING_INFLUENCE);
 	GD_INT_CACHE(RETURN_CIVILIAN_FRIENDSHIP);
 	GD_INT_CACHE(MINOR_CIV_GLOBAL_QUEST_FIRST_POSSIBLE_TURN);
 	GD_INT_CACHE(MINOR_CIV_GLOBAL_QUEST_FIRST_POSSIBLE_TURN_RAND);
@@ -5588,9 +5725,8 @@ void CvGlobals::cacheGlobals()
 	GD_INT_CACHE(MINOR_FRIENDSHIP_DROP_PER_TURN_DAMAGED_CAPITAL_MULTIPLIER);
 	GD_INT_CACHE(LEAGUE_AID_MAX);
 	GD_INT_CACHE(CSD_GOLD_GIFT_DISABLED);
+	GD_INT_CACHE(MAX_TURNS_OBSERVER_MODE);
 	GD_INT_CACHE(RELIGION_BELIEF_SCORE_CITY_MULTIPLIER);
-	GD_INT_CACHE(RELIGION_BELIEF_SCORE_OWNED_PLOT_MULTIPLIER);
-	GD_INT_CACHE(RELIGION_BELIEF_SCORE_UNOWNED_PLOT_MULTIPLIER);
 	GD_INT_CACHE(RELIGION_MISSIONARY_RANGE_IN_TURNS);
 	GD_INT_CACHE(RELIGION_MAX_MISSIONARIES);
 	GD_INT_CACHE(MC_GIFT_WEIGHT_THRESHOLD);
@@ -5629,10 +5765,10 @@ void CvGlobals::cacheGlobals()
 	GD_INT_CACHE(OPINION_WEIGHT_VICTORY_WEAK);
 	GD_INT_CACHE(OPINION_WEIGHT_VICTORY_NONE);
 	GD_INT_CACHE(OPINION_WEIGHT_VICTORY_PER_ERA);
+	GD_INT_CACHE(OPINION_WEIGHT_VICTORY_NONE_PER_ERA);
 	GD_INT_CACHE(OPINION_WEIGHT_VICTORY_BLOCK_FIERCE);
 	GD_INT_CACHE(OPINION_WEIGHT_VICTORY_BLOCK_STRONG);
 	GD_INT_CACHE(OPINION_WEIGHT_VICTORY_BLOCK_WEAK);
-	GD_INT_CACHE(OPINION_WEIGHT_VICTORY_BLOCK_NONE);
 	GD_INT_CACHE(OPINION_WEIGHT_VICTORY_BLOCK_PER_ERA);
 	GD_INT_CACHE(OPINION_WEIGHT_WONDER_FIERCE);
 	GD_INT_CACHE(OPINION_WEIGHT_WONDER_STRONG);
@@ -5662,6 +5798,9 @@ void CvGlobals::cacheGlobals()
 	GD_INT_CACHE(OPINION_WEIGHT_ASKED_STOP_SPYING);
 	GD_INT_CACHE(OPINION_WEIGHT_MADE_DEMAND_OF_US);
 	GD_INT_CACHE(OPINION_WEIGHT_MADE_DEMAND_OF_US_SUBSEQUENT);
+	GD_INT_CACHE(OPINION_WEIGHT_MADE_DEMAND_YOU_NO_TAKE_DIVISOR);
+	GD_INT_CACHE(OPINION_WEIGHT_MADE_DEMAND_BANKRUPT_MULTIPLIER);
+	GD_INT_CACHE(OPINION_WEIGHT_MADE_DEMAND_BANKRUPT_MULTIPLIER_TURNS);
 	GD_INT_CACHE(OPINION_WEIGHT_RETURNED_CIVILIAN);
 	GD_INT_CACHE(OPINION_WEIGHT_RETURNED_CIVILIAN_SUBSEQUENT);
 	GD_INT_CACHE(OPINION_WEIGHT_BUILT_LANDMARK);
@@ -5779,6 +5918,7 @@ void CvGlobals::cacheGlobals()
 	GD_INT_CACHE(COMMON_FOE_VALUE_PER_TURN_DECAY);
 	GD_INT_CACHE(COMMON_FOE_VALUE_PER_OPINION_WEIGHT);
 	GD_INT_CACHE(OPINION_WEIGHT_ASSIST_MAX);
+	GD_INT_CACHE(OPINION_WEIGHT_FAILED_ASSIST_MAX);
 	GD_INT_CACHE(ASSIST_VALUE_PER_TURN_DECAY);
 	GD_INT_CACHE(ASSIST_VALUE_PER_OPINION_WEIGHT);
 	GD_INT_CACHE(OPINION_WEIGHT_LIBERATED_CAPITAL);
@@ -5895,8 +6035,6 @@ void CvGlobals::cacheGlobals()
 	GD_INT_CACHE(VASSALAGE_PROTECTED_PER_TURN_DECAY);
 	GD_INT_CACHE(VASSALAGE_PROTECTED_CITY_DISTANCE);
 	GD_INT_CACHE(OPINION_WEIGHT_VASSALAGE_FAILED_PROTECT_MAX);
-	GD_INT_CACHE(VASSALAGE_FAILED_PROTECT_VALUE_PER_OPINION_WEIGHT);
-	GD_INT_CACHE(VASSALAGE_FAILED_PROTECT_PER_TURN_DECAY);
 	GD_INT_CACHE(VASSALAGE_FAILED_PROTECT_CITY_DISTANCE);
 	GD_INT_CACHE(OPINION_WEIGHT_VASSAL_TRADE_ROUTE);
 	GD_INT_CACHE(OPINION_WEIGHT_VASSAL_TRADE_ROUTE_SUBSEQUENT);
@@ -5920,6 +6058,13 @@ void CvGlobals::cacheGlobals()
 	GD_INT_CACHE(APPROACH_MULTIPLIER_PROXIMITY_CLOSE);
 	GD_INT_CACHE(APPROACH_MULTIPLIER_PROXIMITY_FAR);
 	GD_INT_CACHE(APPROACH_MULTIPLIER_PROXIMITY_DISTANT);
+	GD_INT_CACHE(CONQUEST_WAR_MULTIPLIER_TARGET_CAKEWALK);
+	GD_INT_CACHE(CONQUEST_WAR_MULTIPLIER_TARGET_SOFT);
+	GD_INT_CACHE(CONQUEST_WAR_MULTIPLIER_TARGET_FAVORABLE);
+	GD_INT_CACHE(CONQUEST_WAR_MULTIPLIER_TARGET_AVERAGE);
+	GD_INT_CACHE(CONQUEST_WAR_MULTIPLIER_TARGET_DIFFICULT);
+	GD_INT_CACHE(CONQUEST_WAR_MULTIPLIER_TARGET_BAD);
+	GD_INT_CACHE(CONQUEST_WAR_MULTIPLIER_TARGET_IMPOSSIBLE);
 	GD_INT_CACHE(MAJOR_WAR_MULTIPLIER_TARGET_CAKEWALK);
 	GD_INT_CACHE(MAJOR_WAR_MULTIPLIER_TARGET_SOFT);
 	GD_INT_CACHE(MAJOR_WAR_MULTIPLIER_TARGET_FAVORABLE);
@@ -5934,17 +6079,11 @@ void CvGlobals::cacheGlobals()
 	GD_INT_CACHE(MINOR_APPROACH_WAR_TARGET_DIFFICULT);
 	GD_INT_CACHE(MINOR_APPROACH_WAR_TARGET_BAD);
 	GD_INT_CACHE(MINOR_APPROACH_WAR_TARGET_IMPOSSIBLE);
-	GD_INT_CACHE(CONQUEST_WAR_MULTIPLIER_TARGET_CAKEWALK);
-	GD_INT_CACHE(CONQUEST_WAR_MULTIPLIER_TARGET_SOFT);
-	GD_INT_CACHE(CONQUEST_WAR_MULTIPLIER_TARGET_FAVORABLE);
-	GD_INT_CACHE(CONQUEST_WAR_MULTIPLIER_TARGET_AVERAGE);
-	GD_INT_CACHE(CONQUEST_WAR_MULTIPLIER_TARGET_DIFFICULT);
-	GD_INT_CACHE(CONQUEST_WAR_MULTIPLIER_TARGET_BAD);
-	GD_INT_CACHE(CONQUEST_WAR_MULTIPLIER_TARGET_IMPOSSIBLE);
 	GD_INT_CACHE(APPROACH_NEUTRAL_DEFAULT);
 	GD_INT_CACHE(APPROACH_BIAS_FOR_CURRENT);
 	GD_INT_CACHE(APPROACH_WAR_CURRENTLY_WAR);
 	GD_INT_CACHE(APPROACH_RANDOM_PERCENT);
+	GD_INT_CACHE(APPROACH_RANDOM_PERSONALITIES_PERCENT);
 	GD_INT_CACHE(MINOR_APPROACH_IGNORE_DEFAULT);
 	GD_INT_CACHE(APPROACH_WAR_VASSAL_PEACEFULLY_REVOKED);
 	GD_INT_CACHE(APPROACH_DECEPTIVE_VASSAL_PEACEFULLY_REVOKED);
@@ -5954,6 +6093,16 @@ void CvGlobals::cacheGlobals()
 	GD_INT_CACHE(APPROACH_FRIENDLY_VASSAL_FORCEFULLY_REVOKED);
 	GD_INT_CACHE(APPROACH_WAR_TOO_MANY_VASSALS);
 	GD_INT_CACHE(APPROACH_GUARDED_TOO_MANY_VASSALS);
+	GD_INT_CACHE(APPROACH_HOSTILE_BUYING_PRICE_MODIFIER);
+	GD_INT_CACHE(APPROACH_GUARDED_BUYING_PRICE_MODIFIER);
+	GD_INT_CACHE(APPROACH_AFRAID_BUYING_PRICE_MODIFIER);
+	GD_INT_CACHE(APPROACH_NEUTRAL_BUYING_PRICE_MODIFIER);
+	GD_INT_CACHE(APPROACH_FRIENDLY_BUYING_PRICE_MODIFIER);
+	GD_INT_CACHE(APPROACH_HOSTILE_SELLING_PRICE_MODIFIER);
+	GD_INT_CACHE(APPROACH_GUARDED_SELLING_PRICE_MODIFIER);
+	GD_INT_CACHE(APPROACH_AFRAID_SELLING_PRICE_MODIFIER);
+	GD_INT_CACHE(APPROACH_NEUTRAL_SELLING_PRICE_MODIFIER);
+	GD_INT_CACHE(APPROACH_FRIENDLY_SELLING_PRICE_MODIFIER);
 	GD_INT_CACHE(CLOSE_TO_DOMINATION_VICTORY_THRESHOLD);
 	GD_INT_CACHE(CLOSE_TO_DIPLOMATIC_VICTORY_THRESHOLD);
 	GD_INT_CACHE(CLOSE_TO_SCIENCE_VICTORY_THRESHOLD);
@@ -6247,7 +6396,6 @@ void CvGlobals::cacheGlobals()
 	GD_INT_CACHE(MIN_CITY_RANGE);
 	GD_INT_CACHE(CITY_STARTING_RINGS);
 	GD_INT_CACHE(OWNERSHIP_SCORE_DURATION_THRESHOLD);
-	GD_INT_CACHE(NUM_POLICY_BRANCHES_ALLOWED);
 	GD_INT_CACHE(NUM_VICTORY_POINT_AWARDS);
 	GD_INT_CACHE(NUM_OR_TECH_PREREQS);
 	GD_INT_CACHE(NUM_AND_TECH_PREREQS);
@@ -6302,6 +6450,7 @@ void CvGlobals::cacheGlobals()
 	GD_INT_CACHE(CITY_SIZE_NEED_MODIFIER);
 	GD_INT_CACHE(EMPIRE_SIZE_NEED_MODIFIER_CITIES);
 	GD_INT_CACHE(EMPIRE_SIZE_NEED_MODIFIER_POP);
+	GD_INT_CACHE(EMPIRE_SIZE_NEED_MODIFIER_CAP);
 	GD_INT_CACHE(UNHAPPINESS_PER_SPECIALIST);
 	GD_INT_CACHE(UNHAPPINESS_PER_X_PUPPET_CITIZENS);
 	GD_INT_CACHE(WAR_WEARINESS_POPULATION_PERCENT_CAP);
@@ -6316,13 +6465,10 @@ void CvGlobals::cacheGlobals()
 	GD_INT_CACHE(RESOURCE_DEMAND_COUNTDOWN_BASE);
 	GD_INT_CACHE(RESOURCE_DEMAND_COUNTDOWN_CAPITAL_ADD);
 	GD_INT_CACHE(RESOURCE_DEMAND_COUNTDOWN_RAND);
-	GD_INT_CACHE(NEW_HURRY_MODIFIER);
 	GD_INT_CACHE(GREAT_GENERAL_RANGE);
 	GD_INT_CACHE(GREAT_GENERAL_STRENGTH_MOD);
 	GD_INT_CACHE(BONUS_PER_ADJACENT_FRIEND);
 	GD_INT_CACHE(POLICY_ATTACK_BONUS_MOD);
-	GD_INT_CACHE(CONSCRIPT_MIN_CITY_POPULATION);
-	GD_INT_CACHE(CONSCRIPT_POPULATION_PER_COST);
 	GD_INT_CACHE(COMBAT_DAMAGE);
 	GD_INT_CACHE(NONCOMBAT_UNIT_RANGED_DAMAGE);
 	GD_INT_CACHE(NAVAL_COMBAT_DEFENDER_STRENGTH_MULTIPLIER);
@@ -6398,7 +6544,6 @@ void CvGlobals::cacheGlobals()
 	GD_INT_CACHE(MAX_UNIT_SUPPLY_GROWTH_MOD);
 	GD_INT_CACHE(UNIT_SUPPLY_BASE_TECH_REDUCTION_PER_ERA);
 	GD_INT_CACHE(UNIT_SUPPLY_CITIES_TECH_REDUCTION_MULTIPLIER);
-	GD_INT_CACHE(UNIT_SUPPLY_CITIES_TECH_REDUCTION_DIVISOR);
 	GD_INT_CACHE(UNIT_SUPPLY_POPULATION_TECH_REDUCTION_MULTIPLIER);
 	GD_INT_CACHE(UNIT_SUPPLY_WAR_WEARINESS_PERCENT_REDUCTION);
 	GD_INT_CACHE(UNIT_SUPPLY_POPULATION_PUPPET_PERCENT);
@@ -6607,11 +6752,14 @@ void CvGlobals::cacheGlobals()
 	GD_INT_CACHE(MINOR_CIV_CONTACT_GOLD_OTHER);
 	GD_INT_CACHE(COMBAT_AI_OFFENSE_DAMAGEWEIGHT);
 	GD_INT_CACHE(COMBAT_AI_OFFENSE_DANGERWEIGHT);
-	GD_INT_CACHE(COMBAT_AI_OFFENSE_SCORE_BIAS);
-	GD_INT_CACHE(COMBAT_AI_DEFENSE_SCORE_BIAS);
 	GD_INT_CACHE(MAJORS_CAN_MOVE_STARTING_SETTLER);
 	GD_INT_CACHE(CS_CAN_MOVE_STARTING_SETTLER);
-	GD_INT_CACHE(IGNORE_TERRAIN_COST_INCLUDES_RIVERS);
+	GD_INT_CACHE(COMPLETE_KILLS_TURN_TIMER);
+	GD_INT_CACHE(MAX_NUM_TENETS_LEVEL_1);
+	GD_INT_CACHE(MAX_NUM_TENETS_LEVEL_2);
+	GD_INT_CACHE(MAX_NUM_TENETS_LEVEL_3);
+	GD_INT_CACHE(IGNORE_GLOBAL_TERRAIN_COSTS_INCLUDES_RIVERS);
+	GD_INT_CACHE(IGNORE_SPECIFIC_TERRAIN_COSTS_INCLUDES_RIVERS);
 	GD_INT_CACHE(DIPLOAI_LIMIT_VICTORY_PURSUIT_RANDOMIZATION);
 	GD_INT_CACHE(DIPLOAI_ENABLE_NUCLEAR_GANDHI);
 	GD_INT_CACHE(DIPLOAI_DISABLE_WAR_BRIBES);
@@ -6730,6 +6878,7 @@ void CvGlobals::cacheGlobals()
 	GD_INT_CACHE(CITY_STRENGTH_TECH_MULTIPLIER);
 	GD_INT_CACHE(CITY_STRENGTH_UNIT_DIVISOR);
 	GD_INT_CACHE(CITY_STRENGTH_HILL_CHANGE);
+	GD_INT_CACHE(CITY_STRENGTH_THRESHOLD_FOR_BONUSES);
 	GD_INT_CACHE(CITY_ATTACKING_DAMAGE_MOD);
 	GD_INT_CACHE(ATTACKING_CITY_MELEE_DAMAGE_MOD);
 	GD_INT_CACHE(MAX_CITY_ATTACK_RANGE);
@@ -6843,18 +6992,13 @@ void CvGlobals::cacheGlobals()
 	GD_INT_CACHE(BALANCE_CS_PLEDGE_TO_PROTECT_DEFENSE_BONUS_MAX);
 	GD_INT_CACHE(BALANCE_CS_ALLIANCE_DEFENSE_BONUS);
 	GD_INT_CACHE(UNIT_AUTO_EXTRA_AUTOMATIONS_DISABLED);
-	GD_INT_CACHE(BALANCE_MARRIAGE_GP_RATE);
+	GD_INT_CACHE(BALANCE_GPP_RATE_IN_CAPITAL_PER_MARRIAGE);
 	GD_INT_CACHE(BALANCE_MARRIAGE_RESTING_POINT_INCREASE);
 	GD_INT_CACHE(BALANCE_SPY_RESPAWN_TIMER);
 	GD_INT_CACHE(BALANCE_SPY_TO_PLAYER_RATIO);
 	GD_INT_CACHE(BALANCE_SPY_POINT_THRESHOLD_MAX);
 	GD_INT_CACHE(BALANCE_SPY_POINT_THRESHOLD_MIN);
 	GD_INT_CACHE(BALANCE_SPY_POINT_MAJOR_PLAYER_MULTIPLIER);
-	GD_INT_CACHE(BALANCE_SPY_BOOST_INFLUENCE_EXOTIC);
-	GD_INT_CACHE(BALANCE_SPY_BOOST_INFLUENCE_FAMILIAR);
-	GD_INT_CACHE(BALANCE_SPY_BOOST_INFLUENCE_POPULAR);
-	GD_INT_CACHE(BALANCE_SPY_BOOST_INFLUENCE_INFLUENTIAL);
-	GD_INT_CACHE(BALANCE_SPY_BOOST_INFLUENCE_DOMINANT);
 	GD_INT_CACHE(BALANCE_BASIC_ATTACK_ARMY_SIZE);
 	GD_INT_CACHE(BALANCE_ARMY_NAVY_START_SIZE);
 	GD_INT_CACHE(BALANCE_FAITH_PERCENTAGE_VALUE);
@@ -6955,19 +7099,19 @@ void CvGlobals::cacheGlobals()
 	GD_INT_CACHE(ESPIONAGE_SURVEILLANCE_SIGHT_RANGE);
 	GD_INT_CACHE(ESPIONAGE_COUP_OTHER_PLAYERS_INFLUENCE_DROP);
 	GD_INT_CACHE(ESPIONAGE_COUP_MULTIPLY_CONSTANT);
+	GD_INT_CACHE(ESPIONAGE_CONSECUTIVE_RIGGING_INFLUENCE_MODIFIER);
 	GD_INT_CACHE(ESPIONAGE_NP_BASE);
 	GD_INT_CACHE(ESPIONAGE_NP_PER_SPY_RANK);
 	GD_INT_CACHE(ESPIONAGE_NP_CULTURAL_INFLUENCE);
 	GD_INT_CACHE(ESPIONAGE_NP_PER_TECHNOLOGY_BEHIND);
 	GD_INT_CACHE(ESPIONAGE_NP_MAX_NUM_TECH);
-	GD_INT_CACHE(ESPIONAGE_NP_COUNTERSPY_NETWORK);
-	GD_INT_CACHE(ESPIONAGE_NP_COUNTERSPY_PER_RANK);
 	GD_INT_CACHE(ESPIONAGE_NP_REDUCTION_PER_SECURITY_POINT);
 	GD_INT_CACHE(ESPIONAGE_MAX_NUM_SECURITY_POINTS);
 	GD_INT_CACHE(ESPIONAGE_SECURITY_BASE);
 	GD_INT_CACHE(ESPIONAGE_SECURITY_NOT_ALL_HAVE_SPIES);
 	GD_INT_CACHE(ESPIONAGE_SECURITY_PREVIOUS_CITY_MISSIONS);
 	GD_INT_CACHE(ESPIONAGE_SECURITY_PER_POPULATION);
+	GD_INT_CACHE(ESPIONAGE_SECURITY_PER_POPULATION_BUILDING_SCALER);
 	GD_INT_CACHE(ESPIONAGE_SECURITY_PER_TRADE_ROUTE);
 	GD_INT_CACHE(ESPIONAGE_SECURITY_PER_EXCESS_UNHAPPINESS);
 	GD_INT_CACHE(ESPIONAGE_SPY_EXPERIENCE_DENOMINATOR);
@@ -6977,9 +7121,9 @@ void CvGlobals::cacheGlobals()
 	GD_INT_CACHE(ESPIONAGE_XP_PER_TURN_CITYSTATE);
 	GD_INT_CACHE(ESPIONAGE_XP_RIGGING_SUCCESS);
 	GD_INT_CACHE(ESPIONAGE_XP_UNCOVER_INTRIGUE);
-	GD_INT_CACHE(ESPIONAGE_XP_MISSION_SUCCESS_DENOMINATOR);
+	GD_INT_CACHE(ESPIONAGE_SPY_XP_MISSION_SUCCESS_PERCENT);
 	GD_INT_CACHE(ESPIONAGE_COUNTERSPY_CHANGE_FOCUS_COOLDOWN);
-	GD_INT_CACHE(ESPIONAGE_IMPRISONMENT_COOLDOWN);
+	GD_INT_CACHE(ESPIONAGE_SPY_POINT_UNIT);
 	GD_INT_CACHE(INTERNATIONAL_TRADE_BASE);
 	GD_INT_CACHE(INTERNATIONAL_TRADE_EXCLUSIVE_CONNECTION);
 	GD_INT_CACHE(INTERNATIONAL_TRADE_CITY_GPT_DIVISOR);
@@ -6988,10 +7132,13 @@ void CvGlobals::cacheGlobals()
 	GD_INT_CACHE(BASE_CULTURE_PER_GREAT_WORK);
 	GD_INT_CACHE(BASE_TOURISM_PER_GREAT_WORK);
 	GD_INT_CACHE(TOURISM_MODIFIER_SHARED_RELIGION);
+	GD_INT_CACHE(TOURISM_MODIFIER_SHARED_RELIGION_MAX);
+	GD_INT_CACHE(TOURISM_MODIFIER_SHARED_RELIGION_TYPE);
 	GD_INT_CACHE(TOURISM_MODIFIER_TRADE_ROUTE);
 	GD_INT_CACHE(TOURISM_MODIFIER_OPEN_BORDERS);
 	GD_INT_CACHE(TOURISM_MODIFIER_DIFFERENT_IDEOLOGIES);
 	GD_INT_CACHE(TOURISM_MODIFIER_DIPLOMAT);
+	GD_INT_CACHE(MINIMUM_TOURISM_MODIFIER);
 	GD_INT_CACHE(MINIMUM_TOURISM_BLAST_STRENGTH);
 	GD_INT_CACHE(CULTURE_LEVEL_EXOTIC);
 	GD_INT_CACHE(CULTURE_LEVEL_FAMILIAR);
@@ -7041,6 +7188,7 @@ void CvGlobals::cacheGlobals()
 	GD_INT_CACHE(VASSALAGE_VASSAL_MASTER_CITY_PERCENT_THRESHOLD);
 	GD_INT_CACHE(VASSALAGE_VASSAL_MASTER_POP_PERCENT_THRESHOLD);
 	GD_INT_CACHE(VASSALAGE_CAPITULATE_BASE_THRESHOLD);
+	GD_INT_CACHE(VASSALAGE_LIBERATE_BASE_THRESHOLD);
 	GD_INT_CACHE(VASSALAGE_TREATMENT_THRESHOLD_DISAGREE);
 	GD_INT_CACHE(VASSALAGE_TREATMENT_THRESHOLD_MISTREATED);
 	GD_INT_CACHE(VASSALAGE_TREATMENT_THRESHOLD_UNHAPPY);
@@ -7087,8 +7235,6 @@ void CvGlobals::cacheGlobals()
 	GD_FLOAT_CACHE(AI_STRATEGY_DEFEND_MY_LANDS_UNITS_PER_CITY);
 	GD_FLOAT_CACHE(GOLD_GIFT_FRIENDSHIP_EXPONENT);
 	GD_FLOAT_CACHE(GOLD_GIFT_FRIENDSHIP_DIVISOR);
-	GD_FLOAT_CACHE(HURRY_GOLD_TECH_EXPONENT);
-	GD_FLOAT_CACHE(HURRY_GOLD_CULTURE_EXPONENT);
 	GD_FLOAT_CACHE(CITY_GROWTH_MULTIPLIER);
 	GD_FLOAT_CACHE(CITY_GROWTH_EXPONENT);
 	GD_FLOAT_CACHE(POLICY_COST_EXPONENT);
@@ -7118,6 +7264,7 @@ void CvGlobals::cacheGlobals()
 	GD_INT_CACHE(CAPITAL_BUILDINGCLASS);
 	GD_INT_CACHE(WALLS_BUILDINGCLASS);
 	GD_INT_CACHE(DEFAULT_SPECIALIST);
+	GD_INT_CACHE(NUKE_TRIGGER_PROJECT);
 	GD_INT_CACHE(SPACE_RACE_TRIGGER_PROJECT);
 	GD_INT_CACHE(SPACESHIP_CAPSULE);
 	GD_INT_CACHE(SPACESHIP_BOOSTER);
@@ -7158,10 +7305,19 @@ void CvGlobals::cacheGlobals()
 	GD_INT_CACHE(RELIGION_GP_FAITH_PURCHASE_ERA);
 	GD_INT_CACHE(IDEOLOGY_START_ERA);
 	GD_INT_CACHE(IDEOLOGY_PREREQ_ERA);
+	GD_INT_CACHE(ANCIENT_ERA);
+	GD_INT_CACHE(CLASSICAL_ERA);
+	GD_INT_CACHE(MEDIEVAL_ERA);
+	GD_INT_CACHE(RENAISSANCE_ERA);
+	GD_INT_CACHE(INDUSTRIAL_ERA);
+	GD_INT_CACHE(MODERN_ERA);
+	GD_INT_CACHE(ATOMIC_ERA);
+	GD_INT_CACHE(INFORMATION_ERA);
 	GD_INT_CACHE(TOURISM_START_TECH);
 	GD_INT_CACHE(TOURISM_START_ERA);
 	GD_INT_CACHE(JUGGERNAUT_PROMOTION);
 	GD_INT_CACHE(MARCH_PROMOTION);
+	GD_INT_CACHE(MARCH_SKIRMISHER_PROMOTION);
 	GD_INT_CACHE(MORALE_PROMOTION);
 	GD_INT_CACHE(INQUISITION_EFFECTIVENESS);
 	GD_INT_CACHE(INQUISITOR_CONVERSION_REDUCTION_FACTOR);
@@ -7185,7 +7341,7 @@ bool CvGlobals::getDatabaseValue(const char* szName, int& iValue, bool bReportEr
 
 	if(bReportErrors)
 	{
-		CvAssertFmt(bSuccess, "Integer Define Value not found for %s", szName);
+		ASSERT_DEBUG(bSuccess, "Integer Define Value not found for %s", szName);
 	}
 
 	return bSuccess;
@@ -7207,7 +7363,7 @@ bool CvGlobals::getDatabaseValue(const char* szName, float& fValue, bool bReport
 
 	if(bReportErrors)
 	{
-		CvAssertFmt(bSuccess, "Float Define Value not found for %s", szName);
+		ASSERT_DEBUG(bSuccess, "Float Define Value not found for %s", szName);
 	}
 
 	return bSuccess;
@@ -7229,7 +7385,7 @@ bool CvGlobals::getDatabaseValue(const char* szName, CvString& strValue, bool bR
 
 	if(bReportErrors)
 	{
-		CvAssertFmt(bSuccess, "String Define Value not found for %s", szName);
+		ASSERT_DEBUG(bSuccess, "String Define Value not found for %s", szName);
 	}
 
 	return bSuccess;
@@ -7328,7 +7484,7 @@ int CvGlobals::getInfoTypeForString(const char* szType, bool hideAssert) const
 {
 	if(!hideAssert)
 	{
-		CvAssertMsg(szType, "null info type string");
+		ASSERT_DEBUG(szType, "null info type string");
 	}
 
 	if(szType == NULL)
@@ -7348,7 +7504,7 @@ int CvGlobals::getInfoTypeForString(const char* szType, bool hideAssert) const
 		//
 		CvString strError;
 		strError.Format("Info type %s not found.", szType);
-		CvAssertMsg(strcmp(szType, "NONE")==0 || strcmp(szType, "")==0, strError.c_str());
+		ASSERT_DEBUG(strcmp(szType, "NONE")==0 || strcmp(szType, "")==0, strError.c_str());
 //		gDLL->logMsg("xml.log", szError);
 	}
 
@@ -7357,16 +7513,16 @@ int CvGlobals::getInfoTypeForString(const char* szType, bool hideAssert) const
 
 void CvGlobals::setInfoTypeFromString(const char* szType, int idx)
 {
-	CvAssertMsg(szType, "null info type string");
-	uint uiHash = FString::Hash(szType);
+	ASSERT_DEBUG(szType, "null info type string");
+	uint uiHash = FStringHash(szType);
 #ifdef _DEBUG
 	InfosMap::const_iterator it = m_infosMap.find(szType);
 	int iExisting = (it!=m_infosMap.end()) ? it->second : -1;
-	CvAssertMsg(iExisting==-1 || iExisting==idx || strcmp(szType ? szType : "", "ERROR")==0, CvString::format("xml info type entry %s already exists", szType).c_str());
+	ASSERT_DEBUG(iExisting==-1 || iExisting==idx || strcmp(szType ? szType : "", "ERROR")==0, CvString::format("xml info type entry %s already exists", szType).c_str());
 
 	InfosHashMap::const_iterator ith = m_infosHashMap.find(uiHash);
 	iExisting = (ith!=m_infosHashMap.end()) ? ith->second : -1;
-	CvAssertMsg(iExisting==-1 || iExisting==idx || strcmp(szType ? szType : "", "ERROR")==0, CvString::format("xml info type entry %s already exists", szType).c_str());
+	ASSERT_DEBUG(iExisting==-1 || iExisting==idx || strcmp(szType ? szType : "", "ERROR")==0, CvString::format("xml info type entry %s already exists", szType).c_str());
 #endif
 	m_infosMap[szType] = idx;
 	m_infosHashMap[uiHash] = idx;
@@ -7390,7 +7546,7 @@ int CvGlobals::getInfoTypeForHash(uint uiHash, bool hideAssert) const
 
 	if(!hideAssert)
 	{
-		CvAssertMsg(uiHash==0, "Could not find resource hash");
+		ASSERT_DEBUG(uiHash==0, "Could not find resource hash");
 	}
 
 	return -1;

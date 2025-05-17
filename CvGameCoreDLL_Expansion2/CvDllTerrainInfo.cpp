@@ -1,5 +1,5 @@
 /*	-------------------------------------------------------------------------------------------------------
-	© 1991-2012 Take-Two Interactive Software and its subsidiaries.  Developed by Firaxis Games.  
+	Â© 1991-2012 Take-Two Interactive Software and its subsidiaries.  Developed by Firaxis Games.  
 	Sid Meier's Civilization V, Civ, Civilization, 2K Games, Firaxis Games, Take-Two Interactive Software 
 	and their respective logos are all trademarks of Take-Two interactive Software, Inc.  
 	All other marks and trademarks are the property of their respective owners.  
@@ -13,7 +13,7 @@ CvDllTerrainInfo::CvDllTerrainInfo(CvTerrainInfo* pTerrainInfo)
 	: m_pTerrainInfo(pTerrainInfo)
 	, m_uiRefCount(1)
 {
-	FAssertMsg(pTerrainInfo != NULL, "SHOULD NOT HAPPEN");
+	ASSERT_DEBUG(pTerrainInfo != NULL, "SHOULD NOT HAPPEN");
 }
 //------------------------------------------------------------------------------
 CvDllTerrainInfo::~CvDllTerrainInfo()

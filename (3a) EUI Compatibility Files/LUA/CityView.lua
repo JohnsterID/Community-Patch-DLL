@@ -128,6 +128,8 @@ local YieldTypes = YieldTypes
 local g_options = Modding.OpenUserData( "Enhanced User Interface Options", 1)
 local g_isAdvisor = true
 
+local g_isHighlightBuildingBonuses = g_options.GetValue( "HighlightBuildingBonuses" ) == 1
+
 local g_isSeparateCityProductionEUI = g_options.GetValue( "SeparateCityProduction" ) == 1
 --print("Separate City Production: "..tostring(g_isSeparateCityProductionEUI))
 
@@ -583,6 +585,9 @@ local function OrderItemTooltip( city, isDisabled, purchaseYieldID, orderID, ite
 		elseif orderID == OrderTypes.ORDER_CREATE then
 			itemInfo = GameInfo.Projects
 			strToolTip = GetHelpTextForProject( itemID, city, true )
+			if isDisabled then
+				strDisabledInfo = city:CanCreateTooltip(itemID)
+			end
 		elseif orderID == OrderTypes.ORDER_MAINTAIN then
 			itemInfo = GameInfo.Processes
 			strToolTip = GetHelpTextForProcess( itemID, true )
@@ -945,6 +950,7 @@ local function SetupBuildingList( city, buildings, buildingIM )
 			thisBuildingAndYieldTypes.YieldType = (GameInfo.Yields[yieldID] or {}).Type or -1
 			-- Yield changes from the building
 			buildingYieldRate = Game.GetBuildingYieldChange( buildingID, yieldID )
+						+ cityOwner:GetBuildingTechEnhancedYields(buildingID, yieldID)
 						+ (gk_mode and cityOwner:GetPlayerBuildingClassYieldChange( buildingClassID, yieldID )
 						+ city:GetReligionBuildingClassYieldChange( buildingClassID, yieldID ) or 0)
 						+ (bnw_mode and city:GetLeagueBuildingClassYieldChange( buildingClassID, yieldID ) or 0)
@@ -979,6 +985,9 @@ local function SetupBuildingList( city, buildings, buildingIM )
 			end
 			cityYieldRateModifier = city:GetBaseYieldRateModifier( yieldID )
 			cityYieldRate = city:GetYieldPerPopTimes100( yieldID ) * population / 100 + city:GetBaseYieldRate( yieldID ) + city:GetYieldPerPopInEmpireTimes100( yieldID ) * populationEmpire / 100
+			if yieldID == YieldTypes.YIELD_PRODUCTION and city:IsIndustrialConnectedToCapital() then
+				cityYieldRate = cityYieldRate + city:GetConnectionGoldTimes100() / 100
+			end
 			-- Special culture case
 			if yieldID == YieldTypes.YIELD_CULTURE then
 				buildingYieldRate = buildingYieldRate + buildingCultureRate
@@ -1019,14 +1028,6 @@ local function SetupBuildingList( city, buildings, buildingIM )
 			buildingYieldRate = buildingYieldRate + buildingYieldPerPopInEmpire * populationEmpire / 100
 			-- Events
 			buildingYieldRate = buildingYieldRate + city:GetEventBuildingClassYield(buildingClassID, yieldID);
-			-- Tech Enhanced Yield
-			buildingTechEnhancedYield = 0
-			for row in GameInfo.Building_TechEnhancedYieldChanges( thisBuildingAndYieldTypes ) do
-				if (Teams[city:GetTeam()]:IsHasTech(GameInfoTypes[ building.EnhancedYieldTech ])) then
-					buildingTechEnhancedYield = buildingTechEnhancedYield + (row.Yield or 0)
-				end
-			end
-			buildingYieldRate = buildingYieldRate + buildingTechEnhancedYield
 			-- End
 			-- Vox Populi Comparable Yields
 			cityYieldRateModifier = 100
@@ -1049,14 +1050,9 @@ local function SetupBuildingList( city, buildings, buildingIM )
 					and building.Cost == -1
 					and city and city:GetFaithBuildingTourism()
 					) or 0 )
---			local enhancedYieldTechID = GameInfoTypes[ building.EnhancedYieldTech ]
-			tourism = tourism + (tonumber(building.TechEnhancedTourism) or 0)
 			tips:insertIf( tourism ~= 0 and tourism.."[ICON_TOURISM]" )
 		end
 
-		if civ5_mode and building.IsReligious then
-			buildingName = L( "TXT_KEY_RELIGIOUS_BUILDING", buildingName, Players[city:GetOwner()]:GetStateReligionKey() )
-		end
 		if city:GetNumFreeBuilding( buildingID ) > 0 then
 			buildingName = buildingName .. " ([COLOR_POSITIVE_TEXT]" .. L"TXT_KEY_FREE" .. "[ENDCOLOR])"
 		else
@@ -1244,9 +1240,8 @@ local function handleBuildOrder( city, orderID, itemID )
 	end
 end
 
-local function ChangeHoverBuildingDisplay(city, itemID)
+local function HighlightHoveredBuildingBonuses(city, itemID)
 	Events.ClearHexHighlightStyle("BoostedResourcePlot")
-	g_HoverBuildingID = itemID
 
 	-- Show plots with resources that will be boosted by building moused over
 	local boostedPlots = {city:GetPlotsBoostedByBuilding(itemID)}
@@ -1264,7 +1259,10 @@ local function OnSelectionMouseEnter( orderID, itemID )
 	if city then
 		local cityOwnerID = city:GetOwner()
 		if cityOwnerID == g_activePlayerID and not city:IsPuppet() then
-			ChangeHoverBuildingDisplay(city, itemID)
+			g_HoverBuildingID = itemID
+			if g_isHighlightBuildingBonuses then
+				HighlightHoveredBuildingBonuses(city, itemID)
+			end
 		end
 	end
 end
@@ -1272,12 +1270,13 @@ end
 local function OnSelectionMouseExit( orderID, itemID )
 	-- Only care about buildings 
 	if orderID ~= OrderTypes.ORDER_CONSTRUCT then return end
-
-	--print('No longer hovering over itemID', itemID)
 	
-	if g_HoverBuildingID == itemID then 
-		Events.ClearHexHighlightStyle("BoostedResourcePlot")
+	if g_HoverBuildingID == itemID then
 		g_HoverBuildingID = -1
+
+		if g_isHighlightBuildingBonuses then
+			Events.ClearHexHighlightStyle("BoostedResourcePlot")
+		end
 	end
 end
 
@@ -1355,8 +1354,8 @@ local function SetupSelectionList( itemList, selectionIM, cityOwnerID, getUnitPo
 					local city = GetSelectedModifiableCity()
 					if city then
 						local cityOwnerID = city:GetOwner()
-						if cityOwnerID == g_activePlayerID and not city:IsPuppet() then
-							ChangeHoverBuildingDisplay(city, itemID)
+						if cityOwnerID == g_activePlayerID and not city:IsPuppet() and g_isHighlightBuildingBonuses then
+							HighlightHoveredBuildingBonuses(city, itemID)
 						end
 					end
 				end
@@ -2130,7 +2129,8 @@ local function UpdateCityViewNow()
 		Controls.CityCapitalIcon:SetHide( not isCapital )
 
 		-- Connected to capital?
-		Controls.CityIsConnected:SetHide( isCapital or city:IsBlockaded() or not cityOwner:IsCapitalConnectedToCity(city) or city:GetTeam() ~= Game.GetActiveTeam() )
+		Controls.CityIsConnected:SetHide( isCapital or city:IsBlockaded() or not cityOwner:IsCapitalConnectedToCity(city) or cityOwner:IsCapitalIndustrialConnectedToCity(city) or city:GetTeam() ~= Game.GetActiveTeam() )
+		Controls.CityIsIndustrialConnected:SetHide( isCapital or city:IsBlockaded() or not cityOwner:IsCapitalIndustrialConnectedToCity(city) or city:GetTeam() ~= Game.GetActiveTeam() )
 
 		-- Blockaded ? / Sapped ?
 		Controls.CityIsBlockaded:SetHide( not city:IsBlockaded() )
@@ -2294,8 +2294,18 @@ local function UpdateCityViewNow()
 					local gpChangePlayerMod = cityOwner:GetGreatPeopleRateModifier()
 					local gpChangeCityMod = city:GetGreatPeopleRateModifier()
 					-- CBP
-					gpChangeCityMod = gpChangeCityMod + city:GetSpecialistCityModifier(specialist.ID);
-					local gpChangeMonopolyMod = cityOwner:GetMonopolyGreatPersonRateModifier(specialist.ID);
+					gpChangeCityMod = gpChangeCityMod + city:GetSpecialistCityModifier(specialist.ID)
+					local gpChangeMonopolyMod = cityOwner:GetMonopolyGreatPersonRateModifier(specialist.ID)
+
+					-- City modifiers includes religion and improvement modifiers, separate them into new tooltip lines
+					local gpChangeImprovementsMod = city:GetImprovementGreatPersonRateModifier()
+					if gpChangeImprovementsMod ~= 0 then
+						gpChangeCityMod = gpChangeCityMod - gpChangeImprovementsMod
+					end
+					local gpChangeReligionsMod = city:GetReligionGreatPersonRateModifier(specialist.ID)
+					if gpChangeReligionsMod ~= 0 then
+						gpChangeCityMod = gpChangeCityMod - gpChangeReligionsMod
+					end
 					--END
 					local gpChangePolicyMod = 0
 					local gpChangeWorldCongressMod = 0
@@ -2390,7 +2400,7 @@ local function UpdateCityViewNow()
 
 					end
 
-					local gpChangeMod = gpChangePlayerMod + gpChangePolicyMod + gpChangeWorldCongressMod + gpChangeCityMod + gpChangeGoldenAgeMod + gpChangeMonopolyMod
+					local gpChangeMod = gpChangePlayerMod + gpChangePolicyMod + gpChangeWorldCongressMod + gpChangeCityMod + gpChangeGoldenAgeMod + gpChangeMonopolyMod + gpChangeImprovementsMod + gpChangeReligionsMod
 					gpChange = (gpChangeMod / 100 + 1) * gpChange
 
 					if gpProgress > 0 or gpChange > 0 then
@@ -2422,8 +2432,14 @@ local function UpdateCityViewNow()
 							if gpChangeCityMod ~= 0 then
 								tips:insert( L( "TXT_KEY_CITY_GP_MOD", gpChangeCityMod ) )
 							end
+							if gpChangeReligionsMod ~= 0 then
+								tips:insert( L( "TXT_KEY_RELIGIONS_GP_MOD", gpChangeReligionsMod ) )
+							end
 							if gpChangeGoldenAgeMod ~= 0 then
 								tips:insert( L( "TXT_KEY_GOLDENAGE_GP_MOD", gpChangeGoldenAgeMod ) )
+							end
+							if gpChangeImprovementsMod ~= 0 then
+								tips:insert( L( "TXT_KEY_IMPROVEMENTS_GP_MOD", gpChangeImprovementsMod ) )
 							end
 							if gpChangeWorldCongressMod ~= 0 then
 								if gpChangeWorldCongressMod < 0 then
@@ -2465,7 +2481,7 @@ local function UpdateCityViewNow()
 				local buildingClass = GameInfo.BuildingClasses[ building.BuildingClass ]
 				local buildings
 				local greatWorkCount = civ5bnw_mode and building.GreatWorkCount or 0
-				local corporation = building.IsCorporation > 0
+				local corporation = building.IsCorporation
 				local areSpecialistsAllowedByBuilding = city:GetNumSpecialistsAllowedByBuilding(buildingID) > 0
 
 				if (corporation) then
@@ -2482,7 +2498,7 @@ local function UpdateCityViewNow()
 					buildings = specialistBuildings
 				elseif greatWorkCount > 0 then
 					buildings = greatWorkBuildings
-				elseif greatWorkCount == 0 and building.IsDummy == 0 then		-- compatibility with Firaxis code exploit for invisibility
+				elseif greatWorkCount == 0 and not building.IsDummy then -- compatibility with Firaxis code exploit for invisibility
 					buildings = otherBuildings
 				end
 				if buildings then
@@ -2833,10 +2849,21 @@ end
 -- Citizen Focus
 local FocusButtonBehavior = {
 	[Mouse.eLClick] = function( focus )
-		local city = GetSelectedModifiableCity()
-		if city then
-			Network.SendSetCityAIFocus( city:GetID(), focus )
-			return Network.SendUpdateCityCitizens( city:GetID() )
+		if UI.ShiftKeyDown() then
+			-- Set focus for all cities
+			for cityX in g_activePlayer:Cities() do
+				if ( not cityX:IsPuppet() or ( bnw_mode and g_activePlayer:MayNotAnnex() )) then
+					Network.SendSetCityAIFocus( cityX:GetID(), focus )
+					Network.SendUpdateCityCitizens( cityX:GetID() )
+				end
+			end
+		else
+			-- Set focus for local city only
+			local city = GetSelectedModifiableCity()
+			if city then
+				Network.SendSetCityAIFocus( city:GetID(), focus )
+				return Network.SendUpdateCityCitizens( city:GetID() )
+			end
 		end
 	end,
 }
@@ -2981,10 +3008,10 @@ UpdateOptionsAndCityView()
 Events.SerialEventEnterCityScreen.Add(
 function()
 
---	local city = UI_GetHeadSelectedCity()
---	if city then
---		Network.SendUpdateCityCitizens( city:GetID() )
---	end
+	local city = UI_GetHeadSelectedCity()
+	if city and not city:IsPuppet() then
+		Network.SendUpdateCityCitizens( city:GetID() )
+	end
 
 	LuaEvents.TryQueueTutorial("CITY_SCREEN", true)
 
