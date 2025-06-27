@@ -66,3 +66,6 @@ clang-output/
 #do not ignore lua-language-server configuration (LuaCATS)
 !.luacheckrc
 !.luarc.json
+
+#ignore third party dependencies
+Dependencies
