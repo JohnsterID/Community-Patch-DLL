@@ -60,3 +60,6 @@ clang-output/
 
 #ignore output from any other IDEs/tools
 .idea/
+
+#ignore third party dependencies
+Dependencies
