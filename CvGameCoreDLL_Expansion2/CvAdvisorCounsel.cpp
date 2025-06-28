@@ -87,6 +87,7 @@ void CvAdvisorCounsel::BuildCounselList(PlayerTypes ePlayer)
 		strLoc = Localization::Lookup("TXT_KEY_BUILD_A_CITY_MCFLY_ECONOMIC");
 		bSuccess = SetCounselEntry(uiCounselIndex, ADVISOR_ECONOMIC, strLoc.toUTF8(), 99);
 		ASSERT_DEBUG(bSuccess, "Unable to add counsel to list. Too many strategies running at once");
+		(void)bSuccess; // Suppress unused variable warning (used only in ASSERT_DEBUG)
 		uiCounselIndex++;
 
 		strLoc = Localization::Lookup("TXT_KEY_BUILD_A_CITY_MCFLY_MILITARY");

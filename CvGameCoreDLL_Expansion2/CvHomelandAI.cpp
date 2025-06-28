@@ -4911,6 +4911,7 @@ void CvHomelandAI::ExecuteAircraftMoves()
 	int nSlotsInCarriers = 0;
 	int nAirUnitsOffensive = 0;
 	int nAirUnitsDefensive = 0;
+	(void)nSlotsInCarriers; // Suppress unused variable warning (set but never read after calculation)
 
 	int iAssumedRange = 7; //don't know the concrete aircraft yet
 

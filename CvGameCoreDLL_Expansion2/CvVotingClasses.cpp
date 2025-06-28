@@ -1354,6 +1354,8 @@ void CvActiveResolution::DoEffects(PlayerTypes ePlayer)
 	{
 		eTargetIdeology = (PolicyBranchTypes) GetProposerDecision()->GetDecision();
 	}
+	(void)eTargetReligion; // Suppress unused variable warning (used only in ASSERT_DEBUG)
+	(void)eTargetIdeology; // Suppress unused variable warning (used only in ASSERT_DEBUG)
 	PlayerTypes eTargetCityState = NO_PLAYER;
 	if (eProposerDecision == RESOLUTION_DECISION_CITY_CSD)
 	{
@@ -1789,6 +1791,9 @@ void CvActiveResolution::RemoveEffects(PlayerTypes ePlayer)
 	{
 		eTargetIdeology = (PolicyBranchTypes) GetProposerDecision()->GetDecision();
 	}
+	(void)eTargetReligion; // Suppress unused variable warning (used only in ASSERT_DEBUG)
+	(void)eTargetIdeology; // Suppress unused variable warning (used only in ASSERT_DEBUG)
+	(void)eTargetPlayer; // Suppress unused variable warning (used only in ASSERT_DEBUG)
 	PlayerTypes eTargetCityState = NO_PLAYER;
 	if (eProposerDecision == RESOLUTION_DECISION_CITY_CSD)
 	{
@@ -2570,6 +2575,7 @@ void CvLeague::DoVoteEnact(int iID, PlayerTypes eVoter, int iNumVotes, int iChoi
 		}
 	}
 	ASSERT_DEBUG(bProcessed, "Attempt to vote on an enact resolution when not allowed to.");
+	(void)bProcessed; // Suppress unused variable warning (used only in ASSERT_DEBUG)
 	GC.GetEngineUserInterface()->setDirty(LeagueScreen_DIRTY_BIT, true);
 }
 
@@ -2594,6 +2600,7 @@ void CvLeague::DoVoteRepeal(int iResolutionID, PlayerTypes eVoter, int iNumVotes
 		}
 	}
 	ASSERT_DEBUG(bProcessed, "Attempt to vote on a repeal resolution when not allowed to.");
+	(void)bProcessed; // Suppress unused variable warning (used only in ASSERT_DEBUG)
 	GC.GetEngineUserInterface()->setDirty(LeagueScreen_DIRTY_BIT, true);
 }
 
@@ -2608,6 +2615,7 @@ void CvLeague::DoVoteAbstain(PlayerTypes eVoter, int iNumVotes)
 		bProcessed = true;
 	}
 	ASSERT_DEBUG(bProcessed, "Attempt to abstain votes but not allowed to.");
+	(void)bProcessed; // Suppress unused variable warning (used only in ASSERT_DEBUG)
 	GC.GetEngineUserInterface()->setDirty(LeagueScreen_DIRTY_BIT, true);
 }
 
@@ -4762,6 +4770,7 @@ void CvLeague::SetHostMember(PlayerTypes ePlayer)
 		}
 	}
 	ASSERT_DEBUG(bFound, "Could not find the correct player to set as the World Congress host.");
+	(void)bFound; // Suppress unused variable warning (used only in ASSERT_DEBUG)
 }
 
 int CvLeague::GetConsecutiveHostedSessions() const
@@ -10809,6 +10818,7 @@ CvLeagueAI::DesireLevels CvLeagueAI::EvaluateProposalForProposer(CvLeague* pLeag
 		}
 	}
 	ASSERT_DEBUG(bFound);
+	(void)bFound; // Suppress unused variable warning (used only in ASSERT_DEBUG)
 
 	return eDesire;
 }
@@ -14216,6 +14226,7 @@ int CvLeagueAI::ScoreProposal(CvLeague* pLeague, ResolutionTypes eResolution, in
 		}
 	}
 	ASSERT_DEBUG(bFoundYes);
+	(void)bFoundYes; // Suppress unused variable warning (used only in ASSERT_DEBUG)
 
 	return iYesScore;
 }
@@ -14243,6 +14254,7 @@ int CvLeagueAI::ScoreProposal(CvLeague* pLeague, CvActiveResolution* pResolution
 		}
 	}
 	ASSERT_DEBUG(bFoundYes);
+	(void)bFoundYes; // Suppress unused variable warning (used only in ASSERT_DEBUG)
 
 	return iYesScore;
 }

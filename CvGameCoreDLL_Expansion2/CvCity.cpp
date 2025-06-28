@@ -29311,6 +29311,7 @@ void CvCity::popOrder(int iNum, bool bFinish, bool bChoose)
 		eTrainAIUnit = ((UnitAITypes)(pOrderNode->iData2));
 		ASSERT_DEBUG(eTrainUnit != NO_UNIT, "eTrainUnit is expected to be assigned a valid unit type");
 		ASSERT_DEBUG(eTrainAIUnit != NO_UNITAI, "eTrainAIUnit is expected to be assigned a valid unit AI type");
+		(void)eTrainAIUnit; // Suppress unused variable warning (used only in ASSERT_DEBUG)
 
 		kOwner.changeUnitClassMaking(((UnitClassTypes)(GC.getUnitInfo(eTrainUnit)->GetUnitClassType())), -1);
 

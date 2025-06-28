@@ -21254,6 +21254,7 @@ void CvDiplomacyAI::SelectBestApproachTowardsMajorCiv(PlayerTypes ePlayer, bool 
 		int iNeutralPostCurve = vApproachScores[CIV_APPROACH_NEUTRAL];
 		int iFriendlyPostCurve = vApproachScores[CIV_APPROACH_FRIENDLY];
 		int iHighestBadApproachPostCurve = 0;
+		(void)iNeutralPostCurve; // Suppress unused variable warning (set but never read after calculation)
 		if (!bStrategic)
 		{
 			for (int iApproachLoop = 0; iApproachLoop < NUM_CIV_APPROACHES; iApproachLoop++)
