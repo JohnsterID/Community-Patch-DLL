@@ -3486,6 +3486,7 @@ int CvHandicapInfo::getYieldAmountForDifficultyBonus(int iEra, int iHistoricEven
 	ASSERT_DEBUG(iEra >= 0 && iEra < x);
 	ASSERT_DEBUG(iHistoricEvent >= 0 && iHistoricEvent < y);
 	ASSERT_DEBUG(iYield >= 0 && iYield < z);
+	(void)x; // Suppress unused variable warning (ASSERT_DEBUG compiled out)
 	const int index = iEra * y * z + iHistoricEvent * z + iYield;
 	return m_pppiDifficultyBonus[index];
 }
@@ -3796,6 +3797,7 @@ int CvHandicapInfo::getYieldAmountForAIDifficultyBonus(int iEra, int iHistoricEv
 	ASSERT_DEBUG(iEra >= 0 && iEra < x);
 	ASSERT_DEBUG(iHistoricEvent >= 0 && iHistoricEvent < y);
 	ASSERT_DEBUG(iYield >= 0 && iYield < z);
+	(void)x; // Suppress unused variable warning (ASSERT_DEBUG compiled out)
 	const int index = iEra * y * z + iHistoricEvent * z + iYield;
 	return m_pppiAIDifficultyBonus[index];
 }

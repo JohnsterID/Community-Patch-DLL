@@ -1259,6 +1259,7 @@ void CvUnitCombat::ResolveRangedCityVsUnitCombat(const CvCombatInfo& kCombatInfo
 	CvPlot* pkTargetPlot = kCombatInfo.getPlot();
 	ASSERT_DEBUG(pkTargetPlot);
 	ASSERT_DEBUG(!pkTargetPlot->isCity());
+	(void)pkTargetPlot; // Suppress unused variable warning (ASSERT_DEBUG compiled out)
 
 	ICvUserInterface2* pkDLLInterface = GC.GetEngineUserInterface();
 	int iActivePlayerID = GC.getGame().getActivePlayer();

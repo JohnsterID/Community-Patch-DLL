@@ -7916,7 +7916,8 @@ void CvPlot::setIsCity(bool bValue, int iCityID, int iWorkRange)
 	{
 		//sanity check
 		CvCity* pCity = GET_PLAYER(getOwner()).getCity(iCityID);
-		ASSERT_DEBUG(pCity && pCity->plot() == this && m_owningCity == IDInfo(getOwner(), iCityID))
+		ASSERT_DEBUG(pCity && pCity->plot() == this && m_owningCity == IDInfo(getOwner(), iCityID));
+		(void)pCity; // Suppress unused variable warning (ASSERT_DEBUG compiled out)
 
 		//make sure this is correct
 		m_owningCityOverride.reset();
