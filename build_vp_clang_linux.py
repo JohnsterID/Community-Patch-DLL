@@ -125,6 +125,25 @@ CL_SUPPRESS = [
     'nonportable-include-path',       # Expected when cross-compiling Windows headers on Linux
 ]
 
+# Additional suppressions for -Wall (MSVC /W2 equivalent)
+CL_SUPPRESS_WALL = [
+    # Template/library noise (72% of warnings)
+    'unused-function',                # Template functions, library functions not used
+    
+    # Code style warnings that are low priority for legacy codebase
+    'overloaded-virtual',            # Virtual function name hiding (design issue, not bug)
+    'reorder-ctor',                  # Constructor initialization order (style, not bug)
+    'delete-non-abstract-non-virtual-dtor',  # Destructor design issue (legacy code)
+    
+    # Keep these enabled for actionable warnings:
+    # 'unused-variable',             # Variables declared but not used (should fix)
+    # 'unused-but-set-variable',     # Variables set but not read (should fix) 
+    # 'unused-private-field',        # Unused class members (should fix)
+    # 'switch',                      # Missing enum cases (should fix)
+    # 'unused-value',                # Unused expression results (should fix)
+    # 'sometimes-uninitialized',     # Potential uninitialized use (should fix)
+]
+
 # Note: Third-party header warnings (Windows SDK/VC9) are suppressed via -isystem
 # This preserves important project code warnings while eliminating noise from system headers
 
@@ -405,8 +424,15 @@ def build_cl_config_args(config: Config) -> list[str]:
     for include_path in INCLUDE_PATHS:
         args.append(f'-isystem{include_path}')
     
+    # Add -Wall for comprehensive warning coverage
+    args.append('-Wall')
+    
     # Suppress specific warnings
     for suppress in CL_SUPPRESS:
+        args.append(f'-Wno-{suppress}')
+    
+    # Suppress additional -Wall warnings for practical use
+    for suppress in CL_SUPPRESS_WALL:
         args.append(f'-Wno-{suppress}')
     
     return args
