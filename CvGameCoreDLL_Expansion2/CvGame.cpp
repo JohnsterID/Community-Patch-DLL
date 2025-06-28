@@ -92,7 +92,7 @@ struct stringHash
 // Version 1 
 //	 * CvGame save version reset for expansion pack 2.
 //------------------------------------------------------------------------------
-const int g_CurrentCvGameVersion = 1;
+const int g_CurrentCvGameVersion = 1;  // Used by save system, keep for compatibility
 
 //some statistics
 int gTactMovesCount[NUM_AI_TACTICAL_MOVES] = { 0 };
