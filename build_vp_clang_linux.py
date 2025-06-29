@@ -426,6 +426,7 @@ def build_cl_config_args(config: Config) -> list[str]:
     
     # Add -Wall for comprehensive warning coverage
     args.append('-Wall')
+    args.append('-Wextra')
     
     # Suppress specific warnings
     for suppress in CL_SUPPRESS:
