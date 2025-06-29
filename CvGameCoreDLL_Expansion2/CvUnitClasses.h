@@ -182,8 +182,8 @@ public:
 	int GetLeaderExperience() const;
 
 	const char* GetUnitArtInfoTag() const;
-	const bool GetUnitArtInfoCulturalVariation() const;
-	const bool GetUnitArtInfoEraVariation() const;
+	bool GetUnitArtInfoCulturalVariation() const;
+	bool GetUnitArtInfoEraVariation() const;
 	int GetUnitFlagIconOffset() const;
 	int GetUnitPortraitOffset() const;
 

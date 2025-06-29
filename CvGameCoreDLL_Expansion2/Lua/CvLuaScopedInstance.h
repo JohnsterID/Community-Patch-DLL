@@ -24,7 +24,7 @@ public:
 	static InstanceType* GetInstance(lua_State* L, int idx = 1, bool bErrorOnFail = true);
 
 	//! Used by CvLuaMethodWrapper to know where first argument is.
-	static const int GetStartingArgIndex();
+	static int GetStartingArgIndex();
 
 protected:
 	static void DefaultHandleMissingInstance(lua_State* L);
@@ -188,7 +188,7 @@ InstanceType* CvLuaScopedInstance<Derived, InstanceType>::GetInstance(lua_State*
 }
 //------------------------------------------------------------------------------
 template<class Derived, class InstanceType>
-const int CvLuaScopedInstance<Derived, InstanceType>::GetStartingArgIndex()
+int CvLuaScopedInstance<Derived, InstanceType>::GetStartingArgIndex()
 {
 	return 2;
 }

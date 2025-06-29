@@ -42,17 +42,17 @@ public:
 		// type is unsigned this just means that it will be the
 		// maximum (all bits 1)
 		Handle() : m_wIndex(word(-1)) {}
-		inline const bool Valid() const { return m_wIndex != word(-1); }
+		inline bool Valid() const { return m_wIndex != word(-1); }
 
 		// All handles created outside of the allocator are invalid.
 		// This function is just for writing self-documenting code.
 		inline static Handle InvalidHandle() { return Handle(word(-1)); }
 
-		inline const bool operator ==(const Handle kRhs) const { return m_wIndex == kRhs.m_wIndex; }
-		inline const bool operator !=(const Handle kRhs) const { return m_wIndex != kRhs.m_wIndex; }
+		inline bool operator ==(const Handle kRhs) const { return m_wIndex == kRhs.m_wIndex; }
+		inline bool operator !=(const Handle kRhs) const { return m_wIndex != kRhs.m_wIndex; }
 
-		inline const word ToWord() const { return m_wIndex; }
-		inline const int ToInt() const { return m_wIndex; }
+		inline word ToWord() const { return m_wIndex; }
+		inline int ToInt() const { return m_wIndex; }
 
 	private:
 		explicit Handle(word wIndex) : m_wIndex(wIndex) {}

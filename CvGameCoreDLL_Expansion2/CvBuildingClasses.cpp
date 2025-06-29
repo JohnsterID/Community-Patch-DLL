@@ -3404,19 +3404,19 @@ void CvBuildingEntry::SetArtDefineTag(const char* szVal)
 }
 
 /// Return whether we should try to find a culture specific variant art tag
-const bool CvBuildingEntry::GetArtInfoCulturalVariation() const
+bool CvBuildingEntry::GetArtInfoCulturalVariation() const
 {
 	return m_bArtInfoCulturalVariation;
 }
 
 /// Return whether we should try to find an era specific variant art tag
-const bool CvBuildingEntry::GetArtInfoEraVariation() const
+bool CvBuildingEntry::GetArtInfoEraVariation() const
 {
 	return m_bArtInfoEraVariation;
 }
 
 /// Return whether we should try to find an era specific variant art tag
-const bool CvBuildingEntry::GetArtInfoRandomVariation() const
+bool CvBuildingEntry::GetArtInfoRandomVariation() const
 {
 	return m_bArtInfoRandomVariation;
 }

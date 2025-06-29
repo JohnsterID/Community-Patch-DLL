@@ -18353,7 +18353,7 @@ void CvUnit::ChangeGiveOutsideFriendlyLandsModifier(int iValue)
 	VALIDATE_OBJECT();
 	m_iGiveOutsideFriendlyLandsModifier += iValue;
 }
-const DomainTypes CvUnit::getGiveDomain() const
+DomainTypes CvUnit::getGiveDomain() const
 {
 	VALIDATE_OBJECT();
 	return (DomainTypes)(int)m_eGiveDomain;
@@ -18453,7 +18453,7 @@ bool CvUnit::isConvertUnit() const
 	VALIDATE_OBJECT();
 	return getIsConvertUnit() > 0;
 }
-const DomainTypes CvUnit::getConvertDomain() const
+DomainTypes CvUnit::getConvertDomain() const
 {
 	VALIDATE_OBJECT();
 	return (DomainTypes)(int)m_eConvertDomain;
@@ -18463,7 +18463,7 @@ void CvUnit::ChangeConvertDomain(DomainTypes eDomain)
 	VALIDATE_OBJECT();
 	m_eConvertDomain = eDomain;
 }
-const UnitTypes CvUnit::getConvertDomainUnitType() const
+UnitTypes CvUnit::getConvertDomainUnitType() const
 {
 	VALIDATE_OBJECT();
 	return m_eConvertDomainUnit;
@@ -18518,7 +18518,7 @@ void CvUnit::ChangeDamageThreshold(int iValue)
 	VALIDATE_OBJECT();
 	m_iDamageThreshold += iValue;
 }
-const UnitTypes CvUnit::getConvertDamageOrFullHPUnit() const
+UnitTypes CvUnit::getConvertDamageOrFullHPUnit() const
 {
 	VALIDATE_OBJECT();
 	return m_eConvertDamageOrFullHPUnit;
@@ -25455,7 +25455,7 @@ void CvUnit::SetCapturedAsConscript(bool bSetValue)
 }
 
 //	--------------------------------------------------------------------------------
-const UnitTypes CvUnit::getUnitType() const
+UnitTypes CvUnit::getUnitType() const
 {
 	VALIDATE_OBJECT();
 	return m_eUnitType;
@@ -25481,7 +25481,7 @@ UnitClassTypes CvUnit::getUnitClassType() const
 }
 
 //	--------------------------------------------------------------------------------
-const UnitTypes CvUnit::getLeaderUnitType() const
+UnitTypes CvUnit::getLeaderUnitType() const
 {
 	VALIDATE_OBJECT();
 	return m_eLeaderUnitType;
@@ -25498,7 +25498,7 @@ void CvUnit::setLeaderUnitType(UnitTypes leaderUnitType)
 }
 
 //	--------------------------------------------------------------------------------
-const InvisibleTypes CvUnit::getInvisibleType() const
+InvisibleTypes CvUnit::getInvisibleType() const
 {
 	VALIDATE_OBJECT();
 	return m_eInvisibleType;
@@ -25515,7 +25515,7 @@ void CvUnit::setInvisibleType(InvisibleTypes InvisibleType)
 }
 
 //	--------------------------------------------------------------------------------
-const InvisibleTypes CvUnit::getSeeInvisibleType() const
+InvisibleTypes CvUnit::getSeeInvisibleType() const
 {
 	VALIDATE_OBJECT();
 	return m_eSeeInvisibleType;
@@ -31716,7 +31716,7 @@ void CvUnit::AI_promote()
 	
 	for(int iI = 0; iI < GC.getNumPromotionInfos(); iI++)
 	{
-		const PromotionTypes ePromotion(static_cast<PromotionTypes>(iI));
+		PromotionTypes ePromotion(static_cast<PromotionTypes>(iI));
 
 		CvPromotionEntry* pkPromotionEntry = GC.getPromotionInfo(ePromotion);
 
@@ -31743,7 +31743,7 @@ void CvUnit::AI_promote()
 
 			for (int iJ = 0; iJ < GC.getNumPromotionInfos(); iJ++)
 			{
-				const PromotionTypes eNextPromotion(static_cast<PromotionTypes>(iJ));
+				PromotionTypes eNextPromotion(static_cast<PromotionTypes>(iJ));
 				CvPromotionEntry* pkNextPromotionEntry = GC.getPromotionInfo(eNextPromotion);
 				if (!pkNextPromotionEntry)
 					continue;

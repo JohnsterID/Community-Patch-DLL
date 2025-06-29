@@ -149,7 +149,7 @@ FDataStream& operator<<(FDataStream&, const CvUnitReligion&);
 struct SStrengthModifierInput
 {
 	SStrengthModifierInput(const CvUnit* pOtherUnit, const CvPlot* pBattlePlot, bool bIgnoreUnitAdjacencyBoni, const CvPlot* pFromPlot, bool bQuickAndDirty, int iOurDamage);
-	const bool operator==(const SStrengthModifierInput& rhs) const;
+	bool operator ==(const SStrengthModifierInput& rhs) const;
 
 	int m_iOtherUnitID;
 	int m_iBattlePlot;
@@ -821,7 +821,7 @@ public:
 	void ChangeGiveExperiencePercent(int iValue);
 	int getGiveOutsideFriendlyLandsModifier() const;
 	void ChangeGiveOutsideFriendlyLandsModifier(int iValue);
-	const DomainTypes getGiveDomain() const;
+	DomainTypes getGiveDomain() const;
 	void ChangeGiveDomain(DomainTypes eDomain);
 	int getGiveExtraAttacks() const;
 	void ChangeGiveExtraAttacks(int iValue);
@@ -841,9 +841,9 @@ public:
 	void ChangeIsConvertUnit(int iValue);
 	int getIsConvertUnit() const;
 	bool isConvertUnit() const;
-	const DomainTypes getConvertDomain() const;
+	DomainTypes getConvertDomain() const;
 	void ChangeConvertDomain(DomainTypes eDomain);
-	const UnitTypes getConvertDomainUnitType() const;
+	UnitTypes getConvertDomainUnitType() const;
 	void ChangeConvertDomainUnit(UnitTypes eUnit);
 	void ChangeIsConvertEnemyUnitToBarbarian(int iValue);
 	int getIsConvertEnemyUnitToBarbarian() const;
@@ -854,7 +854,7 @@ public:
 	bool isConvertOnDamage() const;
 	int getDamageThreshold() const;
 	void ChangeDamageThreshold(int iValue);
-	const UnitTypes getConvertDamageOrFullHPUnit() const;
+	UnitTypes getConvertDamageOrFullHPUnit() const;
 	void ChangeConvertDamageOrFullHPUnit(UnitTypes eUnit);
 	bool canIntercept() const;
 	int GetAirInterceptRange() const;
@@ -1616,18 +1616,18 @@ public:
 	bool IsCapturedAsConscript() const;
 	void SetCapturedAsConscript(bool bSetValue);
 
-	const UnitTypes getUnitType() const;
+	UnitTypes getUnitType() const;
 	CvUnitEntry& getUnitInfo() const;
 	UnitClassTypes getUnitClassType() const;
 	bool isUnitAI(UnitAITypes eType) const;
 
-	const UnitTypes getLeaderUnitType() const;
+	UnitTypes getLeaderUnitType() const;
 	void setLeaderUnitType(UnitTypes leaderUnitType);
 
-	const InvisibleTypes getInvisibleType() const;
+	InvisibleTypes getInvisibleType() const;
 	void setInvisibleType(InvisibleTypes InvisibleType);
 
-	const InvisibleTypes getSeeInvisibleType() const;
+	InvisibleTypes getSeeInvisibleType() const;
 	void setSeeInvisibleType(InvisibleTypes InvisibleType);
 
 	const CvUnit* getCombatUnit() const;

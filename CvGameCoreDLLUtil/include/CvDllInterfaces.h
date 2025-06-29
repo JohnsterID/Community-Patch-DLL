@@ -833,9 +833,9 @@ public:
 	virtual bool DLLCALL IsBorderObstacle() const = 0;
 	virtual bool DLLCALL IsPlayerBorderObstacle() const = 0;
 	virtual const char* DLLCALL GetArtDefineTag() const = 0;			
-	virtual const bool DLLCALL GetArtInfoCulturalVariation() const = 0;
-	virtual const bool DLLCALL GetArtInfoEraVariation() const = 0;
-	virtual const bool DLLCALL GetArtInfoRandomVariation() const = 0;
+	virtual bool DLLCALL GetArtInfoCulturalVariation() const = 0;
+	virtual bool DLLCALL GetArtInfoEraVariation() const = 0;
+	virtual bool DLLCALL GetArtInfoRandomVariation() const = 0;
 	virtual const char* DLLCALL GetWonderSplashAudio() const = 0;
 };
 
@@ -1271,7 +1271,7 @@ public:
 	virtual bool DLLCALL IsHuman() const = 0;
 	virtual bool DLLCALL IsBarbarian() const = 0;
 	virtual const char* DLLCALL GetName() const = 0;
-	virtual const char* const DLLCALL GetNickName() const = 0;
+	virtual const char* DLLCALL GetNickName() const = 0;
 	virtual ArtStyleTypes DLLCALL GetArtStyleType() const = 0;
 	virtual ICvUnit1* DLLCALL GetFirstReadyUnit() = 0;
 	virtual bool DLLCALL HasBusyUnit() const = 0;

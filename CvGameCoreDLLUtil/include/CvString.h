@@ -33,7 +33,7 @@ public:
 	// operators
 	char& operator[](int i) { return std::string::operator[](i);	}
 	char& operator[](std::string::size_type i) { return std::string::operator[](i);	}
-	const char operator[](int i) const { return std::string::operator[](i);	}
+	char operator[](int i) const { return std::string::operator[](i);	}
 	CvString& operator=( const char* s) { if (s) assign(s); else clear();	return *this; }	
 	CvString& operator=( const std::string& s) { if (this != &s) assign(s.c_str());	return *this; }	
 

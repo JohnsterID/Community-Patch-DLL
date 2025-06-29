@@ -101,17 +101,17 @@ const char* CvDllBuildingInfo::GetArtDefineTag() const
 	return m_pBuildingInfo->GetArtDefineTag();
 }
 //------------------------------------------------------------------------------
-const bool CvDllBuildingInfo::GetArtInfoCulturalVariation() const
+bool CvDllBuildingInfo::GetArtInfoCulturalVariation() const
 {
 	return m_pBuildingInfo->GetArtInfoCulturalVariation();
 }
 //------------------------------------------------------------------------------
-const bool CvDllBuildingInfo::GetArtInfoEraVariation() const
+bool CvDllBuildingInfo::GetArtInfoEraVariation() const
 {
 	return m_pBuildingInfo->GetArtInfoEraVariation();
 }
 //------------------------------------------------------------------------------
-const bool CvDllBuildingInfo::GetArtInfoRandomVariation() const
+bool CvDllBuildingInfo::GetArtInfoRandomVariation() const
 {
 	return m_pBuildingInfo->GetArtInfoRandomVariation();
 }

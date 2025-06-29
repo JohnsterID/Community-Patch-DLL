@@ -291,7 +291,7 @@ public:
 		return  reinterpret_cast<char*>(&m_vec.front());
 	}
 
-	const uint GetActiveStorageSize()
+	uint GetActiveStorageSize()
 	{
 		return m_vec.capacity()*sizeof(VectorType::TYPE);
 	}

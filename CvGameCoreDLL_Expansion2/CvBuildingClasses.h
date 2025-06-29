@@ -398,9 +398,9 @@ public:
 
 	const char* GetArtDefineTag() const;
 	void SetArtDefineTag(const char* szVal);
-	const bool GetArtInfoCulturalVariation() const;
-	const bool GetArtInfoEraVariation() const;
-	const bool GetArtInfoRandomVariation() const;
+	bool GetArtInfoCulturalVariation() const;
+	bool GetArtInfoEraVariation() const;
+	bool GetArtInfoRandomVariation() const;
 
 	const char* GetWonderSplashAudio() const;
 	CvString GetThemingBonusHelp() const;

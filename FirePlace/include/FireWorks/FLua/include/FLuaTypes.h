@@ -71,8 +71,8 @@ namespace FLua
 
 		inline bool Valid() const { return m_pkLuaState && m_iRef != LUA_NOREF; }
 
-		const bool operator ==(const Value &kRhs) const;
-		inline const bool operator !=(const Value &kRhs) const { return !(operator==(kRhs)); }
+		bool operator ==(const Value &kRhs) const;
+		inline bool operator !=(const Value &kRhs) const { return !(operator==(kRhs)); }
 
 		bool Push() const;
 
@@ -181,10 +181,10 @@ namespace FLua
 
 		bool Valid() const;
 
-		inline const bool operator ==(const String &kRhs) const { return m_kLuaVal == kRhs.m_kLuaVal; }
-		inline const bool operator !=(const String &kRhs) const { return !(m_kLuaVal == kRhs.m_kLuaVal); }
-		inline const bool operator ==(const Value &kRhs) const { return m_kLuaVal == kRhs; }
-		inline const bool operator !=(const Value &kRhs) const { return !(m_kLuaVal == kRhs); }
+		inline bool operator ==(const String &kRhs) const { return m_kLuaVal == kRhs.m_kLuaVal; }
+		inline bool operator !=(const String &kRhs) const { return !(m_kLuaVal == kRhs.m_kLuaVal); }
+		inline bool operator ==(const Value &kRhs) const { return m_kLuaVal == kRhs; }
+		inline bool operator !=(const Value &kRhs) const { return !(m_kLuaVal == kRhs); }
 
 		// Concat operators
 		String operator +(const String &sRhs) const;
@@ -233,10 +233,10 @@ namespace FLua
 
 		bool Valid() const;
 
-		inline const bool operator ==(const Table &kRhs) const { return m_kLuaVal == kRhs.m_kLuaVal; }
-		inline const bool operator !=(const Table &kRhs) const { return !(m_kLuaVal == kRhs.m_kLuaVal); }
-		inline const bool operator ==(const Value &kRhs) const { return m_kLuaVal == kRhs; }
-		inline const bool operator !=(const Value &kRhs) const { return !(m_kLuaVal == kRhs); }
+		inline bool operator ==(const Table &kRhs) const { return m_kLuaVal == kRhs.m_kLuaVal; }
+		inline bool operator !=(const Table &kRhs) const { return !(m_kLuaVal == kRhs.m_kLuaVal); }
+		inline bool operator ==(const Value &kRhs) const { return m_kLuaVal == kRhs; }
+		inline bool operator !=(const Value &kRhs) const { return !(m_kLuaVal == kRhs); }
 
 		bool Push() const;
 
@@ -287,8 +287,8 @@ namespace FLua
 			template<class T> operator T() const { return m_kTable.GetField(m_kKey); }
 			template<class T> inline const Field &operator =(T val) { m_kTable.SetField<T>(m_kKey, val); return *this; }
 
-			inline const bool operator ==(const Field &kRhs) const { return kRhs.m_kTable.GetField(kRhs.m_kKey) == m_kTable.GetField(m_kKey); }
-			inline const bool operator !=(const Field &kRhs) const { return kRhs.m_kTable.GetField(kRhs.m_kKey) != m_kTable.GetField(m_kKey); }
+			inline bool operator ==(const Field &kRhs) const { return kRhs.m_kTable.GetField(kRhs.m_kKey) == m_kTable.GetField(m_kKey); }
+			inline bool operator !=(const Field &kRhs) const { return kRhs.m_kTable.GetField(kRhs.m_kKey) != m_kTable.GetField(m_kKey); }
 
 		private:
 			Table &m_kTable;
@@ -392,8 +392,8 @@ namespace FLua
 
 			const iterator &operator =(const iterator &kRhs);
 
-			const bool operator ==(const iterator &kRhs) const;
-			inline const bool operator !=(const iterator &kRhs) const { return !(operator ==(kRhs)); }
+			bool operator ==(const iterator &kRhs) const;
+			inline bool operator !=(const iterator &kRhs) const { return !(operator ==(kRhs)); }
 
 			inline const iterator &operator++() { Advance(); return *this; }
 			inline iterator operator++(int) { iterator kTemp(*this); Advance(); return kTemp; }
@@ -450,10 +450,10 @@ namespace FLua
 
 		bool Valid() const;
 
-		inline const bool operator ==(const Function &kRhs) const { return m_kLuaVal == kRhs.m_kLuaVal; }
-		inline const bool operator !=(const Function &kRhs) const { return !(m_kLuaVal == kRhs.m_kLuaVal); }
-		inline const bool operator ==(const Value &kRhs) const { return m_kLuaVal == kRhs; }
-		inline const bool operator !=(const Value &kRhs) const { return !(m_kLuaVal == kRhs); }
+		inline bool operator ==(const Function &kRhs) const { return m_kLuaVal == kRhs.m_kLuaVal; }
+		inline bool operator !=(const Function &kRhs) const { return !(m_kLuaVal == kRhs.m_kLuaVal); }
+		inline bool operator ==(const Value &kRhs) const { return m_kLuaVal == kRhs; }
+		inline bool operator !=(const Value &kRhs) const { return !(m_kLuaVal == kRhs); }
 
 		bool Push() const;
 

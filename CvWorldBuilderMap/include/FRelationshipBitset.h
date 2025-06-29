@@ -33,7 +33,7 @@ public:
 		ZeroMemory(m_Mem, sizeof(m_Mem));
 	}
 
-	const bool Get(uint uiFirst, uint uiSecond) const
+	bool Get(uint uiFirst, uint uiSecond) const
 	{
 		if( uiFirst == uiSecond )
 		{
@@ -87,13 +87,13 @@ private:
 	static const uint ByteCount = BitCount / 8 + ((BitCount % 8)? 1 : 0);
 
 	// returns the total number of bits for a relationship map
-	static const uint GetTotalBitCount(uint uiElementCount)
+	static uint GetTotalBitCount(uint uiElementCount)
 	{
 		// BitCount = ((n - 1) / 2) * n where n is the team count
 		return ((uiElementCount - 1) * uiElementCount) / 2;
 	}
 
-	static const uint GetBitIndex(uint uiFirst, uint uiSecond)
+	static uint GetBitIndex(uint uiFirst, uint uiSecond)
 	{
 		FAssertMsg(uiFirst != uiSecond, "There are no self relations in this bitset");
 

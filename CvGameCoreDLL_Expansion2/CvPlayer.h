@@ -207,7 +207,7 @@ public:
 
 	const char* getName() const;
 	const char* getNameKey() const;
-	const char* const getNickName() const;
+	const char* getNickName() const;
 	const char* getCivilizationDescription() const;
 	const char* getCivilizationDescriptionKey() const;
 	const char* getCivilizationShortDescription() const;

@@ -35,8 +35,8 @@ public:
 		_Ret_opt_z_ const char *operator =(_In_opt_z_ const char *sz);
 
 		// This pointer compare is possible because the strings come from the same palette
-		const bool operator ==(const String &sRhs) const { return (m_sz == sRhs.m_sz); }
-		const bool operator ==(_In_z_ const char *szRhs) const { return (strcmp(m_sz, szRhs) == 0); }
+		bool operator ==(const String &sRhs) const { return (m_sz == sRhs.m_sz); }
+		bool operator ==(_In_z_ const char *szRhs) const { return (strcmp(m_sz, szRhs) == 0); }
 
 	private:
 		const char *m_sz;
@@ -51,7 +51,7 @@ public:
 		TypeMap(uint uiReserve = 0) { if (uiReserve > 0) asTypes.reserve(uiReserve); };
 
 		bool FindType(const char *szType, uint &uiTypeOut) const;
-		const size_t GetSerializedSize() const;
+		size_t GetSerializedSize() const;
 
 		uint Size() const { return asTypes.size(); };
 		void Clear() { asTypes.clear(); };

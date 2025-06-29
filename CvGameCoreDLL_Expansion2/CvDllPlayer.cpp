@@ -126,7 +126,7 @@ const char* CvDllPlayer::GetName() const
 	return m_pPlayer->getName();
 }
 //------------------------------------------------------------------------------
-const char* const CvDllPlayer::GetNickName() const
+const char* CvDllPlayer::GetNickName() const
 {
 	return m_pPlayer->getNickName();
 }

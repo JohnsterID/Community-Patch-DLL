@@ -32,7 +32,7 @@ public:
 	bool DLLCALL IsHuman() const;
 	bool DLLCALL IsBarbarian() const;
 	const char* DLLCALL GetName() const;
-	const char* const DLLCALL GetNickName() const;
+	const char* DLLCALL GetNickName() const;
 	ArtStyleTypes DLLCALL GetArtStyleType() const;
 	ICvUnit1* DLLCALL GetFirstReadyUnit();
 	bool DLLCALL HasBusyUnit() const;

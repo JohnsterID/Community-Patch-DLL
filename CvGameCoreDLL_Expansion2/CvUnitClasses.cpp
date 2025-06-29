@@ -1703,14 +1703,14 @@ const char* CvUnitEntry::GetUnitArtInfoTag() const
 }
 
 /// Return whether we should try to find a culture specific variant art tag
-const bool CvUnitEntry::GetUnitArtInfoCulturalVariation() const
+bool CvUnitEntry::GetUnitArtInfoCulturalVariation() const
 {
 	return m_bUnitArtInfoCulturalVariation;
 }
 
 
 /// Return whether we should try to find an era specific variant art tag
-const bool CvUnitEntry::GetUnitArtInfoEraVariation() const
+bool CvUnitEntry::GetUnitArtInfoEraVariation() const
 {
 	return m_bUnitArtInfoEraVariation;
 }

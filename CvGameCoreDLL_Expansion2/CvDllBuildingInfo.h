@@ -32,9 +32,9 @@ public:
 	bool DLLCALL IsBorderObstacle() const;
 	bool DLLCALL IsPlayerBorderObstacle() const;
 	const char* DLLCALL GetArtDefineTag() const;
-	const bool DLLCALL GetArtInfoCulturalVariation() const;
-	const bool DLLCALL GetArtInfoEraVariation() const;
-	const bool DLLCALL GetArtInfoRandomVariation() const;
+	bool DLLCALL GetArtInfoCulturalVariation() const;
+	bool DLLCALL GetArtInfoEraVariation() const;
+	bool DLLCALL GetArtInfoRandomVariation() const;
 	const char* DLLCALL GetWonderSplashAudio() const;
 
 private:

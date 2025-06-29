@@ -86,7 +86,7 @@ public:
 
 	typedef void (*ExceptCallback)(TCHAR* szExceptionText);
 	void SetExceptionTextCB(ExceptCallback pCB) { m_pExceptionTextCB = pCB; }
-	const ExceptCallback GetExceptionTextCB() const { return m_pExceptionTextCB; } 
+	ExceptCallback GetExceptionTextCB() const { return m_pExceptionTextCB; } 
 
 	// Get our instance of the mini dumper.  Can be NULL before initialization of FDebugHelper.
 #if !defined( FINAL_RELEASE )

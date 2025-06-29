@@ -283,38 +283,38 @@ void CvTypes::AcquireTypes(Database::Connection& db)
 
 //ArtifactType
 //-------------------------------------------------------------------------
-const GreatWorkArtifactClass CvTypes::getARTIFACT_ANCIENT_RUIN()
+GreatWorkArtifactClass CvTypes::getARTIFACT_ANCIENT_RUIN()
 {
 	return s_eARTIFACT_ANCIENT_RUIN;
 }
 //-------------------------------------------------------------------------
-const GreatWorkArtifactClass CvTypes::getARTIFACT_BARBARIAN_CAMP()
+GreatWorkArtifactClass CvTypes::getARTIFACT_BARBARIAN_CAMP()
 {
 	return s_eARTIFACT_BARBARIAN_CAMP;
 }
 //-------------------------------------------------------------------------
-const GreatWorkArtifactClass CvTypes::getARTIFACT_BATTLE_RANGED()
+GreatWorkArtifactClass CvTypes::getARTIFACT_BATTLE_RANGED()
 {
 	return s_eARTIFACT_BATTLE_RANGED;
 }
 //-------------------------------------------------------------------------
-const GreatWorkArtifactClass CvTypes::getARTIFACT_BATTLE_MELEE()
+GreatWorkArtifactClass CvTypes::getARTIFACT_BATTLE_MELEE()
 {
 	return s_eARTIFACT_BATTLE_MELEE;
 }
 //-------------------------------------------------------------------------
-const GreatWorkArtifactClass CvTypes::getARTIFACT_RAZED_CITY()
+GreatWorkArtifactClass CvTypes::getARTIFACT_RAZED_CITY()
 {
 	return s_eARTIFACT_RAZED_CITY;
 }
 //-------------------------------------------------------------------------
-const GreatWorkArtifactClass CvTypes::getARTIFACT_WRITING()
+GreatWorkArtifactClass CvTypes::getARTIFACT_WRITING()
 {
 	return s_eARTIFACT_WRITING;
 }
 #if defined(MOD_BALANCE_CORE)
 //-------------------------------------------------------------------------
-const GreatWorkArtifactClass CvTypes::getARTIFACT_SARCOPHAGUS()
+GreatWorkArtifactClass CvTypes::getARTIFACT_SARCOPHAGUS()
 {
 	return s_eARTIFACT_SARCOPHAGUS;
 }
@@ -323,272 +323,272 @@ const GreatWorkArtifactClass CvTypes::getARTIFACT_SARCOPHAGUS()
 
 //GreatWorkClass
 
-const GreatWorkSlotType CvTypes::getGREAT_WORK_SLOT_ART_ARTIFACT()
+GreatWorkSlotType CvTypes::getGREAT_WORK_SLOT_ART_ARTIFACT()
 {
 	return s_eGREAT_WORK_SLOT_ART_ARTIFACT;
 }
 //--------------------------------------------------------------------------
-const GreatWorkSlotType CvTypes::getGREAT_WORK_SLOT_LITERATURE()
+GreatWorkSlotType CvTypes::getGREAT_WORK_SLOT_LITERATURE()
 {
 	return s_eGREAT_WORK_SLOT_LITERATURE;
 }
 //--------------------------------------------------------------------------
-const GreatWorkSlotType CvTypes::getGREAT_WORK_SLOT_MUSIC()
+GreatWorkSlotType CvTypes::getGREAT_WORK_SLOT_MUSIC()
 {
 	return s_eGREAT_WORK_SLOT_MUSIC;
 }
 
 //--------------------------------------------------------------------------
-const GreatWorkSlotType CvTypes::getGREAT_WORK_SLOT_RELIC()
+GreatWorkSlotType CvTypes::getGREAT_WORK_SLOT_RELIC()
 {
 	return s_eGREAT_WORK_SLOT_RELIC;
 }
 //--------------------------------------------------------------------------
-const GreatWorkSlotType CvTypes::getGREAT_WORK_SLOT_FILM()
+GreatWorkSlotType CvTypes::getGREAT_WORK_SLOT_FILM()
 {
 	return s_eGREAT_WORK_SLOT_FILM;
 }
 //--------------------------------------------------------------------------
 
 //MissionTypes
-const MissionTypes CvTypes::getMISSION_MOVE_TO()
+MissionTypes CvTypes::getMISSION_MOVE_TO()
 {
 	return s_eMISSION_MOVE_TO;
 }
-const MissionTypes CvTypes::getMISSION_ROUTE_TO()
+MissionTypes CvTypes::getMISSION_ROUTE_TO()
 {
 	return s_eMISSION_ROUTE_TO;
 }
-const MissionTypes CvTypes::getMISSION_MOVE_TO_UNIT()
+MissionTypes CvTypes::getMISSION_MOVE_TO_UNIT()
 {
 	return s_eMISSION_MOVE_TO_UNIT;
 }
-const MissionTypes CvTypes::getMISSION_SWAP_UNITS()
+MissionTypes CvTypes::getMISSION_SWAP_UNITS()
 {
 	return s_eMISSION_SWAP_UNITS;
 }
-const MissionTypes CvTypes::getMISSION_SKIP()
+MissionTypes CvTypes::getMISSION_SKIP()
 {
 	return s_eMISSION_SKIP;
 }
-const MissionTypes CvTypes::getMISSION_SLEEP()
+MissionTypes CvTypes::getMISSION_SLEEP()
 {
 	return s_eMISSION_SLEEP;
 }
-const MissionTypes CvTypes::getMISSION_ALERT()
+MissionTypes CvTypes::getMISSION_ALERT()
 {
 	return s_eMISSION_ALERT;
 }
-const MissionTypes CvTypes::getMISSION_FORTIFY()
+MissionTypes CvTypes::getMISSION_FORTIFY()
 {
 	return s_eMISSION_FORTIFY;
 }
-const MissionTypes CvTypes::getMISSION_GARRISON()
+MissionTypes CvTypes::getMISSION_GARRISON()
 {
 	return s_eMISSION_GARRISON;
 }
-const MissionTypes CvTypes::getMISSION_SET_UP_FOR_RANGED_ATTACK()
+MissionTypes CvTypes::getMISSION_SET_UP_FOR_RANGED_ATTACK()
 {
 	return s_eMISSION_SET_UP_FOR_RANGED_ATTACK;
 }
-const MissionTypes CvTypes::getMISSION_EMBARK()
+MissionTypes CvTypes::getMISSION_EMBARK()
 {
 	return s_eMISSION_EMBARK;
 }
-const MissionTypes CvTypes::getMISSION_DISEMBARK()
+MissionTypes CvTypes::getMISSION_DISEMBARK()
 {
 	return s_eMISSION_DISEMBARK;
 }
-const MissionTypes CvTypes::getMISSION_AIRPATROL()
+MissionTypes CvTypes::getMISSION_AIRPATROL()
 {
 	return s_eMISSION_AIRPATROL;
 }
-const MissionTypes CvTypes::getMISSION_HEAL()
+MissionTypes CvTypes::getMISSION_HEAL()
 {
 	return s_eMISSION_HEAL;
 }
-const MissionTypes CvTypes::getMISSION_AIRLIFT()
+MissionTypes CvTypes::getMISSION_AIRLIFT()
 {
 	return s_eMISSION_AIRLIFT;
 }
-const MissionTypes CvTypes::getMISSION_NUKE()
+MissionTypes CvTypes::getMISSION_NUKE()
 {
 	return s_eMISSION_NUKE;
 }
-const MissionTypes CvTypes::getMISSION_PARADROP()
+MissionTypes CvTypes::getMISSION_PARADROP()
 {
 	return s_eMISSION_PARADROP;
 }
-const MissionTypes CvTypes::getMISSION_AIR_SWEEP()
+MissionTypes CvTypes::getMISSION_AIR_SWEEP()
 {
 	return s_eMISSION_AIR_SWEEP;
 }
-const MissionTypes CvTypes::getMISSION_REBASE()
+MissionTypes CvTypes::getMISSION_REBASE()
 {
 	return s_eMISSION_REBASE;
 }
-const MissionTypes CvTypes::getMISSION_RANGE_ATTACK()
+MissionTypes CvTypes::getMISSION_RANGE_ATTACK()
 {
 	return s_eMISSION_RANGE_ATTACK;
 }
-const MissionTypes CvTypes::getMISSION_PILLAGE()
+MissionTypes CvTypes::getMISSION_PILLAGE()
 {
 	return s_eMISSION_PILLAGE;
 }
-const MissionTypes CvTypes::getMISSION_FOUND()
+MissionTypes CvTypes::getMISSION_FOUND()
 {
 	return s_eMISSION_FOUND;
 }
-const MissionTypes CvTypes::getMISSION_JOIN()
+MissionTypes CvTypes::getMISSION_JOIN()
 {
 	return s_eMISSION_JOIN;
 }
-const MissionTypes CvTypes::getMISSION_CONSTRUCT()
+MissionTypes CvTypes::getMISSION_CONSTRUCT()
 {
 	return s_eMISSION_CONSTRUCT;
 }
-const MissionTypes CvTypes::getMISSION_DISCOVER()
+MissionTypes CvTypes::getMISSION_DISCOVER()
 {
 	return s_eMISSION_DISCOVER;
 }
-const MissionTypes CvTypes::getMISSION_HURRY()
+MissionTypes CvTypes::getMISSION_HURRY()
 {
 	return s_eMISSION_HURRY;
 }
-const MissionTypes CvTypes::getMISSION_TRADE()
+MissionTypes CvTypes::getMISSION_TRADE()
 {
 	return s_eMISSION_TRADE;
 }
-const MissionTypes CvTypes::getMISSION_REPAIR_FLEET()
+MissionTypes CvTypes::getMISSION_REPAIR_FLEET()
 {
 	return s_eMISSION_REPAIR_FLEET;
 }
-const MissionTypes CvTypes::getMISSION_BUY_CITY_STATE()
+MissionTypes CvTypes::getMISSION_BUY_CITY_STATE()
 {
 	return s_eMISSION_BUY_CITY_STATE;
 }
-const MissionTypes CvTypes::getMISSION_SPACESHIP()
+MissionTypes CvTypes::getMISSION_SPACESHIP()
 {
 	return s_eMISSION_SPACESHIP;
 }
-const MissionTypes CvTypes::getMISSION_CULTURE_BOMB()
+MissionTypes CvTypes::getMISSION_CULTURE_BOMB()
 {
 	return s_eMISSION_CULTURE_BOMB;
 }
-const MissionTypes CvTypes::getMISSION_FOUND_RELIGION()
+MissionTypes CvTypes::getMISSION_FOUND_RELIGION()
 {
 	return s_eMISSION_FOUND_RELIGION;
 }
-const MissionTypes CvTypes::getMISSION_GOLDEN_AGE()
+MissionTypes CvTypes::getMISSION_GOLDEN_AGE()
 {
 	return s_eMISSION_GOLDEN_AGE;
 }
-const MissionTypes CvTypes::getMISSION_BUILD()
+MissionTypes CvTypes::getMISSION_BUILD()
 {
 	return s_eMISSION_BUILD;
 }
-const MissionTypes CvTypes::getMISSION_LEAD()
+MissionTypes CvTypes::getMISSION_LEAD()
 {
 	return s_eMISSION_LEAD;
 }
-const MissionTypes CvTypes::getMISSION_DIE_ANIMATION()
+MissionTypes CvTypes::getMISSION_DIE_ANIMATION()
 {
 	return s_eMISSION_DIE_ANIMATION;
 }
-const MissionTypes CvTypes::getMISSION_BEGIN_COMBAT()
+MissionTypes CvTypes::getMISSION_BEGIN_COMBAT()
 {
 	return s_eMISSION_BEGIN_COMBAT;
 }
-const MissionTypes CvTypes::getMISSION_END_COMBAT()
+MissionTypes CvTypes::getMISSION_END_COMBAT()
 {
 	return s_eMISSION_END_COMBAT;
 }
-const MissionTypes CvTypes::getMISSION_AIRSTRIKE()
+MissionTypes CvTypes::getMISSION_AIRSTRIKE()
 {
 	return s_eMISSION_AIRSTRIKE;
 }
-const MissionTypes CvTypes::getMISSION_SURRENDER()
+MissionTypes CvTypes::getMISSION_SURRENDER()
 {
 	return s_eMISSION_SURRENDER;
 }
-const MissionTypes CvTypes::getMISSION_CAPTURED()
+MissionTypes CvTypes::getMISSION_CAPTURED()
 {
 	return s_eMISSION_CAPTURED;
 }
-const MissionTypes CvTypes::getMISSION_IDLE()
+MissionTypes CvTypes::getMISSION_IDLE()
 {
 	return s_eMISSION_IDLE;
 }
-const MissionTypes CvTypes::getMISSION_DIE()
+MissionTypes CvTypes::getMISSION_DIE()
 {
 	return s_eMISSION_DIE;
 }
-const MissionTypes CvTypes::getMISSION_DAMAGE()
+MissionTypes CvTypes::getMISSION_DAMAGE()
 {
 	return s_eMISSION_DAMAGE;
 }
-const MissionTypes CvTypes::getMISSION_MULTI_SELECT()
+MissionTypes CvTypes::getMISSION_MULTI_SELECT()
 {
 	return s_eMISSION_MULTI_SELECT;
 }
-const MissionTypes CvTypes::getMISSION_MULTI_DESELECT()
+MissionTypes CvTypes::getMISSION_MULTI_DESELECT()
 {
 	return s_eMISSION_MULTI_DESELECT;
 }
-const MissionTypes CvTypes::getMISSION_WAIT_FOR()
+MissionTypes CvTypes::getMISSION_WAIT_FOR()
 {
 	return s_eMISSION_WAIT_FOR;
 }
-const MissionTypes CvTypes::getMISSION_SPREAD_RELIGION()
+MissionTypes CvTypes::getMISSION_SPREAD_RELIGION()
 {
 	return s_eMISSION_SPREAD_RELIGION;
 }
-const MissionTypes CvTypes::getMISSION_ENHANCE_RELIGION()
+MissionTypes CvTypes::getMISSION_ENHANCE_RELIGION()
 {
 	return s_eMISSION_ENHANCE_RELIGION;
 }
-const MissionTypes CvTypes::getMISSION_REMOVE_HERESY()
+MissionTypes CvTypes::getMISSION_REMOVE_HERESY()
 {
 	return s_eMISSION_REMOVE_HERESY;
 }
-const MissionTypes CvTypes::getMISSION_ESTABLISH_TRADE_ROUTE()
+MissionTypes CvTypes::getMISSION_ESTABLISH_TRADE_ROUTE()
 {
 	return s_eMISSION_ESTABLISH_TRADE_ROUTE;
 }
-const MissionTypes CvTypes::getMISSION_PLUNDER_TRADE_ROUTE()
+MissionTypes CvTypes::getMISSION_PLUNDER_TRADE_ROUTE()
 {
 	return s_eMISSION_PLUNDER_TRADE_ROUTE;
 }
-const MissionTypes CvTypes::getMISSION_GREAT_WORK()
+MissionTypes CvTypes::getMISSION_GREAT_WORK()
 {
 	return s_eMISSION_GREAT_WORK;
 }
-const MissionTypes CvTypes::getMISSION_CHANGE_TRADE_UNIT_HOME_CITY()
+MissionTypes CvTypes::getMISSION_CHANGE_TRADE_UNIT_HOME_CITY()
 {
 	return s_eMISSION_CHANGE_TRADE_UNIT_HOME_CITY;
 }
-const MissionTypes CvTypes::getMISSION_CHANGE_ADMIRAL_PORT()
+MissionTypes CvTypes::getMISSION_CHANGE_ADMIRAL_PORT()
 {
 	return s_eMISSION_CHANGE_ADMIRAL_PORT;
 }
-const MissionTypes CvTypes::getMISSION_SELL_EXOTIC_GOODS()
+MissionTypes CvTypes::getMISSION_SELL_EXOTIC_GOODS()
 {
 	return s_eMISSION_SELL_EXOTIC_GOODS;
 }
-const unsigned int CvTypes::getNUM_MISSION_TYPES()
+unsigned int CvTypes::getNUM_MISSION_TYPES()
 {
 	return s_uiNUM_MISSION_TYPES;
 }
-const MissionTypes CvTypes::getMISSION_GIVE_POLICIES()
+MissionTypes CvTypes::getMISSION_GIVE_POLICIES()
 {
 	return s_eMISSION_GIVE_POLICIES;
 }
-const MissionTypes CvTypes::getMISSION_ONE_SHOT_TOURISM()
+MissionTypes CvTypes::getMISSION_ONE_SHOT_TOURISM()
 {
 	return s_eMISSION_ONE_SHOT_TOURISM;
 }
 #if defined(MOD_BALANCE_CORE)
-const MissionTypes CvTypes::getMISSION_FREE_LUXURY()
+MissionTypes CvTypes::getMISSION_FREE_LUXURY()
 {
 	return s_eMISSION_FREE_LUXURY;
 }

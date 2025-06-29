@@ -11,7 +11,7 @@ public:
 	static void Register(lua_State* L);
 
 	//! Used by CvLuaMethodWrapper to know where first argument is.
-	static const int GetStartingArgIndex();
+	static int GetStartingArgIndex();
 
 protected:
 	static int pRegister(lua_State* L);
@@ -30,7 +30,7 @@ void CvLuaStaticInstance<Derived, InstanceType>::Register(lua_State* L)
 }
 //------------------------------------------------------------------------------
 template<class Derived, class InstanceType>
-const int CvLuaStaticInstance<Derived, InstanceType>::GetStartingArgIndex()
+int CvLuaStaticInstance<Derived, InstanceType>::GetStartingArgIndex()
 {
 	return 1;
 }

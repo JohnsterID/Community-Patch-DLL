@@ -261,7 +261,7 @@ public:
 
 		// Remember floating point error if you choose to use these
 		void SetHealthAsFloat(const float fHealth) { m_uiHealth = (uint)(fHealth * MaxHealth); }
-		const float GetHealthAsFloat() const { return (float)m_uiHealth / (float)MaxHealth; }
+		float GetHealthAsFloat() const { return (float)m_uiHealth / (float)MaxHealth; }
 
 		__forceinline bool GetFlag(Flags eFlag) const { return (m_byFlags & eFlag) != 0; }
 		__forceinline void SetFlag(Flags eFlag) { m_byFlags |= eFlag; }
@@ -353,7 +353,7 @@ public:
 
 		// Remember floating point error if you choose to use these
 		void SetHealthAsFloat(const float fHealth) { m_uiHealth = (uint)(fHealth * MaxHealth); }
-		const float GetHealthAsFloat() const { return (float)m_uiHealth / (float)MaxHealth; }
+		float GetHealthAsFloat() const { return (float)m_uiHealth / (float)MaxHealth; }
 
 		__forceinline bool GetFlag(Flags eFlag) const { return (m_byFlags & eFlag) != 0; }
 		__forceinline void SetFlag(Flags eFlag) { m_byFlags |= eFlag; }
@@ -447,7 +447,7 @@ public:
 	void SetAllPlotData(const PlotMapData &kPlotData, const PlotScenarioData &kScenarioData);
 	void ClearScenarioData(bool bPreserveImprovements = false);
 
-	inline const uint GetPlotIndex(uint uiX, uint uiY) const
+	inline uint GetPlotIndex(uint uiX, uint uiY) const
 	{
 		FAssertMsg(uiX < m_kMapDesc.uiWidth && uiY < m_kMapDesc.uiHeight, "Invalid Position");
 		return uiX + uiY * m_kMapDesc.uiWidth;
@@ -557,7 +557,7 @@ public:
 		}
 	}
 
-	inline const byte GetPlayerCount() const { return m_kGameDesc.byPlayerCount; }
+	inline byte GetPlayerCount() const { return m_kGameDesc.byPlayerCount; }
 	inline void SetPlayerCount(byte byCount)
 	{
 		FAssertMsg(byCount < MaxPlayers, "Too many players");
@@ -565,7 +565,7 @@ public:
 			m_kGameDesc.byPlayerCount = byCount;
 	}
 
-	inline const byte GetCityStateCount() const { return m_kGameDesc.byCityStateCount; }
+	inline byte GetCityStateCount() const { return m_kGameDesc.byCityStateCount; }
 	inline void SetCityStateCount(byte byCount)
 	{
 		FAssertMsg(byCount < MaxCityStates, "Too many city states");
@@ -573,7 +573,7 @@ public:
 			m_kGameDesc.byCityStateCount = byCount;
 	}
 
-	inline const byte GetTeamCount() const { return m_kGameDesc.byTeamCount; }
+	inline byte GetTeamCount() const { return m_kGameDesc.byTeamCount; }
 	inline void SetTeamCount(byte byCount)
 	{
 		FAssertMsg(byCount < MaxTeams, "Too many teams");
@@ -662,7 +662,7 @@ public:
 	Unit::Handle AddUnit(uint uiX, uint uiY);
 	bool RemoveUnit(uint uiX, uint uiY, Unit::Handle &hUnit);
 
-	inline const bool GetVisibility(uint uiX, uint uiY, uint uiTeam) const
+	inline bool GetVisibility(uint uiX, uint uiY, uint uiTeam) const
 	{
 		FAssertMsg(uiX < m_kMapDesc.uiWidth && uiY < m_kMapDesc.uiHeight, "Invalid Position");
 		FAssertMsg(uiTeam < m_kGameDesc.byTeamCount, "Invalid Team");
@@ -803,7 +803,7 @@ private:
 			ZeroMemory(m_Mem, sizeof(m_Mem));
 		}
 
-		const bool Get(uint uiBitIndex) const
+		bool Get(uint uiBitIndex) const
 		{
 			FAssertMsg(uiBitIndex < TBits, "Out of range");
 			const uint uiByte = uiBitIndex / 8;

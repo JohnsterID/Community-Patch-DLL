@@ -46748,7 +46748,7 @@ void CvPlayer::setBusyUnitUpdatesRemaining(int iUpdateCount)
 }
 
 //	-----------------------------------------------------------------------------------------------
-const char* const CvPlayer::getNickName() const
+const char* CvPlayer::getNickName() const
 {
 	return CvPreGame::nicknameDisplayed(GetID()).c_str();
 }
