@@ -164,6 +164,7 @@ void CvPlot::reset()
 
 	m_iArea = -1;
 	m_iLandmass = -1;
+	m_iContinent = -1;
 	m_iOwnershipDuration = 0;
 	m_iImprovementDuration = 0;
 	m_iUpgradeProgress = 0;
@@ -3616,7 +3617,7 @@ CvUnit* CvPlot::GetBestInterceptor(PlayerTypes eAttackingPlayer, const CvUnit* p
 		for (std::vector<std::pair<int, int>>::const_iterator it = possibleUnits.begin(); it != possibleUnits.end(); ++it)
 		{
 			CvPlot* pInterceptorPlot = GC.getMap().plotByIndexUnchecked(it->second);
-			if (bVisibleInterceptorsOnly && !pInterceptorPlot->isVisible(getTeam()))
+			if (bVisibleInterceptorsOnly && !pInterceptorPlot->isVisible(GET_PLAYER(eAttackingPlayer).getTeam()))
 				continue;
 
 			//first a very rough distance check to avoid expensive unit lookup
@@ -5706,6 +5707,38 @@ CvLandmass * CvPlot::landmass() const
 	return GC.getMap().getLandmassById(m_iLandmass);
 }
 
+
+//	--------------------------------------------------------------------------------
+void CvPlot::setContinent(int iNewValue)
+{
+	if (m_iContinent != iNewValue)
+	{
+		// cleanup old one
+		CvContinent* pContinent = GC.getMap().getContinentById(m_iContinent);
+		if (pContinent != NULL)
+		{
+			pContinent->changeNumTiles(-1);
+			pContinent->ChangeCentroidX(-m_iX);
+			pContinent->ChangeCentroidY(-m_iY);
+		}
+
+		m_iContinent = iNewValue;
+
+		pContinent = GC.getMap().getContinentById(m_iContinent);
+		if (pContinent != NULL)
+		{
+			pContinent->changeNumTiles(1);
+			pContinent->ChangeCentroidX(m_iX);
+			pContinent->ChangeCentroidY(m_iY);
+		}
+	}
+}
+
+CvContinent* CvPlot::continent() const
+{
+	return GC.getMap().getContinentById(m_iContinent);
+}
+
 //	--------------------------------------------------------------------------------
 int CvPlot::GetRiverID(DirectionTypes eDirection) const
 {
@@ -6961,10 +6994,10 @@ void CvPlot::setOwner(PlayerTypes eNewValue, int iAcquiringCityID, bool bCheckUn
 	{
 		// if there's a resource on this plot, we need to make sure resource counts are updated for both old and new city
 		ResourceTypes eResource = getResourceType(getTeam());
-		bool bImproved = IsResourceImprovedForOwner();
 		if (eResource != NO_RESOURCE)
 		{
-			if (bImproved)
+			bool bPreviouslyImproved = IsResourceImprovedForOwner();
+			if (bPreviouslyImproved)
 			{
 				GET_PLAYER(getOwner()).removeResourcesOnPlotFromTotal(this);
 			}
@@ -6974,7 +7007,9 @@ void CvPlot::setOwner(PlayerTypes eNewValue, int iAcquiringCityID, bool bCheckUn
 			}
 			// chance ownership of the plot
 			setOwningCity(eNewValue, iAcquiringCityID);
-			if (bImproved)
+			// settling a city on the plot improves the resource
+			bool bNowImproved = IsResourceImprovedForOwner(false, bFoundingCity);
+			if (bNowImproved)
 			{
 				GET_PLAYER(getOwner()).addResourcesOnPlotToTotal(this);
 			}
@@ -7048,6 +7083,7 @@ void CvPlot::setPlotType(PlotTypes eNewValue, bool bRecalculate, bool bRebuildGr
 	CvArea* pLastArea = NULL;
 	CvPlot* pLoopPlot = NULL;
 	bool bWasWater = false;
+	bool bWasDeepWater = false;
 	bool bRecalculateAreas = false;
 	int iAreaCount = 0;
 	int iI = 0;
@@ -7062,6 +7098,7 @@ void CvPlot::setPlotType(PlotTypes eNewValue, bool bRecalculate, bool bRebuildGr
 		}
 
 		bWasWater = isWater();
+		bWasDeepWater = isDeepWater();
 
 		updateSeeFromSight(false,bRecalculate);
 
@@ -7101,10 +7138,16 @@ void CvPlot::setPlotType(PlotTypes eNewValue, bool bRecalculate, bool bRebuildGr
 			}
 		}
 
+		if (bWasDeepWater != isDeepWater() && bRecalculate)
+		{
+			GC.getMap().recalculateContinents();
+		}
+
 		if(bWasWater != isWater())
 		{
 			if(bRecalculate)
 			{
+
 				for(iI = 0; iI < NUM_DIRECTION_TYPES; ++iI)
 				{
 					pLoopPlot = plotDirection(getX(), getY(), ((DirectionTypes)iI));
@@ -13483,6 +13526,7 @@ void CvPlot::Serialize(Plot& plot, Visitor& visitor)
 	visitor(plot.m_iRiverCrossingCount);
 	visitor(plot.m_iResourceNum);
 	visitor(plot.m_iLandmass);
+	visitor(plot.m_iContinent);
 	visitor(plot.m_vRivers);
 
 	// Bit fields

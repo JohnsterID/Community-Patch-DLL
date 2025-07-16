@@ -306,20 +306,24 @@ public:
 
 	int GetYieldPerXTerrainFromBuildingsTimes100(TerrainTypes eTerrain, YieldTypes eYield) const;
 	void ChangeYieldPerXTerrainFromBuildingsTimes100(TerrainTypes eTerrain, YieldTypes eYield, int iChange);
-	int GetYieldPerXTerrain(TerrainTypes eTerrain, YieldTypes eYield) const;
-	void SetYieldPerXTerrain(TerrainTypes eTerrain, YieldTypes eYield, int iValue);
+	int GetYieldPerXTerrainTimes100(TerrainTypes eTerrain, YieldTypes eYield) const;
+	void SetYieldPerXTerrainTimes100(TerrainTypes eTerrain, YieldTypes eYield, int iValue);
+	int GetTotalYieldFromTerrainsTimes100(YieldTypes eYield) const;
 	void UpdateYieldPerXTerrain(YieldTypes eYield, TerrainTypes eTerrain = NO_TERRAIN);
 
-	int GetYieldPerXTerrainFromReligion(TerrainTypes eTerrain, YieldTypes eYield) const;
-	void SetYieldPerXTerrainFromReligion(TerrainTypes eTerrain, YieldTypes eYield, int iValue);
+	int GetYieldPerXTerrainFromReligionTimes100(TerrainTypes eTerrain, YieldTypes eYield) const;
+	void SetYieldPerXTerrainFromReligionTimes100(TerrainTypes eTerrain, YieldTypes eYield, int iValue);
 	void UpdateYieldPerXTerrainFromReligion(YieldTypes eYield, TerrainTypes eTerrain = NO_TERRAIN);
+	int GetTotalYieldFromTerrainReligionTimes100(YieldTypes eYield) const;
 
 	int GetYieldPerXFeatureFromBuildingsTimes100(FeatureTypes eFeature, YieldTypes eYield) const;
 	void ChangeYieldPerXFeatureFromBuildingsTimes100(FeatureTypes eFeature, YieldTypes eYield, int iChange);
-	int GetYieldPerXFeature(FeatureTypes eFeature, YieldTypes eYield) const;
-	void SetYieldPerXFeature(FeatureTypes eFeature, YieldTypes eYield, int iValue);
-	int GetYieldPerXFeatureFromReligion(FeatureTypes eFeature, YieldTypes eYield) const;
-	void SetYieldPerXFeatureFromReligion(FeatureTypes eFeature, YieldTypes eYield, int iValue);
+	int GetYieldPerXFeatureTimes100(FeatureTypes eFeature, YieldTypes eYield) const;
+	void SetYieldPerXFeatureTimes100(FeatureTypes eFeature, YieldTypes eYield, int iValue);
+	int GetTotalYieldFromFeaturesTimes100(YieldTypes eYield) const;
+	int GetYieldPerXFeatureFromReligionTimes100(FeatureTypes eFeature, YieldTypes eYield) const;
+	void SetYieldPerXFeatureFromReligionTimes100(FeatureTypes eFeature, YieldTypes eYield, int iValue);
+	int GetTotalYieldFromFeatureReligionTimes100(YieldTypes eYield) const;
 	void UpdateYieldPerXFeature(YieldTypes eYield, FeatureTypes eFeature = NO_FEATURE);
 
 	void UpdateYieldPerXUnimprovedFeature(YieldTypes eYield);
@@ -1866,6 +1870,11 @@ public:
 	void SpawnFreeUnit(UnitTypes eUnit);
 	int SpawnPlayerUnitsNearby(const PlayerTypes ePlayer, const int iNumber, const bool bIncludeUUs = false, bool bIncludeShips = false, const bool bNoResource = false) const;
 
+	bool HasFreeCultureBuilding() const;
+	void SetHasFreeCultureBuilding(bool bNewValue);
+	bool HasFreeFoodBuilding() const;
+	void SetHasFreeFoodBuilding(bool bNewValue);
+
 	bool SetNumFreeBuilding(const BuildingTypes eBuilding, const int iValue, const bool bRefund = true, const bool bValidate = true);
 	BuildingTypes GetBuildingTypeFromClass(const BuildingClassTypes eBuildingClass, const bool bFallback = false) const;
 	void AddFreeCapitalBuildings(const bool bRemoveFromCurrent = false);
@@ -2249,6 +2258,8 @@ protected:
 	int m_iBuildingProductionBlockedTurns;
 	int m_iNoTourismTurns;
 	int m_iLoyaltyCounter;
+	bool m_bHasFreeCultureBuilding;
+	bool m_bHasFreeFoodBuilding;
 	int m_iDisloyaltyCounter;
 	int m_iLoyaltyStateType;
 	std::vector<int> m_aiYieldModifierFromHappiness;
@@ -2633,6 +2644,8 @@ SYNC_ARCHIVE_VAR(int, m_iPlagueType)
 SYNC_ARCHIVE_VAR(int, m_iSappedTurns)
 SYNC_ARCHIVE_VAR(int, m_iBuildingProductionBlockedTurns)
 SYNC_ARCHIVE_VAR(int, m_iLoyaltyCounter)
+SYNC_ARCHIVE_VAR(bool, m_bHasFreeCultureBuilding)
+SYNC_ARCHIVE_VAR(bool, m_bHasFreeFoodBuilding)
 SYNC_ARCHIVE_VAR(int, m_iDisloyaltyCounter)
 SYNC_ARCHIVE_VAR(int, m_iLoyaltyStateType)
 SYNC_ARCHIVE_VAR(std::vector<int>, m_aiYieldModifierFromHappiness)

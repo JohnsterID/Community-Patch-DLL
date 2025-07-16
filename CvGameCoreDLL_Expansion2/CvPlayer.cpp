@@ -13287,7 +13287,7 @@ void CvPlayer::AwardFreeBuildings(CvCity* pCity)
 	bool bRefund = MOD_BALANCE_VP;
 	bool bValidate = MOD_BALANCE_VP;
 	int iNumFreeCultureBuildings = GetNumCitiesFreeCultureBuilding();
-	if (iNumFreeCultureBuildings > 0)
+	if (iNumFreeCultureBuildings > 0 && !pCity->HasFreeCultureBuilding())
 	{
 		BuildingTypes eBuilding = pCity->ChooseFreeCultureBuilding();
 		bool bOwedBuilding = true;
@@ -13295,14 +13295,16 @@ void CvPlayer::AwardFreeBuildings(CvCity* pCity)
 		{
 			if (pCity->SetNumFreeBuilding(eBuilding, 1, bRefund, bValidate))
 				bOwedBuilding = false;
+
+			pCity->SetOwedCultureBuilding(bOwedBuilding);
+			ChangeNumCitiesFreeCultureBuilding(-1);
+			pCity->SetHasFreeCultureBuilding(true);
 		}
 
-		pCity->SetOwedCultureBuilding(bOwedBuilding);
-		ChangeNumCitiesFreeCultureBuilding(-1);
 	}
 
 	int iNumFreeFoodBuildings = GetNumCitiesFreeFoodBuilding();
-	if (iNumFreeFoodBuildings > 0)
+	if (iNumFreeFoodBuildings > 0 && !pCity->HasFreeFoodBuilding())
 	{
 		BuildingTypes eBuilding = pCity->ChooseFreeFoodBuilding();
 		bool bOwedBuilding = true;
@@ -13310,10 +13312,12 @@ void CvPlayer::AwardFreeBuildings(CvCity* pCity)
 		{
 			if (pCity->SetNumFreeBuilding(eBuilding, 1, bRefund, bValidate))
 				bOwedBuilding = false;
+
+			pCity->SetOwedFoodBuilding(bOwedBuilding);
+			ChangeNumCitiesFreeFoodBuilding(-1);
+			pCity->SetHasFreeFoodBuilding(true);
 		}
 
-		pCity->SetOwedFoodBuilding(bOwedBuilding);
-		ChangeNumCitiesFreeFoodBuilding(-1);
 	}
 }
 
@@ -34340,7 +34344,9 @@ void CvPlayer::changeXPopulationConscription(int iChange)
 
 void CvPlayer::DoXPopulationConscription(CvCity* pCity)
 {
-	UnitTypes eUnit = GetCompetitiveSpawnUnitType(true, false, false, true, pCity, true, false, true);
+	// Make sure each conscript on the same turn has a different seed
+	CvSeeder seed = CvSeeder::fromRaw(0x05182eda).mix(getNumMilitaryUnits());
+	UnitTypes eUnit = GetCompetitiveSpawnUnitType(true, false, false, true, pCity, true, false, true, &seed);
 	if (eUnit == NO_UNIT)
 		return;
 
@@ -48493,8 +48499,10 @@ UnitTypes CvPlayer::GetCompetitiveSpawnUnitType(const bool bIncludeRanged, const
 	else
 	{
 		seed = bIncludeRanged ? CvSeeder::fromRaw(0xb5272cbd) : CvSeeder::fromRaw(0xdea52530);
-		seed = seed.mix(GetMilitaryMight()).mix(GetID()).mix(GC.getGame().getGameTurn());
 	}
+	seed = seed.mix(GetMilitaryMight()).mix(GetID());
+	if (pSpawnCity)
+		seed = seed.mix(pSpawnCity->GetID());
 
 	// Choose from weighted unit types
 	return veUnitRankings.ChooseFromTopChoices(/*5*/ GD_INT_GET(UNIT_SPAWN_NUM_CHOICES), seed);
