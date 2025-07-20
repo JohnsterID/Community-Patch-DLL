@@ -634,8 +634,11 @@ def build_pch(cl: str, cl_args: list[str], pch_path: Path, build_dir: Path, log:
     end_time = time.time()
     print(f'precompiled header build finished after {end_time - start_time} seconds')
 
-def build_cpps(cl: str, cl_args: list[str], pch_path: Path, build_dir: Path, log: typing.IO):
-    print('building cpps...')
+def build_cpps(cl: str, cl_args: list[str], pch_path: Path, build_dir: Path, log: typing.IO, analyze: bool = False):
+    if analyze:
+        print('running static analysis on cpps...')
+    else:
+        print('building cpps...')
     start_time = time.time()
     build_tasks = TaskMan()
     logs: dict[Path, typing.IO] = {}
@@ -644,9 +647,17 @@ def build_cpps(cl: str, cl_args: list[str], pch_path: Path, build_dir: Path, log
             cpp_src = PROJECT_DIR.joinpath(cpp)
             cpp_log = tempfile.TemporaryFile()
             logs[cpp_src] = cpp_log
-            out = build_dir.joinpath(cpp).with_suffix('.obj')
-            # Skip PCH for clang cross-compilation for now
-            command = [cl, str(cpp_src), '-o', str(out)] + cl_args
+            
+            if analyze:
+                # Run static analysis instead of compilation
+                # Use --analyzer-output plist-multi-file with LLVM 20.1.8
+                out = build_dir.joinpath(cpp).with_suffix('.plist')
+                command = [cl, '--analyze', '--analyzer-output', 'plist-multi-file', str(cpp_src), '-o', str(out)] + cl_args
+            else:
+                # Regular compilation
+                out = build_dir.joinpath(cpp).with_suffix('.obj')
+                command = [cl, str(cpp_src), '-o', str(out)] + cl_args
+            
             build_tasks.spawn(command, log=cpp_log)
         build_results = build_tasks.wait()
         for cpp_src, cpp_log in logs.items():
@@ -661,10 +672,16 @@ def build_cpps(cl: str, cl_args: list[str], pch_path: Path, build_dir: Path, log
             if result.returncode != 0:
                 failed += 1
         if failed != 0:
-            print(f'{failed} cpp(s) failed to build - see build log')
-            quit()
+            if analyze:
+                print(f'{failed} cpp(s) had analysis issues - see build log')
+            else:
+                print(f'{failed} cpp(s) failed to build - see build log')
+                quit()
         end_time = time.time()
-        print(f'cpps build finished after {end_time - start_time} seconds')
+        if analyze:
+            print(f'static analysis finished after {end_time - start_time} seconds')
+        else:
+            print(f'cpps build finished after {end_time - start_time} seconds')
     finally:
        del logs
 
@@ -715,10 +732,13 @@ print_environment()
 
 arg_parser = argparse.ArgumentParser(description='Build VP.')
 arg_parser.add_argument('--config', type=str, default='debug', choices=['release', 'debug'])
+arg_parser.add_argument('--analyze', action='store_true', help='Run static analysis with clang --analyze')
 args = arg_parser.parse_args()
 config = Config.Release if args.config == 'release' else Config.Debug
 
-cl = 'clang'  # Use clang instead of clang-cl for Linux
+# Use LLVM 20.1.8 for better --plist-multi-file support
+llvm_path = os.environ.get('LLVM_PATH', '/tmp/LLVM-20.1.8-Linux-X64')
+cl = os.path.join(llvm_path, 'bin', 'clang')
 link = 'lld-link'  # Remove .exe extension for Linux
 build_dir = PROJECT_DIR.joinpath(BUILD_DIR[config])
 out_dir = PROJECT_DIR.joinpath(PROJECT_DIR, OUT_DIR[config])
@@ -730,10 +750,17 @@ prepare_dirs(build_dir, out_dir)
 log = open(out_dir.joinpath('build.log'), mode='w+b')
 try:
     update_commit_id(log)
-    build_clang_cpp(cl, cl_args, build_dir, log)
-    build_threading_stub(cl, build_dir, log)
-    build_pch(cl, cl_args, pch_path, build_dir, log)
-    build_cpps(cl, cl_args, pch_path, build_dir, log)
-    link_dll(link, link_args, build_dir, out_dir, log)
+    if not args.analyze:
+        build_clang_cpp(cl, cl_args, build_dir, log)
+        build_threading_stub(cl, build_dir, log)
+        build_pch(cl, cl_args, pch_path, build_dir, log)
+    
+    # Run compilation or analysis
+    build_cpps(cl, cl_args, pch_path, build_dir, log, analyze=args.analyze)
+    
+    if not args.analyze:
+        link_dll(link, link_args, build_dir, out_dir, log)
+    else:
+        print('Static analysis completed. Check .plist files in build directory for results.')
 finally:
     log.close()
