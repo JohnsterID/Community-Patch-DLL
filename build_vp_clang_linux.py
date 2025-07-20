@@ -136,12 +136,14 @@ CL_SUPPRESS_WALL = [
     'delete-non-abstract-non-virtual-dtor',  # Destructor design issue (legacy code)
     
     # Keep these enabled for actionable warnings:
-    # 'unused-variable',             # Variables declared but not used (should fix)
-    # 'unused-but-set-variable',     # Variables set but not read (should fix) 
     # 'unused-private-field',        # Unused class members (should fix)
     # 'switch',                      # Missing enum cases (should fix)
     # 'unused-value',                # Unused expression results (should fix)
     # 'sometimes-uninitialized',     # Potential uninitialized use (should fix)
+    
+    # Suppressed for dev preference:
+    'unused-variable',             # Variables declared but not used (suppressed https://github.com/LoneGazebo/Community-Patch-DLL/pull/11826)
+    'unused-but-set-variable',     # Variables set but not read (suppressed https://github.com/LoneGazebo/Community-Patch-DLL/pull/11826)
 ]
 
 # Note: Third-party header warnings (Windows SDK/VC9) are suppressed via -isystem
