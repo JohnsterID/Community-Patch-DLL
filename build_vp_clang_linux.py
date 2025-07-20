@@ -74,9 +74,13 @@ INCLUDE_DIRS = [
     'CvGameCoreDLLUtil/include',
     'CvLocalization/include',
     'CvGameDatabase/include',
+    'ThirdPartyLibs/Lua51/include'
+]
+
+# Third-party library headers (treated as system headers to suppress warnings)
+SYSTEM_INCLUDE_DIRS = [
     'FirePlace/include',
     'FirePlace/include/FireWorks',
-    'ThirdPartyLibs/Lua51/include'
 ]
 SHARED_PREDEFS = [
     'FXS_IS_DLL',
@@ -425,6 +429,10 @@ def build_cl_config_args(config: Config) -> list[str]:
     for include_dir in INCLUDE_DIRS:
         args.append(f'-I{os.path.join(PROJECT_DIR, include_dir)}')
     
+    # Add third-party library headers as system headers (suppress warnings)
+    for include_dir in SYSTEM_INCLUDE_DIRS:
+        args.append(f'-isystem{os.path.join(PROJECT_DIR, include_dir)}')
+    
     # Add external include paths as system headers (Windows SDK and VC includes)
     # Using -isystem suppresses warnings from these third-party headers
     for include_path in INCLUDE_PATHS:
@@ -434,12 +442,80 @@ def build_cl_config_args(config: Config) -> list[str]:
     args.append('-Wall')
     args.append('-Wextra')
     
+    # Enhanced warnings to catch undefined behavior and potential bugs
+    # These are C++03/TR1 compatible and focus on runtime safety
+    enhanced_warnings = [
+        # Undefined behavior detection (compile-time)
+        '-Warray-bounds',                    # Array bounds checking
+        '-Wshift-count-overflow',            # Shift count >= width of type
+        '-Wshift-count-negative',            # Negative shift count
+        '-Wshift-overflow',                  # Left shift overflow
+        '-Wdivision-by-zero',               # Division by zero (compile-time detectable)
+        '-Winteger-overflow',               # Integer overflow in expressions
+        '-Wbool-operation',                 # Suspicious operations on bool
+        '-Wlogical-op-parentheses',         # Logical operator precedence issues
+        '-Wbitwise-op-parentheses',         # Bitwise operator precedence issues
+        '-Wdangling-else',                  # Ambiguous else clauses
+        
+        # Memory safety warnings
+        '-Wuninitialized',                  # Use of uninitialized variables
+        '-Wconditional-uninitialized',      # Conditionally uninitialized variables
+        '-Wreturn-stack-address',           # Returning address of local variable
+        '-Wdangling-field',                 # Dangling references in fields
+        '-Wself-assign',                    # Self assignment (x = x)
+        '-Wself-move',                      # Self move (C++11, but harmless check)
+        
+        # Type safety and conversion warnings
+        '-Wfloat-conversion',               # Implicit float conversions that lose precision
+        '-Wshorten-64-to-32',              # 64-bit to 32-bit narrowing
+        '-Wbool-conversion',               # Implicit conversions to bool
+        '-Wenum-conversion',               # Implicit enum conversions
+        '-Wstring-conversion',             # String literal to bool conversion
+        '-Wpointer-arith',                 # Pointer arithmetic on void*/function pointers
+        '-Wcast-align',                    # Cast increases required alignment
+        
+        # Control flow warnings
+        '-Wunreachable-code',              # Unreachable code detection
+        '-Wmissing-noreturn',              # Functions that should be marked noreturn
+        '-Winfinite-recursion',            # Infinite recursion detection
+        '-Wfor-loop-analysis',             # Suspicious for loop conditions
+        
+        # Function call safety
+        '-Wformat-security',               # Format string security issues
+        '-Wformat-nonliteral',             # Non-literal format strings
+        '-Wnonnull',                       # NULL passed to nonnull parameter
+        '-Wreturn-type',                   # Missing return statements
+        
+        # C++03/TR1 specific safety checks
+        '-Woverloaded-virtual',            # Virtual function hiding (re-enable, it's important)
+        # '-Wvirtual-dtor',                # Missing virtual destructors (not supported in this clang version)
+        '-Wnon-virtual-dtor',              # Non-virtual destructors in base classes
+        '-Wdelete-non-virtual-dtor',       # Delete through non-virtual destructor
+    ]
+    
+    for warning in enhanced_warnings:
+        args.append(warning)
+    
     # Suppress specific warnings
     for suppress in CL_SUPPRESS:
         args.append(f'-Wno-{suppress}')
     
     # Suppress additional -Wall warnings for practical use
+    # Skip overloaded-virtual since we want the enhanced version enabled
     for suppress in CL_SUPPRESS_WALL:
+        if suppress != 'overloaded-virtual':  # Let enhanced warnings handle this
+            args.append(f'-Wno-{suppress}')
+    
+    # Suppress enhanced warnings that generate too much noise from legacy/interface code
+    enhanced_suppressions = [
+        'non-virtual-dtor',              # Interface classes with virtual functions but non-virtual destructors
+        'delete-non-virtual-dtor',       # Related to above - legacy interface design
+        'cast-align',                    # Alignment warnings from third-party libraries (should be reduced by -isystem)
+        'missing-noreturn',              # Functions that could be marked noreturn (low priority)
+        'unreachable-code',              # Dead code (should be cleaned up but not critical)
+    ]
+    
+    for suppress in enhanced_suppressions:
         args.append(f'-Wno-{suppress}')
     
     return args
