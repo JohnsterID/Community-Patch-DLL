@@ -123,6 +123,10 @@ CL_SUPPRESS = [
     'ignored-pragma-intrinsic',       # MSVC intrinsics not available in clang cross-compilation
     'pragma-pack',                    # Expected when using Windows headers with packing changes
     'nonportable-include-path',       # Expected when cross-compiling Windows headers on Linux
+    
+    # C++03/TR1 compatibility warnings (legacy codebase)
+    'ignored-qualifiers',             # 'const' return type qualifiers (C++03 style, 8700+ warnings)
+    'deprecated-copy-with-user-provided-copy',  # Implicit copy constructors/assignment (C++11+ deprecation)
 ]
 
 # Additional suppressions for -Wall (MSVC /W2 equivalent)
