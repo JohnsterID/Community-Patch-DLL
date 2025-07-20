@@ -394,6 +394,7 @@ def build_cl_config_args(config: Config) -> list[str]:
         '-fms-extensions',  # Enable Microsoft extensions
         '-fms-compatibility',  # MSVC compatibility mode
         '-fdelayed-template-parsing',  # MSVC template parsing
+        '-fno-sized-deallocation',  # Disable C++14 sized delete for MSVC 2008 compatibility
         '-D_DLL',  # Define _DLL for dynamic runtime (equivalent to /MD)
         '-D_MT',   # Define _MT for multithreaded runtime
 
