@@ -69,12 +69,8 @@ def convert_cpp11_to_cpp03(replacement_text, context=""):
     
     # Convert nullptr to appropriate C++03 equivalent
     if "= nullptr" in replacement_text:
-        # For va_list, use = {} (aggregate initialization)
-        if "va_list" in context.lower():
-            return replacement_text.replace("= nullptr", " = {}")
         # For pointers, use = NULL
-        else:
-            return replacement_text.replace("= nullptr", " = NULL")
+        return replacement_text.replace("= nullptr", " = NULL")
     
     # Convert other C++11 constructs as needed
     # Add more conversions here as discovered
@@ -86,10 +82,11 @@ def is_problematic_for_vs2008(replacement_text, file_path="", context=""):
     if not replacement_text:
         return False
     
-    # Patterns that are definitely problematic for VS2008
+    # Check replacement text for problematic patterns
     problematic_patterns = [
         r'#include <math\.h>',  # math.h additions can cause issues
         r'= NAN',  # NAN is not standard in VS2008
+        r'std::to_string',  # std::to_string not available in VS2008
         # Add specific problematic initializations from notes
         r'Connections\s*=\s*0',
         r'VoteCommitmentList\s+\w+\s*=\s*0',
@@ -101,6 +98,11 @@ def is_problematic_for_vs2008(replacement_text, file_path="", context=""):
     
     for pattern in problematic_patterns:
         if re.search(pattern, replacement_text):
+            return True
+    
+    # Check context for va_list initialization - VS2008 incompatible
+    if context and re.search(r'=\s*(\{\}|NULL|nullptr)$', replacement_text.strip()):
+        if re.search(r'va_list\s+\w+\s*$', context):
             return True
     
     return False
