@@ -87,6 +87,8 @@ def is_problematic_for_vs2008(replacement_text, file_path="", context=""):
         r'#include <math\.h>',  # math.h additions can cause issues
         r'= NAN',  # NAN is not standard in VS2008
         r'std::to_string',  # std::to_string not available in VS2008
+        r'va_arg\([^,]+\s*=\s*[^,]+,',  # va_arg with assignment inside - VS2008 incompatible
+        r'\)\);$',  # Double closing parentheses - syntax error
         # Add specific problematic initializations from notes
         r'Connections\s*=\s*0',
         r'VoteCommitmentList\s+\w+\s*=\s*0',
@@ -101,8 +103,13 @@ def is_problematic_for_vs2008(replacement_text, file_path="", context=""):
             return True
     
     # Check context for va_list initialization - VS2008 incompatible
-    if context and re.search(r'=\s*(\{\}|NULL|nullptr)$', replacement_text.strip()):
-        if re.search(r'va_list\s+\w+\s*$', context):
+    if context and re.search(r'=\s*(NULL|nullptr|\{\})$', replacement_text.strip()):
+        if re.search(r'va_list\s+\w+', context):
+            return True
+    
+    # Additional check for va_arg corruption
+    if context and 'va_arg' in context:
+        if re.search(r'va_arg\([^,]+\s*=', replacement_text):
             return True
     
     return False
