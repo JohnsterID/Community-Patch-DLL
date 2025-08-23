@@ -97,6 +97,8 @@ def is_problematic_for_vs2008(replacement_text, file_path="", context=""):
         r'p\s*=\s*NULL\w+',  # Detect "p = NULLrocessing" type corruptions
         r'argum\s*=\s*NULL',  # Detect "argum = NULLent" type corruptions
         r'va\s*=\s*NULL\w+',  # Detect "va = NULLriable" type corruptions
+        r'va_arg\([^,]+\s*=\s*NULL',  # Detect va_arg(vl = NULL, ...) corruption
+        r'\w+\(\)\);$',  # Detect function calls with extra closing parenthesis
         # Add specific problematic initializations from notes
         r'Connections\s*=\s*0',
         r'VoteCommitmentList\s+\w+\s*=\s*0',
@@ -296,6 +298,33 @@ def process_and_filter_fixes(fixes_file):
         traceback.print_exc()
         return None
 
+def validate_applied_fixes():
+    """Validate that applied fixes don't contain corruption patterns"""
+    corruption_patterns = [
+        r'va_arg\([^,]+\s*=\s*NULL',  # va_arg(vl = NULL, ...)
+        r'= NULL[a-z]',  # strle = NULLn
+        r'[a-z]= NULL[a-z]',  # p = NULLrocessing
+        r'\w+\(\)\);',  # function()) - extra parenthesis
+    ]
+    
+    source_files = find_source_files()
+    corruption_found = False
+    
+    for file_path in source_files:
+        try:
+            with open(file_path, 'r') as f:
+                content = f.read()
+                
+            for pattern in corruption_patterns:
+                matches = re.findall(pattern, content)
+                if matches:
+                    print(f"❌ Corruption found in {file_path}: {matches}")
+                    corruption_found = True
+        except Exception as e:
+            print(f"Warning: Could not validate {file_path}: {e}")
+    
+    return corruption_found
+
 def run_combined_analysis():
     """Run all proven checks in a single clang-tidy invocation"""
     print("\n" + "="*60)
@@ -351,6 +380,12 @@ def run_combined_analysis():
                 
                 if apply_result.returncode == 0:
                     print("✓ All processed fixes applied successfully")
+                    
+                    # Validate applied fixes for corruption
+                    corruption_found = validate_applied_fixes()
+                    if corruption_found:
+                        print("❌ Corruption detected in applied fixes!")
+                        return False
                 else:
                     print(f"❌ Error applying fixes: {apply_result.stderr}")
                     return False
