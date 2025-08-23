@@ -89,6 +89,14 @@ def is_problematic_for_vs2008(replacement_text, file_path="", context=""):
         r'std::to_string',  # std::to_string not available in VS2008
         r'va_arg\([^,]+\s*=\s*[^,]+,',  # va_arg with assignment inside - VS2008 incompatible
         r'\)\);$',  # Double closing parentheses - syntax error
+        # CORRUPTION DETECTION - clang-tidy bugs that insert "= NULL" in wrong places
+        r'= NULL[a-z]',  # Detect NULL insertion corruption like "strle = NULLn"
+        r'[a-z]= NULL[a-z]',  # Detect NULL insertion in middle of words
+        r'\w+\(\)\);',  # Detect extra closing parentheses in function calls
+        r'strle\s*=',  # Detect strlen corruption specifically
+        r'p\s*=\s*NULL\w+',  # Detect "p = NULLrocessing" type corruptions
+        r'argum\s*=\s*NULL',  # Detect "argum = NULLent" type corruptions
+        r'va\s*=\s*NULL\w+',  # Detect "va = NULLriable" type corruptions
         # Add specific problematic initializations from notes
         r'Connections\s*=\s*0',
         r'VoteCommitmentList\s+\w+\s*=\s*0',
@@ -111,6 +119,22 @@ def is_problematic_for_vs2008(replacement_text, file_path="", context=""):
     if context and 'va_arg' in context:
         if re.search(r'va_arg\([^,]+\s*=', replacement_text):
             return True
+    
+    # Check for function name corruptions in context
+    if context:
+        # Look for patterns where function names might be corrupted
+        if re.search(r'strlen\s*\(', context) and 'strle' in replacement_text:
+            return True
+        if re.search(r'processing', context) and 'p = NULL' in replacement_text:
+            return True
+        if re.search(r'argument', context) and 'argum = NULL' in replacement_text:
+            return True
+        if re.search(r'variable', context) and 'va = NULL' in replacement_text:
+            return True
+    
+    # Check for suspicious patterns that suggest corruption
+    if re.search(r'\w+\s*=\s*NULL\w+', replacement_text):
+        return True
     
     return False
 
