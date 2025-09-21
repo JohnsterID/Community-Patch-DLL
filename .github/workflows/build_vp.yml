@@ -7,7 +7,7 @@ on:
 
 jobs:
   setup:
-    runs-on: windows-latest
+    runs-on: windows-2022
     steps:
 
       - uses: actions/cache@v4
@@ -40,7 +40,7 @@ jobs:
 
   build-clang:
     needs: setup
-    runs-on: windows-latest
+    runs-on: windows-2022
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -85,7 +85,7 @@ jobs:
       - name: Display debug build log
         run: cat clang-output/Debug/build.log
 
-      - name: Check if build failed in log
+      - name: Check if debug build failed in log
         if: always()
         run: |
           if (Select-String -Path "clang-output/Debug/build.log" -Pattern "error:") {
@@ -98,6 +98,14 @@ jobs:
 
       - name: Display release build log
         run: cat clang-output/Release/build.log
+
+      - name: Check if release build failed in log
+        if: always()
+        run: |
+          if (Select-String -Path "clang-output/Release/build.log" -Pattern "error:") {
+            Write-Error "Build failed with error."
+            exit 1
+          }
 
       - name: Create debug artifact
         uses: actions/upload-artifact@v4
