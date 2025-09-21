@@ -2,7 +2,7 @@ name: Build
 
 on:
   push:
-    branches: [ master ]
+    branches: [ ci-workflow-improvements ]
   workflow_dispatch:
 
 jobs:
