@@ -2409,9 +2409,6 @@ void CvEconomicAI::DisbandMiscUnits()
 		int iUnitLoop = 0;
 		for (CvUnit* pLoopUnit = m_pPlayer->firstUnit(&iUnitLoop); pLoopUnit != NULL; pLoopUnit = m_pPlayer->nextUnit(&iUnitLoop))
 		{
-			if (!pLoopUnit)
-				continue;
-
 			//disband missionaries, however we got them
 			if (pLoopUnit->GetReligionData()->GetSpreadsLeft(pLoopUnit) > 0)
 			{
@@ -2464,9 +2461,6 @@ void CvEconomicAI::DisbandUnitsToFreeSpaceshipResources()
 		int iUnitLoop = 0;
 		for (CvUnit* pLoopUnit = m_pPlayer->firstUnit(&iUnitLoop); pLoopUnit != NULL; pLoopUnit = m_pPlayer->nextUnit(&iUnitLoop))
 		{
-			if (!pLoopUnit)
-				continue;
-
 			if (!pLoopUnit->canScrap())
 				continue;
 
@@ -2782,11 +2776,6 @@ CvUnit* CvEconomicAI::FindSeaWorkerToScrap()
 	// Look at map for loose workers
 	for(pLoopUnit = m_pPlayer->firstUnit(&iUnitLoop); pLoopUnit != NULL; pLoopUnit = m_pPlayer->nextUnit(&iUnitLoop))
 	{
-		if(!pLoopUnit)
-		{
-			continue;
-		}
-
 		if (!pLoopUnit->canScrap())
 			continue;
 
@@ -3103,11 +3092,6 @@ CvUnit* CvEconomicAI::FindWorkerToScrap()
 	// Look at map for loose workers
 	for(pLoopUnit = m_pPlayer->firstUnit(&iUnitLoop); pLoopUnit != NULL; pLoopUnit = m_pPlayer->nextUnit(&iUnitLoop))
 	{
-		if(!pLoopUnit)
-		{
-			continue;
-		}
-
 		UnitTypes eWorker = m_pPlayer->GetSpecificUnitType("UNITCLASS_WORKER");
 
 		if(pLoopUnit->getDomainType() == DOMAIN_LAND && pLoopUnit->getUnitType() == eWorker && !pLoopUnit->IsCombatUnit() && pLoopUnit->getSpecialUnitType() == NO_SPECIALUNIT)
@@ -3128,11 +3112,6 @@ CvUnit* CvEconomicAI::FindWorkerToScrap()
 	{
 		for (pLoopUnit = m_pPlayer->firstUnit(&iUnitLoop); pLoopUnit != NULL; pLoopUnit = m_pPlayer->nextUnit(&iUnitLoop))
 		{
-			if (!pLoopUnit)
-			{
-				continue;
-			}
-
 			if (!pLoopUnit->canScrap())
 				continue;
 
@@ -3156,11 +3135,6 @@ CvUnit* CvEconomicAI::FindArchaeologistToScrap()
 	// Look at map for loose archaeologists
 	for(pLoopUnit = m_pPlayer->firstUnit(&iUnitLoop); pLoopUnit != NULL; pLoopUnit = m_pPlayer->nextUnit(&iUnitLoop))
 	{
-		if(!pLoopUnit)
-		{
-			continue;
-		}
-
 		if (!pLoopUnit->canScrap())
 			continue;
 
