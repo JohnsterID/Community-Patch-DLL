@@ -1398,217 +1398,23 @@ void CvAdvisorCounsel::BuildCounselList(PlayerTypes ePlayer)
 		{
 			// warn the player they are about to not be an ally with a minor civ
 			iMessageRating = 80;
-			if(eEnemyPlayer != NO_PLAYER)
-			{
-				strLoc = Localization::Lookup("TXT_KEY_DIPLOSTRATEGY_ALMOST_LOST_CITY_STATE_ALLY_WAR_WITH_MAJOR");
-				strLoc << GC.getMinorCivInfo(pMinorCivAI->GetMinorCivType())->GetTextKey();
-				strLoc << GET_PLAYER(eEnemyPlayer).getCivilizationInfo().GetTextKey();
-			}
-			/*
-			else if (eQuest != NO_MINOR_CIV_QUEST_TYPE)
-			{
-				int iQuestData = pMinorCivAI->GetQuestData1(ePlayer, eQuest);
 
-				switch (eQuest)
-				{
-				case MINOR_CIV_QUEST_ROUTE:
-					strLoc = Localization::Lookup("TXT_KEY_DIPLOSTRATEGY_ALMOST_LOST_CITY_STATE_ALLY_QUEST_ROUTE");
-					strLoc << GC.getMinorCivInfo(pMinorCivAI->GetMinorCivType())->GetTextKey();
-					break;
-				case MINOR_CIV_QUEST_KILL_CAMP:
-					strLoc = Localization::Lookup("TXT_KEY_DIPLOSTRATEGY_ALMOST_LOST_CITY_STATE_ALLY_QUEST_KILL_CAMP");
-					strLoc << GC.getMinorCivInfo(pMinorCivAI->GetMinorCivType())->GetTextKey();
-					break;
-				case MINOR_CIV_QUEST_CONNECT_RESOURCE:
-					strLoc = Localization::Lookup("TXT_KEY_DIPLOSTRATEGY_ALMOST_LOST_CITY_STATE_ALLY_QUEST_CONNECT_RESOURCE");
-					strLoc << GC.getMinorCivInfo(pMinorCivAI->GetMinorCivType())->GetTextKey();
-					strLoc << GC.getResourceInfo((ResourceTypes)iQuestData)->GetTextKey();
-					break;
-				case MINOR_CIV_QUEST_CONSTRUCT_WONDER:
-					strLoc = Localization::Lookup("TXT_KEY_DIPLOSTRATEGY_ALMOST_LOST_CITY_STATE_ALLY_QUEST_CONSTRUCT_WONDER");
-					strLoc << GC.getMinorCivInfo(pMinorCivAI->GetMinorCivType())->GetTextKey();
-					strLoc << GC.getBuildingInfo((BuildingTypes)iQuestData)->GetDescription();
-					break;
-				case MINOR_CIV_QUEST_GREAT_PERSON:
-					strLoc = Localization::Lookup("TXT_KEY_DIPLOSTRATEGY_ALMOST_LOST_CITY_STATE_ALLY_QUEST_GREAT_PERSON");
-					strLoc << GC.getMinorCivInfo(pMinorCivAI->GetMinorCivType())->GetTextKey();
-					strLoc << GC.getUnitInfo((UnitTypes)iQuestData)->GetDescription();
-					break;
-				case MINOR_CIV_QUEST_KILL_CITY_STATE:
-					strLoc = Localization::Lookup("TXT_KEY_DIPLOSTRATEGY_ALMOST_LOST_CITY_STATE_ALLY_QUEST_KILL_CITY_STATE");
-					strLoc << GC.getMinorCivInfo(pMinorCivAI->GetMinorCivType())->GetTextKey();
-					strLoc << GC.getMinorCivInfo(GET_PLAYER((PlayerTypes)iQuestData).GetMinorCivAI()->GetMinorCivType())->GetTextKey();
-					break;
-				case MINOR_CIV_QUEST_FIND_PLAYER:
-					strLoc = Localization::Lookup("TXT_KEY_DIPLOSTRATEGY_ALMOST_LOST_CITY_STATE_ALLY_QUEST_FIND_PLAYER");
-					strLoc << GC.getMinorCivInfo(pMinorCivAI->GetMinorCivType())->GetTextKey();
-					strLoc << GET_PLAYER((PlayerTypes)iQuestData).getCivilizationInfo().GetTextKey();
-					break;
-				case MINOR_CIV_QUEST_FIND_NATURAL_WONDER:
-					strLoc = Localization::Lookup("TXT_KEY_DIPLOSTRATEGY_ALMOST_LOST_CITY_STATE_ALLY_QUEST_FIND_NATURAL_WONDER");
-					strLoc << GC.getMinorCivInfo(pMinorCivAI->GetMinorCivType())->GetTextKey();
-					break;
-				default:
-					ASSERT_DEBUG(false, "No entry for this quest type!");
-					break;
-				}
-			}
-			else if (pMinorCivAI->GetTurnsSinceThreatenedByBarbarians() >= 0)
-			{
-				strLoc = Localization::Lookup("TXT_KEY_DIPLOSTRATEGY_ALMOST_LOST_CITY_STATE_ALLY_QUEST_CLEAR_BARBARIANS");
-				strLoc << GC.getMinorCivInfo(pMinorCivAI->GetMinorCivType())->GetTextKey();
-			}
-			*/
-			else
-			{
-				strLoc = Localization::Lookup("TXT_KEY_DIPLOSTRATEGY_ALMOST_LOST_CITY_STATE_ALLY");
-				strLoc << GC.getMinorCivInfo(pMinorCivAI->GetMinorCivType())->GetTextKey();
-			}
+			strLoc = Localization::Lookup("TXT_KEY_DIPLOSTRATEGY_ALMOST_LOST_CITY_STATE_ALLY");
+			strLoc << GC.getMinorCivInfo(pMinorCivAI->GetMinorCivType())->GetTextKey();
 		}
 		else if(pMinorCivAI->IsFriends(ePlayer) && pMinorCivAI->IsCloseToNotBeingFriends(ePlayer))
 		{
 			// warn the player they are about to not be an friend with a minor civ
 			iMessageRating = 60;
-			if(eEnemyPlayer != NO_PLAYER)
-			{
-				strLoc = Localization::Lookup("TXT_KEY_DIPLOSTRATEGY_ALMOST_LOST_CITY_STATE_FRIENDSHIP_WAR_WITH_MAJOR");
-				strLoc << GC.getMinorCivInfo(pMinorCivAI->GetMinorCivType())->GetTextKey();
-				strLoc << GET_PLAYER(eEnemyPlayer).getCivilizationInfo().GetTextKey();
-			}
-			/*
-			else if (eQuest != NO_MINOR_CIV_QUEST_TYPE)
-			{
-				int iQuestData = pMinorCivAI->GetQuestData1(ePlayer, eQuest);
 
-				switch (eQuest)
-				{
-				case MINOR_CIV_QUEST_ROUTE:
-					strLoc = Localization::Lookup("TXT_KEY_DIPLOSTRATEGY_ALMOST_LOST_CITY_STATE_FRIENDSHIP_QUEST_ROUTE");
-					strLoc << GC.getMinorCivInfo(pMinorCivAI->GetMinorCivType())->GetTextKey();
-					break;
-				case MINOR_CIV_QUEST_KILL_CAMP:
-					strLoc = Localization::Lookup("TXT_KEY_DIPLOSTRATEGY_ALMOST_LOST_CITY_STATE_FRIENDSHIP_QUEST_KILL_CAMP");
-					strLoc << GC.getMinorCivInfo(pMinorCivAI->GetMinorCivType())->GetTextKey();
-					break;
-				case MINOR_CIV_QUEST_CONNECT_RESOURCE:
-					strLoc = Localization::Lookup("TXT_KEY_DIPLOSTRATEGY_ALMOST_LOST_CITY_STATE_FRIENDSHIP_QUEST_CONNECT_RESOURCE");
-					strLoc << GC.getMinorCivInfo(pMinorCivAI->GetMinorCivType())->GetTextKey();
-					strLoc << GC.getResourceInfo((ResourceTypes)iQuestData)->GetTextKey();
-					break;
-				case MINOR_CIV_QUEST_CONSTRUCT_WONDER:
-					strLoc = Localization::Lookup("TXT_KEY_DIPLOSTRATEGY_ALMOST_LOST_CITY_STATE_FRIENDSHIP_QUEST_CONSTRUCT_WONDER");
-					strLoc << GC.getMinorCivInfo(pMinorCivAI->GetMinorCivType())->GetTextKey();
-					strLoc << GC.getBuildingInfo((BuildingTypes)iQuestData)->GetDescription();
-					break;
-				case MINOR_CIV_QUEST_GREAT_PERSON:
-					strLoc = Localization::Lookup("TXT_KEY_DIPLOSTRATEGY_ALMOST_LOST_CITY_STATE_FRIENDSHIP_QUEST_GREAT_PERSON");
-					strLoc << GC.getMinorCivInfo(pMinorCivAI->GetMinorCivType())->GetTextKey();
-					strLoc << GC.getUnitInfo((UnitTypes)iQuestData)->GetDescription();
-					break;
-				case MINOR_CIV_QUEST_KILL_CITY_STATE:
-					strLoc = Localization::Lookup("TXT_KEY_DIPLOSTRATEGY_ALMOST_LOST_CITY_STATE_FRIENDSHIP_QUEST_KILL_CITY_STATE");
-					strLoc << GC.getMinorCivInfo(pMinorCivAI->GetMinorCivType())->GetTextKey();
-					strLoc << GC.getMinorCivInfo(GET_PLAYER((PlayerTypes)iQuestData).GetMinorCivAI()->GetMinorCivType())->GetTextKey();
-					break;
-				case MINOR_CIV_QUEST_FIND_PLAYER:
-					strLoc = Localization::Lookup("TXT_KEY_DIPLOSTRATEGY_ALMOST_LOST_CITY_STATE_FRIENDSHIP_QUEST_FIND_PLAYER");
-					strLoc << GC.getMinorCivInfo(pMinorCivAI->GetMinorCivType())->GetTextKey();
-					strLoc << GET_PLAYER((PlayerTypes)iQuestData).getCivilizationInfo().GetTextKey();
-					break;
-				case MINOR_CIV_QUEST_FIND_NATURAL_WONDER:
-					strLoc = Localization::Lookup("TXT_KEY_DIPLOSTRATEGY_ALMOST_LOST_CITY_STATE_FRIENDSHIP_QUEST_FIND_NATURAL_WONDER");
-					strLoc << GC.getMinorCivInfo(pMinorCivAI->GetMinorCivType())->GetTextKey();
-					break;
-				default:
-					ASSERT_DEBUG(false, "No entry for this quest type!");
-					break;
-				}
-			}
-			else if (pMinorCivAI->GetTurnsSinceThreatenedByBarbarians() >= 0)
-			{
-				strLoc = Localization::Lookup("TXT_KEY_DIPLOSTRATEGY_ALMOST_LOST_CITY_STATE_FRIENDSHIP_QUEST_CLEAR_BARBARIANS");
-				strLoc << GC.getMinorCivInfo(pMinorCivAI->GetMinorCivType())->GetTextKey();
-			}
-			*/
-			else
-			{
-				strLoc = Localization::Lookup("TXT_KEY_DIPLOSTRATEGY_ALMOST_LOST_CITY_STATE_FRIENDSHIP");
-				strLoc << GC.getMinorCivInfo(pMinorCivAI->GetMinorCivType())->GetTextKey();
-			}
+			strLoc = Localization::Lookup("TXT_KEY_DIPLOSTRATEGY_ALMOST_LOST_CITY_STATE_FRIENDSHIP");
+			strLoc << GC.getMinorCivInfo(pMinorCivAI->GetMinorCivType())->GetTextKey();
 		}
 		else
 		{
 			iMessageRating = 20;
-			if(eEnemyPlayer != NO_PLAYER)
-			{
-				strLoc = Localization::Lookup("TXT_KEY_DIPLOSTRATEGY_BEFRIEND_CITY_STATE_WAR_WITH_MAJOR");
-				strLoc << GC.getMinorCivInfo(pMinorCivAI->GetMinorCivType())->GetTextKey();
-				strLoc << GET_PLAYER(eEnemyPlayer).getCivilizationInfo().GetTextKey();
-			}
-			/*
-			else if (eQuest != NO_MINOR_CIV_QUEST_TYPE)
-			{
-				int iQuestData = pMinorCivAI->GetQuestData1(ePlayer, eQuest);
 
-				switch (eQuest)
-				{
-				case MINOR_CIV_QUEST_ROUTE:
-					strLoc = Localization::Lookup("TXT_KEY_DIPLOSTRATEGY_BEFRIEND_CITY_STATE_QUEST_ROUTE");
-					strLoc << GC.getMinorCivInfo(pMinorCivAI->GetMinorCivType())->GetTextKey();
-					break;
-				case MINOR_CIV_QUEST_KILL_CAMP:
-					strLoc = Localization::Lookup("TXT_KEY_DIPLOSTRATEGY_BEFRIEND_CITY_STATE_QUEST_KILL_CAMP");
-					strLoc << GC.getMinorCivInfo(pMinorCivAI->GetMinorCivType())->GetTextKey();
-					break;
-				case MINOR_CIV_QUEST_CONNECT_RESOURCE:
-					strLoc = Localization::Lookup("TXT_KEY_DIPLOSTRATEGY_BEFRIEND_CITY_STATE_QUEST_CONNECT_RESOURCE");
-					strLoc << GC.getMinorCivInfo(pMinorCivAI->GetMinorCivType())->GetTextKey();
-					strLoc << GC.getResourceInfo((ResourceTypes)iQuestData)->GetTextKey();
-					break;
-				case MINOR_CIV_QUEST_CONSTRUCT_WONDER:
-					strLoc = Localization::Lookup("TXT_KEY_DIPLOSTRATEGY_BEFRIEND_CITY_STATE_QUEST_CONSTRUCT_WONDER");
-					strLoc << GC.getMinorCivInfo(pMinorCivAI->GetMinorCivType())->GetTextKey();
-					strLoc << GC.getBuildingInfo((BuildingTypes)iQuestData)->GetDescription();
-					break;
-				case MINOR_CIV_QUEST_GREAT_PERSON:
-					strLoc = Localization::Lookup("TXT_KEY_DIPLOSTRATEGY_BEFRIEND_CITY_STATE_QUEST_GREAT_PERSON");
-					strLoc << GC.getMinorCivInfo(pMinorCivAI->GetMinorCivType())->GetTextKey();
-					strLoc << GC.getUnitInfo((UnitTypes)iQuestData)->GetDescription();
-					break;
-				case MINOR_CIV_QUEST_KILL_CITY_STATE:
-					strLoc = Localization::Lookup("TXT_KEY_DIPLOSTRATEGY_BEFRIEND_CITY_STATE_QUEST_KILL_CITY_STATE");
-					strLoc << GC.getMinorCivInfo(pMinorCivAI->GetMinorCivType())->GetTextKey();
-					strLoc << GC.getMinorCivInfo(GET_PLAYER((PlayerTypes)iQuestData).GetMinorCivAI()->GetMinorCivType())->GetTextKey();
-					break;
-				case MINOR_CIV_QUEST_FIND_PLAYER:
-					strLoc = Localization::Lookup("TXT_KEY_DIPLOSTRATEGY_BEFRIEND_CITY_STATE_QUEST_FIND_PLAYER");
-					strLoc << GC.getMinorCivInfo(pMinorCivAI->GetMinorCivType())->GetTextKey();
-					strLoc << GET_PLAYER((PlayerTypes)iQuestData).getCivilizationInfo().GetTextKey();
-					break;
-				case MINOR_CIV_QUEST_FIND_NATURAL_WONDER:
-					strLoc = Localization::Lookup("TXT_KEY_DIPLOSTRATEGY_BEFRIEND_CITY_STATE_QUEST_FIND_NATURAL_WONDER");
-					strLoc << GC.getMinorCivInfo(pMinorCivAI->GetMinorCivType())->GetTextKey();
-					break;
-				default:
-					ASSERT_DEBUG(false, "No entry for this quest type!");
-					break;
-				}
-			}
-			else if (pMinorCivAI->GetTurnsSinceThreatenedByBarbarians() >= 0)
-			{
-				strLoc = Localization::Lookup("TXT_KEY_DIPLOSTRATEGY_BEFRIEND_CITY_STATE_QUEST_CLEAR_BARBARIANS");
-				strLoc << GC.getMinorCivInfo(pMinorCivAI->GetMinorCivType())->GetTextKey();
-			}
-			*/
-			else
-			{
-				iMessageRating = 0;
-			}
-			//else
-			//{
-			//	strLoc = Localization::Lookup("TXT_KEY_DIPLOSTRATEGY_BEFRIEND_CITY_STATE");
-			//	strLoc << GC.getMinorCivInfo(pMinorCivAI->GetMinorCivType())->GetTextKey();
-			//}
+			iMessageRating = 0;
 		}
 
 		if(iMessageRating > 0)
