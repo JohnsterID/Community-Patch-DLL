@@ -1,0 +1,328 @@
+name: cppcheck-win
+on:
+  push:
+    branches: [ master ]
+  workflow_dispatch:
+
+env:
+  CPPCHECK_VERSION: "2.18.0"
+
+jobs:
+  setup:
+    runs-on: windows-2022
+    steps:
+
+      - uses: actions/cache@v4
+        id: cache
+        with:
+          path: |
+            ./wget
+            ./SDK7
+            ./SDK7.1
+            ./cppcheck-build
+          key: ${{ runner.os }}-${{ hashFiles('**/lockfiles') }}
+
+      - name: Install wget
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          echo "Installing wget..."
+          mkdir wget
+          Invoke-WebRequest -Uri https://eternallybored.org/misc/wget/1.21.3/64/wget.exe -OutFile "wget\wget.exe"
+          Add-Content $env:GITHUB_PATH "$env:GITHUB_WORKSPACE\wget"
+          echo "wget installation complete."
+
+      - name: Download Windows SDK 7.0 SP1 and 7.1
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          echo "Downloading SDKs..."
+          wget -O ./sdk7.iso https://web.archive.org/web/20161230154527/http://download.microsoft.com/download/2/E/9/2E911956-F90F-4BFB-8231-E292A7B6F287/GRMSDK_EN_DVD.iso
+          wget -O ./sdk71.iso http://download.microsoft.com/download/F/1/0/F10113F5-B750-4969-A255-274341AC6BCE/GRMSDK_EN_DVD.iso
+          7z x ./sdk7.iso -y -o"./SDK7"
+          7z x ./sdk71.iso -y -o"./SDK7.1"
+          echo "SDKs downloaded and extracted."
+
+      - name: Download and install cppcheck
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          echo "Downloading cppcheck MSI..."
+          $cppcheckUrl = "https://github.com/danmar/cppcheck/releases/download/${{ env.CPPCHECK_VERSION }}/cppcheck-${{ env.CPPCHECK_VERSION }}-x64-Setup.msi"
+          Invoke-WebRequest -Uri $cppcheckUrl -OutFile "cppcheck-setup.msi"
+          echo "Installing cppcheck..."
+          Start-Process -FilePath "msiexec.exe" -ArgumentList "/i", "cppcheck-setup.msi", "/quiet", "INSTALLDIR=C:\cppcheck" -Wait
+          echo "Creating cppcheck build cache..."
+          mkdir cppcheck-build
+          Copy-Item -Path "C:\cppcheck\*" -Destination "cppcheck-build\" -Recurse -Force
+          echo "cppcheck installation complete."
+
+      - name: Upload cppcheck build
+        uses: actions/upload-artifact@v4
+        with:
+          name: cppcheck-build-win
+          path: ./cppcheck-build/
+          retention-days: 90
+
+  analysis:
+    needs: setup
+    runs-on: windows-2022
+    continue-on-error: true
+    outputs:
+      timed_out: ${{ steps.check-timeout.outputs.timed_out }}
+    env:
+      TIMEOUT_EXIT_CODE: 124
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - uses: actions/cache@v4
+        id: cache
+        with:
+          path: |
+            ./wget
+            ./SDK7
+            ./SDK7.1
+            ./cppcheck-build
+          key: ${{ runner.os }}-${{ hashFiles('**/lockfiles') }}
+
+      - name: Download cppcheck build
+        if: steps.cache.outputs.cache-hit != 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: cppcheck-build-win
+          path: ./cppcheck-build
+
+      - name: Setup cppcheck
+        run: |
+          Add-Content $env:GITHUB_PATH "$env:GITHUB_WORKSPACE\cppcheck-build"
+          echo "cppcheck path added to PATH"
+
+      - name: Verify cppcheck
+        run: cppcheck --version
+
+      - name: Install SDKs
+        run: |
+          echo "Installing SDKs..."
+          Start-Process -FilePath ".\SDK7\Setup\WinSDK\WinSDK_x86.msi" -ArgumentList "/qn" -Wait
+          Start-Process -FilePath ".\SDK7\Setup\WinSDKBuild\WinSDKBuild_x86.msi" -ArgumentList "/qn" -Wait
+          Start-Process -FilePath ".\SDK7\Setup\WinSDKInterop\WinSDKInterop_x86.msi" -ArgumentList "/qn" -Wait
+          Start-Process -FilePath ".\SDK7\Setup\WinSDKTools\WinSDKTools_x86.msi" -ArgumentList "/qn" -Wait
+          Start-Process -FilePath ".\SDK7\Setup\WinSDKWin32Tools\WinSDKWin32Tools_x86.msi" -ArgumentList "/qn" -Wait
+          Start-Process -FilePath ".\SDK7\Setup\vc_stdx86\vc_stdx86.msi" -ArgumentList "/qn" -Wait
+          Start-Process -FilePath ".\SDK7\Setup\vc_stdamd64\vc_stdamd64.msi" -ArgumentList "/qn" -Wait
+          Start-Process -FilePath ".\SDK7\Setup\winsdk_intellidocs\winsdk_intellidocs.msi" -ArgumentList "/qn" -Wait
+          Start-Process -FilePath ".\SDK7\Setup\WinSDKNetFxTools\WinSDK_nfxtoolsm_x86.msi" -ArgumentList "/qn" -Wait
+          Start-Process -FilePath ".\SDK7.1\Setup\WinSDK\WinSDK_x86.msi" -ArgumentList "/qn" -Wait
+          Start-Process -FilePath ".\SDK7.1\Setup\WinSDKBuild\WinSDKBuild_x86.msi" -ArgumentList "/qn" -Wait
+          Start-Process -FilePath ".\SDK7.1\Setup\WinSDKInterop\WinSDKInterop_x86.msi" -ArgumentList "/qn" -Wait
+          Start-Process -FilePath ".\SDK7.1\Setup\WinSDKTools\WinSDKTools_x86.msi" -ArgumentList "/qn" -Wait
+          Start-Process -FilePath ".\SDK7.1\Setup\WinSDKWin32Tools\WinSDKWin32Tools_x86.msi" -ArgumentList "/qn" -Wait
+          Start-Process -FilePath ".\SDK7.1\Setup\vc_stdx86\vc_stdx86.msi" -ArgumentList "/qn" -Wait
+          Start-Process -FilePath ".\SDK7.1\Setup\vc_stdamd64\vc_stdamd64.msi" -ArgumentList "/qn" -Wait
+          Start-Process -FilePath ".\SDK7.1\Setup\WinSDKNetFxTools\WinSDK_nfxtoolsm_x86.msi" -ArgumentList "/qn" -Wait
+          echo "SDKs installation complete."
+
+      - name: Copy DLLs to v90 folders
+        run: |
+          echo "Copying DLLs to v90 folders..."
+          cp "C:\Program Files (x86)\Microsoft Visual Studio 9.0\Common7\IDE\msobj80.dll" "C:\Program Files (x86)\Microsoft Visual Studio 9.0\VC\bin"
+          cp "C:\Program Files (x86)\Microsoft Visual Studio 9.0\Common7\IDE\mspdb80.dll" "C:\Program Files (x86)\Microsoft Visual Studio 9.0\VC\bin"
+          cp "C:\Program Files (x86)\Microsoft Visual Studio 9.0\Common7\IDE\mspdbcore.dll" "C:\Program Files (x86)\Microsoft Visual Studio 9.0\VC\bin"
+          cp "C:\Program Files (x86)\Microsoft Visual Studio 9.0\Common7\IDE\mspdbsrv.exe" "C:\Program Files (x86)\Microsoft Visual Studio 9.0\VC\bin"
+          echo "DLLs copied to v90 folders."
+
+      - name: Set Registry Keys
+        run: |
+          # PowerShell script to set registry key
+          $regPath32 = "HKLM:\SOFTWARE\Wow6432Node\Microsoft\Microsoft SDKs\Windows"
+          # Path to installed SDK
+          $newInstallFolder = "C:\Program Files (x86)\Microsoft SDKs\Windows\v7.1"
+          Set-ItemProperty -Path $regPath32 -Name "CurrentInstallFolder" -Value $newInstallFolder
+          Write-Output "Registry key set successfully."
+
+      - name: Copy all SDK library files to source directory
+        run: |
+          $SDKLib = "C:\Program Files (x86)\Microsoft SDKs\Windows\v7.1\Lib"
+          $SourceLib = Join-Path $env:GITHUB_WORKSPACE "CvGameCoreDLL_Expansion2"
+          Write-Output "SDKLib path: $SDKLib"
+          Write-Output "SourceLib path: $SourceLib"
+          
+          if (Test-Path $SDKLib) {
+            Copy-Item -Path "$SDKLib\*" -Destination $SourceLib -Recurse -Force
+            Write-Output "All SDK library files copied successfully."
+          } else {
+            Write-Output "SDK library path not found: $SDKLib"
+          }
+        shell: pwsh
+
+      - name: Make build-dir
+        run: mkdir build-dir
+
+      - uses: actions/cache@v4
+        id: cache-build-dir
+        with:
+          path: ./build-dir/
+          key: build-dir-win-${{ hashFiles('**/*.*') }}
+          restore-keys: |
+            build-dir-win-
+
+      - name: Determine number of CPU threads
+        id: cpu-info
+        run: |
+          $cpuCount = (Get-WmiObject -Class Win32_ComputerSystem).NumberOfLogicalProcessors
+          echo "cpu_count=$cpuCount" >> $env:GITHUB_OUTPUT
+
+      - name: Run cppcheck analysis
+        id: cppcheck
+        shell: cmd
+        run: |
+          timeout /t 21000 cppcheck -j %CPU_COUNT% --project=VoxPopuli_vs2013.sln --check-level=exhaustive --max-ctu-depth=10 --cppcheck-build-dir=build-dir --enable=all --std=c++03 --verbose --check-library --inline-suppr --platform=win32W --xml 2> cppcheck.xml
+          if %ERRORLEVEL% equ 1 (
+            echo exit_code=1 >> %GITHUB_ENV%
+          ) else (
+            echo exit_code=0 >> %GITHUB_ENV%
+          )
+        env:
+          CPU_COUNT: ${{ steps.cpu-info.outputs.cpu_count }}
+
+      - name: Check timeout status
+        id: check-timeout
+        if: always()
+        run: |
+          if ($env:exit_code -eq "124") {
+            echo "timed_out=true" >> $env:GITHUB_OUTPUT
+          } else {
+            echo "timed_out=false" >> $env:GITHUB_OUTPUT
+          }
+
+      - name: Upload analysis artifacts
+        if: success() && steps.check-timeout.outputs.timed_out != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: cppcheck-xml-win
+          path: |
+            cppcheck.xml
+          retention-days: 90
+
+  retry_analysis:
+    needs: [setup, analysis]
+    runs-on: windows-2022
+    if: needs.analysis.outputs.timed_out == 'true'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - uses: actions/cache@v4
+        id: cache
+        with:
+          path: |
+            ./wget
+            ./SDK7
+            ./SDK7.1
+            ./cppcheck-build
+          key: ${{ runner.os }}-${{ hashFiles('**/lockfiles') }}
+
+      - name: Download cppcheck build
+        if: steps.cache.outputs.cache-hit != 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: cppcheck-build-win
+          path: ./cppcheck-build
+
+      - name: Setup cppcheck
+        run: |
+          Add-Content $env:GITHUB_PATH "$env:GITHUB_WORKSPACE\cppcheck-build"
+          echo "cppcheck path added to PATH"
+
+      - name: Verify cppcheck
+        run: cppcheck --version
+
+      - name: Install SDKs
+        run: |
+          echo "Installing SDKs..."
+          Start-Process -FilePath ".\SDK7\Setup\WinSDK\WinSDK_x86.msi" -ArgumentList "/qn" -Wait
+          Start-Process -FilePath ".\SDK7\Setup\WinSDKBuild\WinSDKBuild_x86.msi" -ArgumentList "/qn" -Wait
+          Start-Process -FilePath ".\SDK7\Setup\WinSDKInterop\WinSDKInterop_x86.msi" -ArgumentList "/qn" -Wait
+          Start-Process -FilePath ".\SDK7\Setup\WinSDKTools\WinSDKTools_x86.msi" -ArgumentList "/qn" -Wait
+          Start-Process -FilePath ".\SDK7\Setup\WinSDKWin32Tools\WinSDKWin32Tools_x86.msi" -ArgumentList "/qn" -Wait
+          Start-Process -FilePath ".\SDK7\Setup\vc_stdx86\vc_stdx86.msi" -ArgumentList "/qn" -Wait
+          Start-Process -FilePath ".\SDK7\Setup\vc_stdamd64\vc_stdamd64.msi" -ArgumentList "/qn" -Wait
+          Start-Process -FilePath ".\SDK7\Setup\winsdk_intellidocs\winsdk_intellidocs.msi" -ArgumentList "/qn" -Wait
+          Start-Process -FilePath ".\SDK7\Setup\WinSDKNetFxTools\WinSDK_nfxtoolsm_x86.msi" -ArgumentList "/qn" -Wait
+          Start-Process -FilePath ".\SDK7.1\Setup\WinSDK\WinSDK_x86.msi" -ArgumentList "/qn" -Wait
+          Start-Process -FilePath ".\SDK7.1\Setup\WinSDKBuild\WinSDKBuild_x86.msi" -ArgumentList "/qn" -Wait
+          Start-Process -FilePath ".\SDK7.1\Setup\WinSDKInterop\WinSDKInterop_x86.msi" -ArgumentList "/qn" -Wait
+          Start-Process -FilePath ".\SDK7.1\Setup\WinSDKTools\WinSDKTools_x86.msi" -ArgumentList "/qn" -Wait
+          Start-Process -FilePath ".\SDK7.1\Setup\WinSDKWin32Tools\WinSDKWin32Tools_x86.msi" -ArgumentList "/qn" -Wait
+          Start-Process -FilePath ".\SDK7.1\Setup\vc_stdx86\vc_stdx86.msi" -ArgumentList "/qn" -Wait
+          Start-Process -FilePath ".\SDK7.1\Setup\vc_stdamd64\vc_stdamd64.msi" -ArgumentList "/qn" -Wait
+          Start-Process -FilePath ".\SDK7.1\Setup\WinSDKNetFxTools\WinSDK_nfxtoolsm_x86.msi" -ArgumentList "/qn" -Wait
+          echo "SDKs installation complete."
+
+      - name: Copy DLLs to v90 folders
+        run: |
+          echo "Copying DLLs to v90 folders..."
+          cp "C:\Program Files (x86)\Microsoft Visual Studio 9.0\Common7\IDE\msobj80.dll" "C:\Program Files (x86)\Microsoft Visual Studio 9.0\VC\bin"
+          cp "C:\Program Files (x86)\Microsoft Visual Studio 9.0\Common7\IDE\mspdb80.dll" "C:\Program Files (x86)\Microsoft Visual Studio 9.0\VC\bin"
+          cp "C:\Program Files (x86)\Microsoft Visual Studio 9.0\Common7\IDE\mspdbcore.dll" "C:\Program Files (x86)\Microsoft Visual Studio 9.0\VC\bin"
+          cp "C:\Program Files (x86)\Microsoft Visual Studio 9.0\Common7\IDE\mspdbsrv.exe" "C:\Program Files (x86)\Microsoft Visual Studio 9.0\VC\bin"
+          echo "DLLs copied to v90 folders."
+
+      - name: Set Registry Keys
+        run: |
+          # PowerShell script to set registry key
+          $regPath32 = "HKLM:\SOFTWARE\Wow6432Node\Microsoft\Microsoft SDKs\Windows"
+          # Path to installed SDK
+          $newInstallFolder = "C:\Program Files (x86)\Microsoft SDKs\Windows\v7.1"
+          Set-ItemProperty -Path $regPath32 -Name "CurrentInstallFolder" -Value $newInstallFolder
+          Write-Output "Registry key set successfully."
+
+      - name: Copy all SDK library files to source directory
+        run: |
+          $SDKLib = "C:\Program Files (x86)\Microsoft SDKs\Windows\v7.1\Lib"
+          $SourceLib = Join-Path $env:GITHUB_WORKSPACE "CvGameCoreDLL_Expansion2"
+          Write-Output "SDKLib path: $SDKLib"
+          Write-Output "SourceLib path: $SourceLib"
+          
+          if (Test-Path $SDKLib) {
+            Copy-Item -Path "$SDKLib\*" -Destination $SourceLib -Recurse -Force
+            Write-Output "All SDK library files copied successfully."
+          } else {
+            Write-Output "SDK library path not found: $SDKLib"
+          }
+        shell: pwsh
+
+      - name: Make build-dir
+        run: mkdir build-dir
+
+      - uses: actions/cache@v4
+        id: cache-build-dir
+        with:
+          path: ./build-dir/
+          key: build-dir-win-${{ hashFiles('**/*.*') }}
+          restore-keys: |
+            build-dir-win-
+
+      - name: Determine number of CPU threads
+        id: cpu-info
+        run: |
+          $cpuCount = (Get-WmiObject -Class Win32_ComputerSystem).NumberOfLogicalProcessors
+          echo "cpu_count=$cpuCount" >> $env:GITHUB_OUTPUT
+
+      - name: Run cppcheck analysis
+        id: cppcheck
+        continue-on-error: true
+        shell: cmd
+        run: |
+          timeout /t 21000 cppcheck -j %CPU_COUNT% --project=VoxPopuli_vs2013.sln --check-level=exhaustive --max-ctu-depth=10 --cppcheck-build-dir=build-dir --enable=all --std=c++03 --verbose --check-library --inline-suppr --platform=win32W --xml 2> cppcheck.xml
+          echo cppcheck exit code: %ERRORLEVEL%
+        env:
+          CPU_COUNT: ${{ steps.cpu-info.outputs.cpu_count }}
+
+      - name: Upload analysis artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cppcheck-xml-win
+          path: |
+            cppcheck.xml
+          retention-days: 90
