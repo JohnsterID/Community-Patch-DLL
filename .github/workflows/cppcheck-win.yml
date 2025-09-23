@@ -173,31 +173,61 @@ jobs:
 
       - name: Run cppcheck analysis
         id: cppcheck
-        shell: cmd
+        shell: powershell
         run: |
-          echo "Starting cppcheck analysis..."
-          echo "Working directory: %CD%"
-          echo "CPU count: %CPU_COUNT%"
-          echo "Checking if solution file exists..."
-          if exist "VoxPopuli_vs2013.sln" (
-            echo "Solution file found"
-          ) else (
-            echo "Solution file NOT found"
-            dir *.sln
-          )
-          echo "Running cppcheck..."
-          timeout /t 21000 cppcheck -j %CPU_COUNT% --project=VoxPopuli_vs2013.sln --check-level=exhaustive --max-ctu-depth=10 --cppcheck-build-dir=build-dir --enable=all --std=c++03 --verbose --check-library --inline-suppr --platform=win32W --xml 2> cppcheck.xml 1> cppcheck_stdout.txt
-          set CPPCHECK_EXIT=%ERRORLEVEL%
-          echo "Cppcheck exit code: %CPPCHECK_EXIT%"
-          echo "=== STDOUT ==="
-          if exist "cppcheck_stdout.txt" type cppcheck_stdout.txt
-          echo "=== STDERR (XML) ==="
-          if exist "cppcheck.xml" type cppcheck.xml
-          if %CPPCHECK_EXIT% equ 1 (
-            echo exit_code=1 >> %GITHUB_ENV%
-          ) else (
-            echo exit_code=0 >> %GITHUB_ENV%
-          )
+          Write-Output "Starting cppcheck analysis..."
+          Write-Output "Working directory: $(Get-Location)"
+          Write-Output "CPU count: $env:CPU_COUNT"
+          Write-Output "Checking if solution file exists..."
+          if (Test-Path "VoxPopuli_vs2013.sln") {
+            Write-Output "Solution file found"
+          } else {
+            Write-Output "Solution file NOT found"
+            Get-ChildItem *.sln
+          }
+          Write-Output "Running cppcheck with 21000 second timeout..."
+          
+          # Use Start-Process with timeout (21000 seconds = 350 minutes)
+          $process = Start-Process -FilePath "cppcheck" -ArgumentList @(
+            "-j", "$env:CPU_COUNT",
+            "--project=VoxPopuli_vs2013.sln",
+            "--check-level=exhaustive",
+            "--max-ctu-depth=10",
+            "--cppcheck-build-dir=build-dir",
+            "--enable=all",
+            "--std=c++03",
+            "--verbose",
+            "--check-library",
+            "--inline-suppr",
+            "--platform=win32W",
+            "--xml"
+          ) -RedirectStandardOutput "cppcheck_stdout.txt" -RedirectStandardError "cppcheck.xml" -PassThru -NoNewWindow
+          
+          # Wait for process with timeout
+          $timeoutMs = 21000 * 1000  # Convert to milliseconds
+          $finished = $process.WaitForExit($timeoutMs)
+          
+          if ($finished) {
+            $exitCode = $process.ExitCode
+            Write-Output "Cppcheck completed with exit code: $exitCode"
+          } else {
+            Write-Output "Cppcheck timed out after 21000 seconds"
+            $process.Kill()
+            $exitCode = $env:TIMEOUT_EXIT_CODE
+          }
+          
+          Write-Output "=== STDOUT ==="
+          if (Test-Path "cppcheck_stdout.txt") { Get-Content "cppcheck_stdout.txt" }
+          Write-Output "=== STDERR (XML) ==="
+          if (Test-Path "cppcheck.xml") { Get-Content "cppcheck.xml" }
+          
+          if ($exitCode -eq $env:TIMEOUT_EXIT_CODE) {
+            Write-Output "exit_code=$env:TIMEOUT_EXIT_CODE" >> $env:GITHUB_ENV
+          } elseif ($exitCode -eq 1) {
+            Write-Output "exit_code=1" >> $env:GITHUB_ENV
+          } else {
+            Write-Output "exit_code=0" >> $env:GITHUB_ENV
+          }
         env:
           CPU_COUNT: ${{ steps.cpu-info.outputs.cpu_count }}
 
