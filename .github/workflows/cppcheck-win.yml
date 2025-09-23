@@ -175,8 +175,25 @@ jobs:
         id: cppcheck
         shell: cmd
         run: |
-          timeout /t 21000 cppcheck -j %CPU_COUNT% --project=VoxPopuli_vs2013.sln --check-level=exhaustive --max-ctu-depth=10 --cppcheck-build-dir=build-dir --enable=all --std=c++03 --verbose --check-library --inline-suppr --platform=win32W --xml 2> cppcheck.xml
-          if %ERRORLEVEL% equ 1 (
+          echo "Starting cppcheck analysis..."
+          echo "Working directory: %CD%"
+          echo "CPU count: %CPU_COUNT%"
+          echo "Checking if solution file exists..."
+          if exist "VoxPopuli_vs2013.sln" (
+            echo "Solution file found"
+          ) else (
+            echo "Solution file NOT found"
+            dir *.sln
+          )
+          echo "Running cppcheck..."
+          timeout /t 21000 cppcheck -j %CPU_COUNT% --project=VoxPopuli_vs2013.sln --check-level=exhaustive --max-ctu-depth=10 --cppcheck-build-dir=build-dir --enable=all --std=c++03 --verbose --check-library --inline-suppr --platform=win32W --xml 2> cppcheck.xml 1> cppcheck_stdout.txt
+          set CPPCHECK_EXIT=%ERRORLEVEL%
+          echo "Cppcheck exit code: %CPPCHECK_EXIT%"
+          echo "=== STDOUT ==="
+          if exist "cppcheck_stdout.txt" type cppcheck_stdout.txt
+          echo "=== STDERR (XML) ==="
+          if exist "cppcheck.xml" type cppcheck.xml
+          if %CPPCHECK_EXIT% equ 1 (
             echo exit_code=1 >> %GITHUB_ENV%
           ) else (
             echo exit_code=0 >> %GITHUB_ENV%
