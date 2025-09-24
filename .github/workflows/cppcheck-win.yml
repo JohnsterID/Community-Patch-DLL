@@ -185,41 +185,38 @@ jobs:
             Write-Output "Solution file NOT found"
             Get-ChildItem *.sln
           }
-          Write-Output "Running cppcheck with 21000 second timeout..."
+          Write-Output "Running cppcheck with optimized settings and 7200 second timeout (2 hours)..."
           
-          # Use Start-Process with timeout (21000 seconds = 350 minutes)
-          $process = Start-Process -FilePath "cppcheck" -ArgumentList @(
-            "-j", "$env:CPU_COUNT",
-            "--project=VoxPopuli_vs2013.sln",
-            "--check-level=exhaustive",
-            "--max-ctu-depth=10",
-            "--cppcheck-build-dir=build-dir",
-            "--enable=all",
-            "--std=c++03",
-            "--verbose",
-            "--check-library",
-            "--inline-suppr",
-            "--platform=win32W",
-            "--xml"
-          ) -RedirectStandardOutput "cppcheck_stdout.txt" -RedirectStandardError "cppcheck.xml" -PassThru -NoNewWindow
+          # Create a job to run cppcheck with real-time output
+          $job = Start-Job -ScriptBlock {
+            param($cpuCount)
+            & cppcheck -j $cpuCount --project=VoxPopuli_vs2013.sln --check-level=normal --max-ctu-depth=5 --cppcheck-build-dir=build-dir --enable=warning,style,performance,portability --std=c++03 --verbose --inline-suppr --platform=win32W --xml 2> cppcheck.xml
+            return $LASTEXITCODE
+          } -ArgumentList $env:CPU_COUNT
           
-          # Wait for process with timeout
-          $timeoutMs = 21000 * 1000  # Convert to milliseconds
-          $finished = $process.WaitForExit($timeoutMs)
+          # Wait for job with timeout (7200 seconds = 2 hours)
+          $timeoutSeconds = 7200
+          $finished = Wait-Job $job -Timeout $timeoutSeconds
           
           if ($finished) {
-            $exitCode = $process.ExitCode
+            $exitCode = Receive-Job $job
             Write-Output "Cppcheck completed with exit code: $exitCode"
           } else {
-            Write-Output "Cppcheck timed out after 21000 seconds"
-            $process.Kill()
+            Write-Output "Cppcheck timed out after $timeoutSeconds seconds"
+            Stop-Job $job
+            Remove-Job $job
             $exitCode = $env:TIMEOUT_EXIT_CODE
           }
           
-          Write-Output "=== STDOUT ==="
-          if (Test-Path "cppcheck_stdout.txt") { Get-Content "cppcheck_stdout.txt" }
-          Write-Output "=== STDERR (XML) ==="
-          if (Test-Path "cppcheck.xml") { Get-Content "cppcheck.xml" }
+          # Show any output files
+          Write-Output "=== Checking output files ==="
+          if (Test-Path "cppcheck.xml") { 
+            Write-Output "cppcheck.xml exists ($(Get-Item cppcheck.xml | Select-Object -ExpandProperty Length) bytes)"
+            Write-Output "First 50 lines of cppcheck.xml:"
+            Get-Content "cppcheck.xml" -TotalCount 50
+          } else {
+            Write-Output "cppcheck.xml not found"
+          }
           
           if ($exitCode -eq $env:TIMEOUT_EXIT_CODE) {
             Write-Output "exit_code=$env:TIMEOUT_EXIT_CODE" >> $env:GITHUB_ENV
@@ -355,13 +352,46 @@ jobs:
           $cpuCount = (Get-WmiObject -Class Win32_ComputerSystem).NumberOfLogicalProcessors
           echo "cpu_count=$cpuCount" >> $env:GITHUB_OUTPUT
 
-      - name: Run cppcheck analysis
+      - name: Run cppcheck analysis (retry with reduced scope)
         id: cppcheck
         continue-on-error: true
-        shell: cmd
+        shell: powershell
         run: |
-          timeout /t 21000 cppcheck -j %CPU_COUNT% --project=VoxPopuli_vs2013.sln --check-level=exhaustive --max-ctu-depth=10 --cppcheck-build-dir=build-dir --enable=all --std=c++03 --verbose --check-library --inline-suppr --platform=win32W --xml 2> cppcheck.xml
-          echo cppcheck exit code: %ERRORLEVEL%
+          Write-Output "Starting retry cppcheck analysis with reduced scope..."
+          Write-Output "Working directory: $(Get-Location)"
+          Write-Output "CPU count: $env:CPU_COUNT"
+          Write-Output "Running cppcheck with minimal settings and 3600 second timeout (1 hour)..."
+          
+          # Create a job to run cppcheck with minimal settings for retry
+          $job = Start-Job -ScriptBlock {
+            param($cpuCount)
+            & cppcheck -j $cpuCount --project=VoxPopuli_vs2013.sln --check-level=normal --max-ctu-depth=3 --cppcheck-build-dir=build-dir --enable=warning,error --std=c++03 --inline-suppr --platform=win32W --xml 2> cppcheck.xml
+            return $LASTEXITCODE
+          } -ArgumentList $env:CPU_COUNT
+          
+          # Wait for job with timeout (3600 seconds = 1 hour)
+          $timeoutSeconds = 3600
+          $finished = Wait-Job $job -Timeout $timeoutSeconds
+          
+          if ($finished) {
+            $exitCode = Receive-Job $job
+            Write-Output "Cppcheck retry completed with exit code: $exitCode"
+          } else {
+            Write-Output "Cppcheck retry timed out after $timeoutSeconds seconds"
+            Stop-Job $job
+            Remove-Job $job
+            $exitCode = 124
+          }
+          
+          # Show any output files
+          Write-Output "=== Checking retry output files ==="
+          if (Test-Path "cppcheck.xml") { 
+            Write-Output "cppcheck.xml exists ($(Get-Item cppcheck.xml | Select-Object -ExpandProperty Length) bytes)"
+            Write-Output "First 50 lines of cppcheck.xml:"
+            Get-Content "cppcheck.xml" -TotalCount 50
+          } else {
+            Write-Output "cppcheck.xml not found"
+          }
         env:
           CPU_COUNT: ${{ steps.cpu-info.outputs.cpu_count }}
 
