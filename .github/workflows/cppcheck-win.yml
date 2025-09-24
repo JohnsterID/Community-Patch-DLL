@@ -188,11 +188,13 @@ jobs:
           Write-Output "Running cppcheck with exhaustive settings and 21000 second timeout (5.8 hours)..."
           
           # Create a job to run cppcheck with real-time output
+          $currentDir = Get-Location
           $job = Start-Job -ScriptBlock {
-            param($cpuCount)
+            param($cpuCount, $workingDir)
+            Set-Location $workingDir
             & cppcheck -j $cpuCount --project=VoxPopuli_vs2013.sln --check-level=exhaustive --max-ctu-depth=10 --cppcheck-build-dir=build-dir --enable=all --std=c++03 --verbose --check-library --inline-suppr --platform=win32W --xml 2> cppcheck.xml
             return $LASTEXITCODE
-          } -ArgumentList $env:CPU_COUNT
+          } -ArgumentList $env:CPU_COUNT, $currentDir
           
           # Wait for job with timeout (21000 seconds = 5.8 hours)
           $timeoutSeconds = 21000
@@ -363,11 +365,13 @@ jobs:
           Write-Output "Running cppcheck with exhaustive settings and 21000 second timeout (5.8 hours)..."
           
           # Create a job to run cppcheck with same exhaustive settings for retry
+          $currentDir = Get-Location
           $job = Start-Job -ScriptBlock {
-            param($cpuCount)
+            param($cpuCount, $workingDir)
+            Set-Location $workingDir
             & cppcheck -j $cpuCount --project=VoxPopuli_vs2013.sln --check-level=exhaustive --max-ctu-depth=10 --cppcheck-build-dir=build-dir --enable=all --std=c++03 --verbose --check-library --inline-suppr --platform=win32W --xml 2> cppcheck.xml
             return $LASTEXITCODE
-          } -ArgumentList $env:CPU_COUNT
+          } -ArgumentList $env:CPU_COUNT, $currentDir
           
           # Wait for job with timeout (21000 seconds = 5.8 hours)
           $timeoutSeconds = 21000
