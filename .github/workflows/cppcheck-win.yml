@@ -185,17 +185,17 @@ jobs:
             Write-Output "Solution file NOT found"
             Get-ChildItem *.sln
           }
-          Write-Output "Running cppcheck with optimized settings and 7200 second timeout (2 hours)..."
+          Write-Output "Running cppcheck with exhaustive settings and 21000 second timeout (5.8 hours)..."
           
           # Create a job to run cppcheck with real-time output
           $job = Start-Job -ScriptBlock {
             param($cpuCount)
-            & cppcheck -j $cpuCount --project=VoxPopuli_vs2013.sln --check-level=normal --max-ctu-depth=5 --cppcheck-build-dir=build-dir --enable=warning,style,performance,portability --std=c++03 --verbose --inline-suppr --platform=win32W --xml 2> cppcheck.xml
+            & cppcheck -j $cpuCount --project=VoxPopuli_vs2013.sln --check-level=exhaustive --max-ctu-depth=10 --cppcheck-build-dir=build-dir --enable=all --std=c++03 --verbose --check-library --inline-suppr --platform=win32W --xml 2> cppcheck.xml
             return $LASTEXITCODE
           } -ArgumentList $env:CPU_COUNT
           
-          # Wait for job with timeout (7200 seconds = 2 hours)
-          $timeoutSeconds = 7200
+          # Wait for job with timeout (21000 seconds = 5.8 hours)
+          $timeoutSeconds = 21000
           $finished = Wait-Job $job -Timeout $timeoutSeconds
           
           if ($finished) {
@@ -357,20 +357,20 @@ jobs:
         continue-on-error: true
         shell: powershell
         run: |
-          Write-Output "Starting retry cppcheck analysis with reduced scope..."
+          Write-Output "Starting retry cppcheck analysis with same exhaustive settings..."
           Write-Output "Working directory: $(Get-Location)"
           Write-Output "CPU count: $env:CPU_COUNT"
-          Write-Output "Running cppcheck with minimal settings and 3600 second timeout (1 hour)..."
+          Write-Output "Running cppcheck with exhaustive settings and 21000 second timeout (5.8 hours)..."
           
-          # Create a job to run cppcheck with minimal settings for retry
+          # Create a job to run cppcheck with same exhaustive settings for retry
           $job = Start-Job -ScriptBlock {
             param($cpuCount)
-            & cppcheck -j $cpuCount --project=VoxPopuli_vs2013.sln --check-level=normal --max-ctu-depth=3 --cppcheck-build-dir=build-dir --enable=warning,error --std=c++03 --inline-suppr --platform=win32W --xml 2> cppcheck.xml
+            & cppcheck -j $cpuCount --project=VoxPopuli_vs2013.sln --check-level=exhaustive --max-ctu-depth=10 --cppcheck-build-dir=build-dir --enable=all --std=c++03 --verbose --check-library --inline-suppr --platform=win32W --xml 2> cppcheck.xml
             return $LASTEXITCODE
           } -ArgumentList $env:CPU_COUNT
           
-          # Wait for job with timeout (3600 seconds = 1 hour)
-          $timeoutSeconds = 3600
+          # Wait for job with timeout (21000 seconds = 5.8 hours)
+          $timeoutSeconds = 21000
           $finished = Wait-Job $job -Timeout $timeoutSeconds
           
           if ($finished) {
