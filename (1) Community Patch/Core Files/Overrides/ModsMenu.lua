@@ -60,7 +60,9 @@ Controls.MultiPlayerButton:RegisterCallback( Mouse.eLClick, OnMultiPlayer );
 function OnWorldBuilder()
 	UIManager:QueuePopup( Controls.WorldBuilderScreen, PopupPriority.eUtmost );
 end
-Controls.WorldBuilderButton:RegisterCallback( Mouse.eLClick, OnWorldBuilder );
+if Controls.WorldBuilderButton then
+	Controls.WorldBuilderButton:RegisterCallback( Mouse.eLClick, OnWorldBuilder );
+end
 
 ----------------------------------------------------------------        
 ----------------------------------------------------------------        

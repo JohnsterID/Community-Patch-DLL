@@ -67,7 +67,9 @@ Controls.HotSeatButton:RegisterCallback( Mouse.eLClick, OnHotSeat );
 function OnPitBoss()
 	UIManager:QueuePopup( Controls.PitBossScreen, PopupPriority.eUtmost );
 end
-Controls.PitBossButton:RegisterCallback( Mouse.eLClick, OnPitBoss );
+if Controls.PitBossButton then
+	Controls.PitBossButton:RegisterCallback( Mouse.eLClick, OnPitBoss );
+end
 
 ----------------------------------------------------------------        
 ----------------------------------------------------------------        

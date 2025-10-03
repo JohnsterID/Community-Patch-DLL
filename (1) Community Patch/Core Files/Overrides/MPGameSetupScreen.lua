@@ -79,16 +79,7 @@ function OnStart()
 			if (PreGame.IsHotSeatGame()) then
 				local bResult, bPending = Matchmaking.HostHotSeatGame( strGameName, worldInfo.DefaultPlayers );
 			else
-				-- *** MINIMAL DEBUG: Show the critical gap ***
-				local activeModsBefore = Modding.GetActivatedMods()
-				local modCountBefore = activeModsBefore and #activeModsBefore or 0
-				print(string.format("[TIMING] MPGameSetupScreen: BEFORE HostLANGame - %d mods active", modCountBefore))
-				
 				local bResult, bPending = Matchmaking.HostLANGame( strGameName, worldInfo.DefaultPlayers );
-				
-				local activeModsAfter = Modding.GetActivatedMods()
-				local modCountAfter = activeModsAfter and #activeModsAfter or 0
-				print(string.format("[TIMING] MPGameSetupScreen: AFTER HostLANGame - %d mods active", modCountAfter))
 			end
 		end
 	end
