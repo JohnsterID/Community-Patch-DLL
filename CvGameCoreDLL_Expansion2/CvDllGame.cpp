@@ -596,7 +596,7 @@ bool endsWith(const char* str, const char* ending)
 #ifdef WIN32
 // Original function pointer for Modding::System::DeactivateMods
 typedef int (__cdecl *DeactivateModsFunc)();
-DeactivateModsFunc g_originalDeactivateMods = nullptr;
+DeactivateModsFunc g_originalDeactivateMods = NULL;
 
 // Hook function that preserves multiplayer-compatible mods
 int __cdecl HookedDeactivateMods()
