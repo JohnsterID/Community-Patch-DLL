@@ -33,8 +33,8 @@ CvDllGame::CvDllGame(CvGame* pGame)
 		fclose(markerFile);
 	}
 	
-	// Try to install binary hooks early, during DLL construction
-	InstallBinaryHooksEarly();
+	// Don't install hooks during construction - wait until game is fully loaded
+	// InstallBinaryHooksEarly(); // Moved to delayed installation
 }
 //------------------------------------------------------------------------------
 CvDllGame::~CvDllGame()
@@ -505,6 +505,9 @@ void CvDllGame::UnitIsMoving()
 //------------------------------------------------------------------------------
 void CvDllGame::Update()
 {
+	// Check if we need to install hooks now that game is running
+	CheckAndInstallHooks();
+	
 	m_pGame->update();
 }
 //------------------------------------------------------------------------------
@@ -613,6 +616,54 @@ DeactivateModsFunc g_originalDeactivateMods = NULL;
 typedef bool (__thiscall *BulkDeactivateFunc)(void* this_ptr);
 BulkDeactivateFunc g_originalBulkDeactivate = NULL;
 
+// Storage for original bytes and trampolines
+struct HookInfo {
+	DWORD originalAddress;
+	unsigned char originalBytes[5];
+	void* trampolineAddress;
+	bool isInstalled;
+};
+
+HookInfo g_individualHookInfo[3] = {0}; // DX9, DX11, Tablet
+HookInfo g_bulkHookInfo[3] = {0}; // DX9, DX11, Tablet
+
+// Delayed hook installation - only install when game is ready
+bool g_hooksInstalled = false;
+bool g_gameFullyLoaded = false;
+
+// Function to check if game is ready and install hooks
+void CheckAndInstallHooks()
+{
+	if (g_hooksInstalled) {
+		return; // Already installed
+	}
+	
+	// Check if game is accessible
+	try {
+		CvGame* pGame = GC.getGamePointer();
+		if (pGame != NULL) {
+			// Game is accessible, we can install hooks now
+			g_gameFullyLoaded = true;
+			
+			FILE* logFile = NULL;
+			if (fopen_s(&logFile, "Logs/MOD_HOOK_DEBUG.log", "a") == 0 && logFile != NULL) {
+				fprintf(logFile, "[MOD_HOOK] Game is now accessible, installing hooks...\n");
+				fflush(logFile);
+				fclose(logFile);
+			}
+			
+			// Install hooks now that game is ready
+			CvDllGame* dllGame = static_cast<CvDllGame*>(gDLL->GetGameCore());
+			if (dllGame) {
+				dllGame->InstallBinaryHooksEarly();
+				g_hooksInstalled = true;
+			}
+		}
+	} catch (...) {
+		// Game not ready yet, try again later
+	}
+}
+
 // SQLite function hooks to catch ANY database operations
 typedef int (__cdecl *sqlite3_exec_func)(void* db, const char* sql, int (*callback)(void*,int,char**,char**), void* arg, char** errmsg);
 typedef int (__cdecl *sqlite3_prepare_func)(void* db, const char* zSql, int nByte, void** ppStmt, const char** pzTail);
@@ -643,54 +694,66 @@ int __cdecl HookedDeactivateMods()
 	bool isNetworkMP = false;
 	bool isHotSeat = false;
 	bool isPbem = false;
+	bool gameStateAccessible = false;
 	
 	try {
-		isNetworkMP = GC.getGame().isNetworkMultiPlayer();
-		isHotSeat = GC.getGame().isHotSeat();
-		isPbem = GC.getGame().isPbem();
-	} catch (...) {
-		// Game state might not be initialized yet
-		if (logFile) {
-			fprintf(logFile, "[MOD_HOOK] Game state not accessible, assuming multiplayer\n");
-			fflush(logFile);
+		CvGame* pGame = GC.getGamePointer();
+		if (pGame != NULL) {
+			isNetworkMP = pGame->isNetworkMultiPlayer();
+			isHotSeat = pGame->isHotSeat();
+			isPbem = pGame->isPbem();
+			gameStateAccessible = true;
 		}
+	} catch (...) {
+		// Game state might not be initialized yet - this is likely during startup
+		gameStateAccessible = false;
 	}
+	
+	// If game state is not accessible, we're probably during startup - allow normal operation
+	if (!gameStateAccessible) {
+		if (logFile) {
+			fprintf(logFile, "[MOD_HOOK] Game state not accessible - likely during startup, allowing normal mod operation\n");
+			fflush(logFile);
+			fclose(logFile);
+		}
+		
+		// Call original function during startup
+		if (g_originalDeactivateMods) {
+			return g_originalDeactivateMods();
+		}
+		return 1; // Fallback success
+	}
+	
+	// Game state is accessible - check if we're in multiplayer
+	bool isMultiplayer = (isNetworkMP || isHotSeat || isPbem);
 	
 	// Log the detected game mode
 	if (logFile) {
 		if (isNetworkMP) {
-			fprintf(logFile, "[MOD_HOOK] Network multiplayer detected - preserving mods\n");
+			fprintf(logFile, "[MOD_HOOK] Network multiplayer detected - BLOCKING mod deactivation\n");
 		} else if (isHotSeat) {
-			fprintf(logFile, "[MOD_HOOK] HotSeat detected - preserving mods\n");
+			fprintf(logFile, "[MOD_HOOK] HotSeat detected - BLOCKING mod deactivation\n");
 		} else if (isPbem) {
-			fprintf(logFile, "[MOD_HOOK] PBEM detected - preserving mods\n");
+			fprintf(logFile, "[MOD_HOOK] PBEM detected - BLOCKING mod deactivation\n");
 		} else {
-			fprintf(logFile, "[MOD_HOOK] Single player or unknown mode detected\n");
+			fprintf(logFile, "[MOD_HOOK] Single player detected - allowing normal mod operation\n");
 		}
-		
-		// For now, always preserve mods to test if the hook is working
-		fprintf(logFile, "[MOD_HOOK] Preserving mods (bypassing deactivation)\n");
 		fflush(logFile);
 		fclose(logFile);
 	}
 	
-	return 1; // Return success without deactivating mods
-	
-	// Original logic (commented out for testing):
-	/*
-	if (isNetworkMP || isHotSeat || isPbem)
-	{
+	if (isMultiplayer) {
 		// In multiplayer, we skip the deactivation to preserve mod compatibility
 		// This prevents the problematic "UPDATE Mods Set Activated = 0" SQL query
 		return 1; // Return success without deactivating mods
 	}
 	
 	// In single player, call the original function
-	if (g_originalDeactivateMods)
+	if (g_originalDeactivateMods) {
 		return g_originalDeactivateMods();
+	}
 	
 	return 1; // Fallback success
-	*/
 }
 
 // Hook function that intercepts bulk mod deactivation
@@ -713,21 +776,48 @@ bool __fastcall HookedBulkDeactivate(void* this_ptr, void* edx)
 	
 	// Check if we're in multiplayer mode
 	bool isMultiplayer = false;
+	bool gameStateAccessible = false;
 	
 	// Try to get the game instance to check multiplayer status
-	CvGame* pGame = GC.getGamePointer();
-	if (pGame != NULL) {
-		isMultiplayer = pGame->isNetworkMultiPlayer() || pGame->isHotSeat() || pGame->isPbem();
-		
+	try {
+		CvGame* pGame = GC.getGamePointer();
+		if (pGame != NULL) {
+			isMultiplayer = pGame->isNetworkMultiPlayer() || pGame->isHotSeat() || pGame->isPbem();
+			gameStateAccessible = true;
+			
+			if (logFile) {
+				fprintf(logFile, "[MOD_HOOK] HookedBulkDeactivate: Multiplayer status = %s\n", 
+					isMultiplayer ? "TRUE" : "FALSE");
+				fflush(logFile);
+			}
+			if (debugFile) {
+				fprintf(debugFile, "Multiplayer status = %s\n", isMultiplayer ? "TRUE" : "FALSE");
+				fflush(debugFile);
+			}
+		}
+	} catch (...) {
+		// Game state might not be initialized yet - this is likely during startup
+		gameStateAccessible = false;
+	}
+	
+	// If game state is not accessible, we're probably during startup - allow normal operation
+	if (!gameStateAccessible) {
 		if (logFile) {
-			fprintf(logFile, "[MOD_HOOK] HookedBulkDeactivate: Multiplayer status = %s\n", 
-				isMultiplayer ? "TRUE" : "FALSE");
+			fprintf(logFile, "[MOD_HOOK] HookedBulkDeactivate: Game state not accessible - likely during startup, allowing normal operation\n");
 			fflush(logFile);
+			fclose(logFile);
 		}
 		if (debugFile) {
-			fprintf(debugFile, "Multiplayer status = %s\n", isMultiplayer ? "TRUE" : "FALSE");
+			fprintf(debugFile, "Game state not accessible - allowing normal bulk operation\n");
 			fflush(debugFile);
+			fclose(debugFile);
 		}
+		
+		// Call original function during startup
+		if (g_originalBulkDeactivate) {
+			return g_originalBulkDeactivate(this_ptr);
+		}
+		return true; // Fallback success
 	}
 	
 	if (isMultiplayer) {
