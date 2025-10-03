@@ -1593,6 +1593,27 @@ function UpdateOptions()
 			end
 		end
 		
+		-- Add Active Mods section
+		local mods = Modding.GetEnabledModsByActivationOrder();
+		if #mods > 0 then
+			-- Add a separator/header for mods
+			local controlTable = g_AdvancedOptionIM:GetInstance();
+			g_AdvancedOptionsList[count] = controlTable;
+			controlTable.Text:SetText("--- Active Mods ---");
+			count = count + 1;
+			
+			-- Add each active mod
+			for i, v in ipairs(mods) do
+				local displayName = Modding.GetModProperty(v.ModID, v.Version, "Name");
+				if displayName and displayName ~= "" then
+					local controlTable = g_AdvancedOptionIM:GetInstance();
+					g_AdvancedOptionsList[count] = controlTable;
+					controlTable.Text:SetText(displayName .. " (v." .. v.Version .. ")");
+					count = count + 1;
+				end
+			end
+		end
+		
 		-- Update scrollable panel
 		Controls.AdvancedOptions:CalculateSize();
 		Controls.GameOptionsSummary:CalculateInternalSize();
