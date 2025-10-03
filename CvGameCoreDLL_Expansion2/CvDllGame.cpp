@@ -613,6 +613,12 @@ DeactivateModsFunc g_originalDeactivateMods = NULL;
 typedef bool (__thiscall *BulkDeactivateFunc)(void* this_ptr);
 BulkDeactivateFunc g_originalBulkDeactivate = NULL;
 
+// SQLite function hooks to catch ANY database operations
+typedef int (__cdecl *sqlite3_exec_func)(void* db, const char* sql, int (*callback)(void*,int,char**,char**), void* arg, char** errmsg);
+typedef int (__cdecl *sqlite3_prepare_func)(void* db, const char* zSql, int nByte, void** ppStmt, const char** pzTail);
+sqlite3_exec_func g_original_sqlite3_exec = NULL;
+sqlite3_prepare_func g_original_sqlite3_prepare = NULL;
+
 // Hook function that intercepts individual mod disabling
 // This prevents "UPDATE Mods Set Enabled = 0 WHERE ModID = ?" during multiplayer setup
 int __cdecl HookedDeactivateMods()
@@ -753,6 +759,138 @@ bool __fastcall HookedBulkDeactivate(void* this_ptr, void* edx)
 	}
 	
 	return true; // Fallback success
+}
+
+// SQLite hook functions to monitor ALL database operations
+int __cdecl HookedSqlite3Exec(void* db, const char* sql, int (*callback)(void*,int,char**,char**), void* arg, char** errmsg)
+{
+	FILE* logFile = NULL;
+	FILE* debugFile = NULL;
+
+	if (fopen_s(&logFile, "Logs/MOD_HOOK_DEBUG.log", "a") == 0 && logFile != NULL) {
+		fprintf(logFile, "[SQLITE_HOOK] sqlite3_exec called with SQL: %s\n", sql ? sql : "NULL");
+		fflush(logFile);
+	}
+
+	if (fopen_s(&debugFile, "SQLITE_EXECUTION_DEBUG.txt", "a") == 0 && debugFile != NULL) {
+		fprintf(debugFile, "SQLITE3_EXEC: %s\n", sql ? sql : "NULL");
+		fflush(debugFile);
+	}
+
+	// Check if this is mod-related SQL
+	if (sql && (strstr(sql, "Mods") || strstr(sql, "mods") || strstr(sql, "Enabled") || strstr(sql, "Activated"))) {
+		// Check if we're in multiplayer mode
+		CvGame* pGame = GC.getGamePointer();
+		bool isMultiplayer = false;
+		
+		if (pGame != NULL) {
+			isMultiplayer = pGame->isNetworkMultiPlayer() || pGame->isHotSeat() || pGame->isPbem();
+		}
+
+		if (logFile) {
+			fprintf(logFile, "[SQLITE_HOOK] MOD-RELATED SQL DETECTED! Multiplayer: %s\n", isMultiplayer ? "TRUE" : "FALSE");
+			fflush(logFile);
+		}
+		if (debugFile) {
+			fprintf(debugFile, "MOD-RELATED SQL! MP: %s\n", isMultiplayer ? "TRUE" : "FALSE");
+			fflush(debugFile);
+		}
+
+		if (isMultiplayer) {
+			if (logFile) {
+				fprintf(logFile, "[SQLITE_HOOK] BLOCKING mod-related SQL in multiplayer: %s\n", sql);
+				fflush(logFile);
+			}
+			if (debugFile) {
+				fprintf(debugFile, "BLOCKED: %s\n", sql);
+				fflush(debugFile);
+			}
+
+			// Close files
+			if (logFile) fclose(logFile);
+			if (debugFile) fclose(debugFile);
+
+			// Return success without executing the SQL
+			return 0; // SQLITE_OK
+		}
+	}
+
+	// Close files
+	if (logFile) fclose(logFile);
+	if (debugFile) fclose(debugFile);
+
+	// In single player or non-mod SQL, call the original function
+	if (g_original_sqlite3_exec) {
+		return g_original_sqlite3_exec(db, sql, callback, arg, errmsg);
+	}
+
+	return 0; // SQLITE_OK fallback
+}
+
+int __cdecl HookedSqlite3Prepare(void* db, const char* zSql, int nByte, void** ppStmt, const char** pzTail)
+{
+	FILE* logFile = NULL;
+	FILE* debugFile = NULL;
+
+	if (fopen_s(&logFile, "Logs/MOD_HOOK_DEBUG.log", "a") == 0 && logFile != NULL) {
+		fprintf(logFile, "[SQLITE_HOOK] sqlite3_prepare called with SQL: %s\n", zSql ? zSql : "NULL");
+		fflush(logFile);
+	}
+
+	if (fopen_s(&debugFile, "SQLITE_EXECUTION_DEBUG.txt", "a") == 0 && debugFile != NULL) {
+		fprintf(debugFile, "SQLITE3_PREPARE: %s\n", zSql ? zSql : "NULL");
+		fflush(debugFile);
+	}
+
+	// Check if this is mod-related SQL
+	if (zSql && (strstr(zSql, "Mods") || strstr(zSql, "mods") || strstr(zSql, "Enabled") || strstr(zSql, "Activated"))) {
+		// Check if we're in multiplayer mode
+		CvGame* pGame = GC.getGamePointer();
+		bool isMultiplayer = false;
+		
+		if (pGame != NULL) {
+			isMultiplayer = pGame->isNetworkMultiPlayer() || pGame->isHotSeat() || pGame->isPbem();
+		}
+
+		if (logFile) {
+			fprintf(logFile, "[SQLITE_HOOK] MOD-RELATED PREPARE DETECTED! Multiplayer: %s\n", isMultiplayer ? "TRUE" : "FALSE");
+			fflush(logFile);
+		}
+		if (debugFile) {
+			fprintf(debugFile, "MOD-RELATED PREPARE! MP: %s\n", isMultiplayer ? "TRUE" : "FALSE");
+			fflush(debugFile);
+		}
+
+		if (isMultiplayer) {
+			if (logFile) {
+				fprintf(logFile, "[SQLITE_HOOK] BLOCKING mod-related PREPARE in multiplayer: %s\n", zSql);
+				fflush(logFile);
+			}
+			if (debugFile) {
+				fprintf(debugFile, "BLOCKED PREPARE: %s\n", zSql);
+				fflush(debugFile);
+			}
+
+			// Close files
+			if (logFile) fclose(logFile);
+			if (debugFile) fclose(debugFile);
+
+			// Return success without preparing the statement
+			if (ppStmt) *ppStmt = NULL;
+			return 0; // SQLITE_OK
+		}
+	}
+
+	// Close files
+	if (logFile) fclose(logFile);
+	if (debugFile) fclose(debugFile);
+
+	// In single player or non-mod SQL, call the original function
+	if (g_original_sqlite3_prepare) {
+		return g_original_sqlite3_prepare(db, zSql, nByte, ppStmt, pzTail);
+	}
+
+	return 0; // SQLITE_OK fallback
 }
 
 void CvDllGame::HookDeactivateModsFunction(DWORD functionAddr)
@@ -912,6 +1050,84 @@ void CvDllGame::HookBulkDeactivateFunction(DWORD functionAddr)
 		fclose(debugFile);
 	}
 }
+
+void CvDllGame::HookSqliteFunction(const char* functionName, DWORD functionAddr, void* hookFunction, void** originalFunction)
+{
+	FILE* logFile = NULL;
+	FILE* debugFile = NULL;
+
+	if (fopen_s(&logFile, "Logs/MOD_HOOK_DEBUG.log", "a") == 0 && logFile != NULL) {
+		fprintf(logFile, "[SQLITE_HOOK] Attempting to hook %s at address 0x%08lX\n", functionName, functionAddr);
+		fflush(logFile);
+	}
+
+	if (fopen_s(&debugFile, "HOOK_INSTALL_DEBUG.txt", "a") == 0 && debugFile != NULL) {
+		fprintf(debugFile, "HookSqliteFunction called for %s with address 0x%08lX\n", functionName, functionAddr);
+		fflush(debugFile);
+	}
+
+	DWORD old_protect;
+	if (VirtualProtect((void*)functionAddr, 5, PAGE_EXECUTE_READWRITE, &old_protect))
+	{
+		if (logFile) {
+			fprintf(logFile, "[SQLITE_HOOK] VirtualProtect succeeded for %s, installing hook\n", functionName);
+			fflush(logFile);
+		}
+		if (debugFile) {
+			fprintf(debugFile, "VirtualProtect succeeded for %s, installing hook\n", functionName);
+			fflush(debugFile);
+		}
+
+		// Store original function pointer
+		*originalFunction = (void*)functionAddr;
+
+		// Create a JMP instruction to our hook function
+		DWORD hookAddr = (DWORD)hookFunction;
+		DWORD relativeAddr = hookAddr - functionAddr - 5;
+
+		if (logFile) {
+			fprintf(logFile, "[SQLITE_HOOK] %s hook function at 0x%08lX, relative addr: 0x%08lX\n", functionName, hookAddr, relativeAddr);
+			fflush(logFile);
+		}
+		if (debugFile) {
+			fprintf(debugFile, "%s hook function at 0x%08lX, relative addr: 0x%08lX\n", functionName, hookAddr, relativeAddr);
+			fflush(debugFile);
+		}
+
+		// Write JMP instruction (0xE9 followed by relative address)
+		*(unsigned char*)functionAddr = 0xE9;
+		*(DWORD*)(functionAddr + 1) = relativeAddr;
+
+		VirtualProtect((void*)functionAddr, 5, old_protect, &old_protect);
+
+		if (logFile) {
+			fprintf(logFile, "[SQLITE_HOOK] %s hook installation completed successfully\n", functionName);
+			fflush(logFile);
+		}
+		if (debugFile) {
+			fprintf(debugFile, "%s hook installation completed successfully\n", functionName);
+			fflush(debugFile);
+		}
+	}
+	else
+	{
+		if (logFile) {
+			fprintf(logFile, "[SQLITE_HOOK] VirtualProtect failed for %s - hook installation failed\n", functionName);
+			fflush(logFile);
+		}
+		if (debugFile) {
+			fprintf(debugFile, "VirtualProtect failed for %s - hook installation failed\n", functionName);
+			fflush(debugFile);
+		}
+	}
+
+	if (logFile) {
+		fclose(logFile);
+	}
+	if (debugFile) {
+		fclose(debugFile);
+	}
+}
 #endif
 
 void CvDllGame::StartModStatusMonitoring()
@@ -994,26 +1210,41 @@ void CvDllGame::InstallBinaryHooksEarly()
 		HMODULE hModule = GetModuleHandleA(NULL);
 		if (hModule)
 		{
+			// Get the actual base address of the loaded module
+			DWORD baseAddress = (DWORD)hModule;
+			
 			if (debugFile) {
-				fprintf(debugFile, "Got module handle, trying hook addresses\n");
+				fprintf(debugFile, "Got module handle at base 0x%08lX, calculating addresses\n", baseAddress);
 				fflush(debugFile);
 			}
 			
-			// Hook BOTH individual AND bulk mod deactivation functions to cover all scenarios
+			// Calculate addresses relative to actual base address
+			// These offsets are from reverse engineering (assuming base 0x00400000)
+			DWORD expectedBase = 0x00400000;
 			
 			// 1. Individual mod disable functions (Lua API: DisableMod) - "UPDATE Mods Set Enabled = 0 WHERE ModID = ?"
-			DWORD individualAddresses[] = {
-				0x007B9510,  // DX9 - sub_7B9510 (Lua: DisableMod)
-				0x007C1ED0,  // DX11 - sub_7C1ED0 (Lua: DisableMod)
-				0x007C2F80   // Tablet - sub_7C2F80 (Lua: DisableMod)
+			DWORD individualOffsets[] = {
+				0x007B9510 - expectedBase,  // DX9 offset
+				0x007C1ED0 - expectedBase,  // DX11 offset  
+				0x007C2F80 - expectedBase   // Tablet offset
 			};
 			
+			DWORD individualAddresses[3];
+			for (int i = 0; i < 3; i++) {
+				individualAddresses[i] = baseAddress + individualOffsets[i];
+			}
+			
 			// 2. Bulk mod deactivation functions - "BEGIN; UPDATE Mods Set Activated = 0; END;"
-			DWORD bulkAddresses[] = {
-				0x007B91F0,  // DX9 - sub_7B91F0 (bulk deactivation)
-				0x007C1BB0,  // DX11 - sub_7C1BB0 (bulk deactivation)
-				0x007C2C60   // Tablet - sub_7C2C60 (bulk deactivation)
+			DWORD bulkOffsets[] = {
+				0x007B91F0 - expectedBase,  // DX9 offset
+				0x007C1BB0 - expectedBase,  // DX11 offset
+				0x007C2C60 - expectedBase   // Tablet offset
 			};
+			
+			DWORD bulkAddresses[3];
+			for (int i = 0; i < 3; i++) {
+				bulkAddresses[i] = baseAddress + bulkOffsets[i];
+			}
 			
 			const char* types[] = { "DX9", "DX11", "Tablet" };
 			
@@ -1028,24 +1259,52 @@ void CvDllGame::InstallBinaryHooksEarly()
 				DWORD deactivateModsAddr = individualAddresses[i];
 				
 				if (logFile) {
-					fprintf(logFile, "[MOD_HOOK] InstallBinaryHooksEarly: Hooking %s individual mod disable function at 0x%08lX\n", 
-						types[i], deactivateModsAddr);
+					fprintf(logFile, "[MOD_HOOK] InstallBinaryHooksEarly: Calculated %s individual address: 0x%08lX (base: 0x%08lX + offset: 0x%08lX)\n", 
+						types[i], deactivateModsAddr, baseAddress, individualOffsets[i]);
 					fflush(logFile);
 				}
 				
 				if (debugFile) {
-					fprintf(debugFile, "Trying %s individual address 0x%08lX\n", types[i], deactivateModsAddr);
+					fprintf(debugFile, "Trying %s individual address 0x%08lX (base + 0x%08lX)\n", types[i], deactivateModsAddr, individualOffsets[i]);
 					fflush(debugFile);
 				}
 				
+				// Validate the address points to executable memory
 				if (deactivateModsAddr != 0)
 				{
-					if (debugFile) {
-						fprintf(debugFile, "Calling HookDeactivateModsFunction for %s individual\n", types[i]);
-						fflush(debugFile);
+					// Check if we can read the first few bytes (function prologue)
+					__try {
+						unsigned char firstBytes[5];
+						memcpy(firstBytes, (void*)deactivateModsAddr, 5);
+						
+						if (logFile) {
+							fprintf(logFile, "[MOD_HOOK] %s individual function bytes: %02X %02X %02X %02X %02X\n", 
+								types[i], firstBytes[0], firstBytes[1], firstBytes[2], firstBytes[3], firstBytes[4]);
+							fflush(logFile);
+						}
+						if (debugFile) {
+							fprintf(debugFile, "%s individual bytes: %02X %02X %02X %02X %02X\n", 
+								types[i], firstBytes[0], firstBytes[1], firstBytes[2], firstBytes[3], firstBytes[4]);
+							fflush(debugFile);
+						}
+						
+						if (debugFile) {
+							fprintf(debugFile, "Calling HookDeactivateModsFunction for %s individual\n", types[i]);
+							fflush(debugFile);
+						}
+						
+						HookDeactivateModsFunction(deactivateModsAddr);
 					}
-					
-					HookDeactivateModsFunction(deactivateModsAddr);
+					__except(EXCEPTION_EXECUTE_HANDLER) {
+						if (logFile) {
+							fprintf(logFile, "[MOD_HOOK] ERROR: Cannot read memory at %s individual address 0x%08lX\n", types[i], deactivateModsAddr);
+							fflush(logFile);
+						}
+						if (debugFile) {
+							fprintf(debugFile, "ERROR: Cannot read %s individual address 0x%08lX\n", types[i], deactivateModsAddr);
+							fflush(debugFile);
+						}
+					}
 				}
 			}
 			
@@ -1060,24 +1319,115 @@ void CvDllGame::InstallBinaryHooksEarly()
 				DWORD bulkDeactivateAddr = bulkAddresses[i];
 				
 				if (logFile) {
-					fprintf(logFile, "[MOD_HOOK] InstallBinaryHooksEarly: Hooking %s bulk mod deactivation function at 0x%08lX\n", 
-						types[i], bulkDeactivateAddr);
+					fprintf(logFile, "[MOD_HOOK] InstallBinaryHooksEarly: Calculated %s bulk address: 0x%08lX (base: 0x%08lX + offset: 0x%08lX)\n", 
+						types[i], bulkDeactivateAddr, baseAddress, bulkOffsets[i]);
 					fflush(logFile);
 				}
 				
 				if (debugFile) {
-					fprintf(debugFile, "Trying %s bulk address 0x%08lX\n", types[i], bulkDeactivateAddr);
+					fprintf(debugFile, "Trying %s bulk address 0x%08lX (base + 0x%08lX)\n", types[i], bulkDeactivateAddr, bulkOffsets[i]);
 					fflush(debugFile);
 				}
 				
+				// Validate the address points to executable memory
 				if (bulkDeactivateAddr != 0)
 				{
-					if (debugFile) {
-						fprintf(debugFile, "Calling HookBulkDeactivateFunction for %s bulk\n", types[i]);
-						fflush(debugFile);
+					// Check if we can read the first few bytes (function prologue)
+					__try {
+						unsigned char firstBytes[5];
+						memcpy(firstBytes, (void*)bulkDeactivateAddr, 5);
+						
+						if (logFile) {
+							fprintf(logFile, "[MOD_HOOK] %s bulk function bytes: %02X %02X %02X %02X %02X\n", 
+								types[i], firstBytes[0], firstBytes[1], firstBytes[2], firstBytes[3], firstBytes[4]);
+							fflush(logFile);
+						}
+						if (debugFile) {
+							fprintf(debugFile, "%s bulk bytes: %02X %02X %02X %02X %02X\n", 
+								types[i], firstBytes[0], firstBytes[1], firstBytes[2], firstBytes[3], firstBytes[4]);
+							fflush(debugFile);
+						}
+						
+						if (debugFile) {
+							fprintf(debugFile, "Calling HookBulkDeactivateFunction for %s bulk\n", types[i]);
+							fflush(debugFile);
+						}
+						
+						HookBulkDeactivateFunction(bulkDeactivateAddr);
+					}
+					__except(EXCEPTION_EXECUTE_HANDLER) {
+						if (logFile) {
+							fprintf(logFile, "[MOD_HOOK] ERROR: Cannot read memory at %s bulk address 0x%08lX\n", types[i], bulkDeactivateAddr);
+							fflush(logFile);
+						}
+						if (debugFile) {
+							fprintf(debugFile, "ERROR: Cannot read %s bulk address 0x%08lX\n", types[i], bulkDeactivateAddr);
+							fflush(debugFile);
+						}
+					}
+				}
+			}
+			
+			// 3. SQLite function hooks - catch ANY database operations
+			if (debugFile) {
+				fprintf(debugFile, "=== HOOKING SQLITE DATABASE FUNCTIONS ===\n");
+				fflush(debugFile);
+			}
+				
+				// We need to find sqlite3_exec and sqlite3_prepare addresses dynamically
+				// These are typically in sqlite3.dll or statically linked
+				HMODULE sqlite3Module = GetModuleHandleA("sqlite3.dll");
+				if (!sqlite3Module) {
+					// Try the main executable (statically linked SQLite)
+					sqlite3Module = hModule;
+				}
+				
+				if (sqlite3Module) {
+					// Try to get sqlite3_exec address
+					DWORD sqlite3_exec_addr = (DWORD)GetProcAddress(sqlite3Module, "sqlite3_exec");
+					if (sqlite3_exec_addr) {
+						if (logFile) {
+							fprintf(logFile, "[SQLITE_HOOK] Found sqlite3_exec at 0x%08lX\n", sqlite3_exec_addr);
+							fflush(logFile);
+						}
+						if (debugFile) {
+							fprintf(debugFile, "Hooking sqlite3_exec at 0x%08lX\n", sqlite3_exec_addr);
+							fflush(debugFile);
+						}
+						HookSqliteFunction("sqlite3_exec", sqlite3_exec_addr, (void*)HookedSqlite3Exec, (void**)&g_original_sqlite3_exec);
 					}
 					
-					HookBulkDeactivateFunction(bulkDeactivateAddr);
+					// Try to get sqlite3_prepare address
+					DWORD sqlite3_prepare_addr = (DWORD)GetProcAddress(sqlite3Module, "sqlite3_prepare");
+					if (sqlite3_prepare_addr) {
+						if (logFile) {
+							fprintf(logFile, "[SQLITE_HOOK] Found sqlite3_prepare at 0x%08lX\n", sqlite3_prepare_addr);
+							fflush(logFile);
+						}
+						if (debugFile) {
+							fprintf(debugFile, "Hooking sqlite3_prepare at 0x%08lX\n", sqlite3_prepare_addr);
+							fflush(debugFile);
+						}
+						HookSqliteFunction("sqlite3_prepare", sqlite3_prepare_addr, (void*)HookedSqlite3Prepare, (void**)&g_original_sqlite3_prepare);
+					}
+					
+					if (logFile) {
+						fprintf(logFile, "[SQLITE_HOOK] SQLite hook installation completed\n");
+						fflush(logFile);
+					}
+					if (debugFile) {
+						fprintf(debugFile, "SQLite hook installation completed\n");
+						fflush(debugFile);
+					}
+				} else {
+					if (logFile) {
+						fprintf(logFile, "[SQLITE_HOOK] Could not find SQLite module\n");
+						fflush(logFile);
+					}
+					if (debugFile) {
+						fprintf(debugFile, "Could not find SQLite module\n");
+						fflush(debugFile);
+					}
 				}
 			}
 		}
