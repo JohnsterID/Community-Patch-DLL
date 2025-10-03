@@ -718,6 +718,13 @@ void CvDllGame::HookDeactivateModsFunction(DWORD functionAddr)
 void CvDllGame::InitExeStuff()
 {
 	// Runtime interoperability layer for multiplayer synchronization features
+	
+	// Simple debug - create a marker file to confirm InitExeStuff is called
+	FILE* markerFile = NULL;
+	if (fopen_s(&markerFile, "INITEXESTUFF_CALLED.txt", "w") == 0 && markerFile != NULL) {
+		fprintf(markerFile, "InitExeStuff was called\n");
+		fclose(markerFile);
+	}
 	// 
 	// This function establishes communication with the host application to enable
 	// enhanced multiplayer functionality through standard Windows API calls.
