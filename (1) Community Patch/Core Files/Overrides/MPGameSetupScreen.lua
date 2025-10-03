@@ -252,3 +252,4 @@ end
 Events.SystemUpdateUI.Add( OnUpdateUI );
 
 AdjustScreenSize();
+RefreshModsDisplay();
