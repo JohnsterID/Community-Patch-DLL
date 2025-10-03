@@ -436,7 +436,11 @@
     <File md5="7DF4AF6E9D5F16CD06D0CD576615869F" import="1">Core Files/Overrides/LeagueOverview.lua</File>
     <File md5="D1B2B6362725A779E49BAD0C8366DE6A" import="1">Core Files/Overrides/LeagueOverview.xml</File>
     <File md5="125DBB3FDF354092B6DA2FADB20C5849" import="1">Core Files/Overrides/MPList.lua</File>
+    <File md5="d886fdb0dc9ac5d36b539f6c6ebf322d" import="1">Core Files/Overrides/MPGameSetupScreen.lua</File>
+    <File md5="56056a955c02e8ce5b69fad347435af3" import="1">Core Files/Overrides/MPGameSetupScreen.xml</File>
     <File md5="2BFE0E6D6EAE4917F5068B6084CF75A2" import="1">Core Files/Overrides/MPTurnPanel.lua</File>
+    <File md5="8068091687c907430b2c11fdf23c0070" import="1">Core Files/Overrides/ModsMenu.lua</File>
+    <File md5="e383cc5784a21bcb7251e18fc8a69a5b" import="1">Core Files/Overrides/MultiplayerSelect.lua</File>
     <File md5="A9FEDE41B8D28348DDD9FD51E905C096" import="1">Core Files/Overrides/NaturalWonderPopup.lua</File>
     <File md5="91DEEC22E933A63497BBDA0E5066D8D3" import="1">Core Files/Overrides/NewEraPopup.lua</File>
     <File md5="34AF515180770B3554A250F1D77329A1" import="1">Core Files/Overrides/PathHelpManager.lua</File>
