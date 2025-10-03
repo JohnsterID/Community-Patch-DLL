@@ -614,9 +614,18 @@ int __cdecl HookedDeactivateMods()
 {
 	// Debug: Write to a log file that we can check
 	FILE* logFile = NULL;
+	FILE* debugFile = NULL;
+	
 	if (fopen_s(&logFile, "Logs/MOD_HOOK_DEBUG.log", "a") == 0 && logFile != NULL) {
 		fprintf(logFile, "[MOD_HOOK] HookedDeactivateMods called\n");
 		fflush(logFile);
+	}
+	
+	// Also create a simple debug file to make it obvious the hook was called
+	if (fopen_s(&debugFile, "HOOK_EXECUTION_DEBUG.txt", "a") == 0 && debugFile != NULL) {
+		fprintf(debugFile, "HookedDeactivateMods called!\n");
+		fflush(debugFile);
+		fclose(debugFile);
 	}
 	
 	// Check game state
@@ -756,6 +765,12 @@ void CvDllGame::HookDeactivateModsFunction(DWORD functionAddr)
 void CvDllGame::InstallBinaryHooksEarly()
 {
 #ifdef WIN32
+	// Prevent multiple hook installations
+	static bool hooksInstalled = false;
+	if (hooksInstalled) {
+		return;
+	}
+	
 	// Install binary hooks early during DLL construction to catch multiplayer mod deactivation
 	FILE* logFile = NULL;
 	FILE* debugFile = NULL;
@@ -860,6 +875,9 @@ void CvDllGame::InstallBinaryHooksEarly()
 	if (debugFile) {
 		fclose(debugFile);
 	}
+	
+	// Mark hooks as installed to prevent repeated installations
+	hooksInstalled = true;
 #endif
 }
 
