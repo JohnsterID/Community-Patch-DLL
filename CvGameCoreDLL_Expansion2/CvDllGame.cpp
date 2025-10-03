@@ -29,6 +29,7 @@ CvDllGame::CvDllGame(CvGame* pGame)
 	FILE* markerFile = NULL;
 	if (fopen_s(&markerFile, "CVDLLGAME_CONSTRUCTOR_CALLED.txt", "w") == 0 && markerFile != NULL) {
 		fprintf(markerFile, "CvDllGame constructor was called\n");
+		fprintf(markerFile, "MOD_BIN_HOOKS = %s\n", MOD_BIN_HOOKS ? "true" : "false");
 		fclose(markerFile);
 	}
 	
@@ -676,9 +677,16 @@ void CvDllGame::HookDeactivateModsFunction(DWORD functionAddr)
 {
 	// Debug: Log hook installation attempt to file
 	FILE* logFile = NULL;
+	FILE* debugFile = NULL;
+	
 	if (fopen_s(&logFile, "Logs/MOD_HOOK_DEBUG.log", "a") == 0 && logFile != NULL) {
 		fprintf(logFile, "[MOD_HOOK] Attempting to hook DeactivateMods at address 0x%08X\n", functionAddr);
 		fflush(logFile);
+	}
+	
+	if (fopen_s(&debugFile, "HOOK_INSTALL_DEBUG.txt", "a") == 0 && debugFile != NULL) {
+		fprintf(debugFile, "HookDeactivateModsFunction called with address 0x%08lX\n", functionAddr);
+		fflush(debugFile);
 	}
 	
 	DWORD old_protect;
@@ -687,6 +695,10 @@ void CvDllGame::HookDeactivateModsFunction(DWORD functionAddr)
 		if (logFile) {
 			fprintf(logFile, "[MOD_HOOK] VirtualProtect succeeded, installing hook\n");
 			fflush(logFile);
+		}
+		if (debugFile) {
+			fprintf(debugFile, "VirtualProtect succeeded, installing hook\n");
+			fflush(debugFile);
 		}
 		
 		// Store original function pointer (first 5 bytes will be overwritten)
@@ -700,6 +712,10 @@ void CvDllGame::HookDeactivateModsFunction(DWORD functionAddr)
 			fprintf(logFile, "[MOD_HOOK] Hook function at 0x%08X, relative addr: 0x%08X\n", hookAddr, relativeAddr);
 			fflush(logFile);
 		}
+		if (debugFile) {
+			fprintf(debugFile, "Hook function at 0x%08lX, relative addr: 0x%08lX\n", hookAddr, relativeAddr);
+			fflush(debugFile);
+		}
 		
 		// Write JMP instruction (0xE9 followed by relative address)
 		*(unsigned char*)functionAddr = 0xE9;
@@ -711,6 +727,10 @@ void CvDllGame::HookDeactivateModsFunction(DWORD functionAddr)
 			fprintf(logFile, "[MOD_HOOK] Hook installation completed successfully\n");
 			fflush(logFile);
 		}
+		if (debugFile) {
+			fprintf(debugFile, "Hook installation completed successfully\n");
+			fflush(debugFile);
+		}
 	}
 	else
 	{
@@ -718,10 +738,17 @@ void CvDllGame::HookDeactivateModsFunction(DWORD functionAddr)
 			fprintf(logFile, "[MOD_HOOK] VirtualProtect failed - hook installation failed\n");
 			fflush(logFile);
 		}
+		if (debugFile) {
+			fprintf(debugFile, "VirtualProtect failed - hook installation failed\n");
+			fflush(debugFile);
+		}
 	}
 	
 	if (logFile) {
 		fclose(logFile);
+	}
+	if (debugFile) {
+		fclose(debugFile);
 	}
 }
 #endif
@@ -731,18 +758,38 @@ void CvDllGame::InstallBinaryHooksEarly()
 #ifdef WIN32
 	// Install binary hooks early during DLL construction to catch multiplayer mod deactivation
 	FILE* logFile = NULL;
+	FILE* debugFile = NULL;
+	
+	// Try to create log in Logs directory
 	if (fopen_s(&logFile, "Logs/MOD_HOOK_DEBUG.log", "a") == 0 && logFile != NULL) {
 		fprintf(logFile, "[MOD_HOOK] InstallBinaryHooksEarly: MOD_BIN_HOOKS = %s\n", 
 			MOD_BIN_HOOKS ? "true" : "false");
 		fflush(logFile);
 	}
 	
+	// Also create a simple debug file in current directory as fallback
+	if (fopen_s(&debugFile, "HOOK_DEBUG.txt", "w") == 0 && debugFile != NULL) {
+		fprintf(debugFile, "InstallBinaryHooksEarly called\n");
+		fprintf(debugFile, "MOD_BIN_HOOKS = %s\n", MOD_BIN_HOOKS ? "true" : "false");
+		fflush(debugFile);
+	}
+	
 	if (MOD_BIN_HOOKS)
 	{
+		if (debugFile) {
+			fprintf(debugFile, "MOD_BIN_HOOKS is enabled, proceeding with hook installation\n");
+			fflush(debugFile);
+		}
+		
 		// Get module handle and detect binary type
 		HMODULE hModule = GetModuleHandleA(NULL);
 		if (hModule)
 		{
+			if (debugFile) {
+				fprintf(debugFile, "Got module handle, trying hook addresses\n");
+				fflush(debugFile);
+			}
+			
 			// Try all three binary variants - we don't know which one is running
 			DWORD addresses[] = {
 				0x007B91F0,  // DX9 - sub_7B91F0
@@ -761,12 +808,22 @@ void CvDllGame::InstallBinaryHooksEarly()
 					fflush(logFile);
 				}
 				
+				if (debugFile) {
+					fprintf(debugFile, "Trying %s address 0x%08lX\n", types[i], deactivateModsAddr);
+					fflush(debugFile);
+				}
+				
 				// Try to hook this address - HookDeactivateModsFunction will validate if it's correct
 				if (deactivateModsAddr != 0)
 				{
 					if (logFile) {
 						fprintf(logFile, "[MOD_HOOK] InstallBinaryHooksEarly: Attempting hook for %s\n", types[i]);
 						fflush(logFile);
+					}
+					
+					if (debugFile) {
+						fprintf(debugFile, "Calling HookDeactivateModsFunction for %s\n", types[i]);
+						fflush(debugFile);
 					}
 					
 					// Try the hook - if it fails, we'll try the next address
@@ -783,11 +840,25 @@ void CvDllGame::InstallBinaryHooksEarly()
 				fprintf(logFile, "[MOD_HOOK] InstallBinaryHooksEarly: Failed to get module handle\n");
 				fflush(logFile);
 			}
+			if (debugFile) {
+				fprintf(debugFile, "Failed to get module handle\n");
+				fflush(debugFile);
+			}
+		}
+	}
+	else
+	{
+		if (debugFile) {
+			fprintf(debugFile, "MOD_BIN_HOOKS is disabled - no hook installation\n");
+			fflush(debugFile);
 		}
 	}
 	
 	if (logFile) {
 		fclose(logFile);
+	}
+	if (debugFile) {
+		fclose(debugFile);
 	}
 #endif
 }
