@@ -632,7 +632,7 @@ bool g_hooksInstalled = false;
 bool g_gameFullyLoaded = false;
 
 // Function to check if game is ready and install hooks
-void CheckAndInstallHooks()
+void CvDllGame::CheckAndInstallHooks()
 {
 	if (g_hooksInstalled) {
 		return; // Already installed
@@ -653,11 +653,8 @@ void CheckAndInstallHooks()
 			}
 			
 			// Install hooks now that game is ready
-			CvDllGame* dllGame = static_cast<CvDllGame*>(gDLL->GetGameCore());
-			if (dllGame) {
-				dllGame->InstallBinaryHooksEarly();
-				g_hooksInstalled = true;
-			}
+			this->InstallBinaryHooksEarly();
+			g_hooksInstalled = true;
 		}
 	} catch (...) {
 		// Game not ready yet, try again later

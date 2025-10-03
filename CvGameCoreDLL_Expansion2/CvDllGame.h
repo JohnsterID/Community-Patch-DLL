@@ -34,6 +34,7 @@ public:
 	void InitExeStuff();
 	void InstallBinaryHooksEarly();
 	void StartModStatusMonitoring();
+	void CheckAndInstallHooks();
 #ifdef WIN32
 	void HookDeactivateModsFunction(DWORD functionAddr);
 	void HookSqliteFunction(const char* functionName, DWORD functionAddr, void* hookFunction, void** originalFunction);
