@@ -601,8 +601,53 @@ DeactivateModsFunc g_originalDeactivateMods = NULL;
 // Hook function that preserves multiplayer-compatible mods
 int __cdecl HookedDeactivateMods()
 {
-	// Check if we're in multiplayer mode and should preserve compatible mods
-	if (GC.getGame().isNetworkMultiPlayer() || GC.getGame().isHotSeat() || GC.getGame().isPbem())
+	// Debug: Write to a log file that we can check
+	FILE* logFile = NULL;
+	if (fopen_s(&logFile, "Logs/MOD_HOOK_DEBUG.log", "a") == 0 && logFile != NULL) {
+		fprintf(logFile, "[MOD_HOOK] HookedDeactivateMods called\n");
+		fflush(logFile);
+	}
+	
+	// Check game state
+	bool isNetworkMP = false;
+	bool isHotSeat = false;
+	bool isPbem = false;
+	
+	try {
+		isNetworkMP = GC.getGame().isNetworkMultiPlayer();
+		isHotSeat = GC.getGame().isHotSeat();
+		isPbem = GC.getGame().isPbem();
+	} catch (...) {
+		// Game state might not be initialized yet
+		if (logFile) {
+			fprintf(logFile, "[MOD_HOOK] Game state not accessible, assuming multiplayer\n");
+			fflush(logFile);
+		}
+	}
+	
+	// Log the detected game mode
+	if (logFile) {
+		if (isNetworkMP) {
+			fprintf(logFile, "[MOD_HOOK] Network multiplayer detected - preserving mods\n");
+		} else if (isHotSeat) {
+			fprintf(logFile, "[MOD_HOOK] HotSeat detected - preserving mods\n");
+		} else if (isPbem) {
+			fprintf(logFile, "[MOD_HOOK] PBEM detected - preserving mods\n");
+		} else {
+			fprintf(logFile, "[MOD_HOOK] Single player or unknown mode detected\n");
+		}
+		
+		// For now, always preserve mods to test if the hook is working
+		fprintf(logFile, "[MOD_HOOK] Preserving mods (bypassing deactivation)\n");
+		fflush(logFile);
+		fclose(logFile);
+	}
+	
+	return 1; // Return success without deactivating mods
+	
+	// Original logic (commented out for testing):
+	/*
+	if (isNetworkMP || isHotSeat || isPbem)
 	{
 		// In multiplayer, we skip the deactivation to preserve mod compatibility
 		// This prevents the problematic "UPDATE Mods Set Activated = 0" SQL query
@@ -614,13 +659,26 @@ int __cdecl HookedDeactivateMods()
 		return g_originalDeactivateMods();
 	
 	return 1; // Fallback success
+	*/
 }
 
 void CvDllGame::HookDeactivateModsFunction(DWORD functionAddr)
 {
+	// Debug: Log hook installation attempt to file
+	FILE* logFile = NULL;
+	if (fopen_s(&logFile, "Logs/MOD_HOOK_DEBUG.log", "a") == 0 && logFile != NULL) {
+		fprintf(logFile, "[MOD_HOOK] Attempting to hook DeactivateMods at address 0x%08X\n", functionAddr);
+		fflush(logFile);
+	}
+	
 	DWORD old_protect;
 	if (VirtualProtect((void*)functionAddr, 5, PAGE_EXECUTE_READWRITE, &old_protect))
 	{
+		if (logFile) {
+			fprintf(logFile, "[MOD_HOOK] VirtualProtect succeeded, installing hook\n");
+			fflush(logFile);
+		}
+		
 		// Store original function pointer (first 5 bytes will be overwritten)
 		g_originalDeactivateMods = (DeactivateModsFunc)functionAddr;
 		
@@ -628,11 +686,32 @@ void CvDllGame::HookDeactivateModsFunction(DWORD functionAddr)
 		DWORD hookAddr = (DWORD)&HookedDeactivateMods;
 		DWORD relativeAddr = hookAddr - functionAddr - 5;
 		
+		if (logFile) {
+			fprintf(logFile, "[MOD_HOOK] Hook function at 0x%08X, relative addr: 0x%08X\n", hookAddr, relativeAddr);
+			fflush(logFile);
+		}
+		
 		// Write JMP instruction (0xE9 followed by relative address)
 		*(unsigned char*)functionAddr = 0xE9;
 		*(DWORD*)(functionAddr + 1) = relativeAddr;
 		
 		VirtualProtect((void*)functionAddr, 5, old_protect, &old_protect);
+		
+		if (logFile) {
+			fprintf(logFile, "[MOD_HOOK] Hook installation completed successfully\n");
+			fflush(logFile);
+		}
+	}
+	else
+	{
+		if (logFile) {
+			fprintf(logFile, "[MOD_HOOK] VirtualProtect failed - hook installation failed\n");
+			fflush(logFile);
+		}
+	}
+	
+	if (logFile) {
+		fclose(logFile);
 	}
 }
 #endif
@@ -702,6 +781,13 @@ void CvDllGame::InitExeStuff()
 		}
 
 		// Hook Modding::System::DeactivateMods to preserve multiplayer-compatible mods
+		FILE* logFile = NULL;
+		if (fopen_s(&logFile, "Logs/MOD_HOOK_DEBUG.log", "a") == 0 && logFile != NULL) {
+			fprintf(logFile, "[MOD_HOOK] InitExeStuff: MOD_BIN_HOOKS = %s, binType = %d\n", 
+				MOD_BIN_HOOKS ? "true" : "false", binType);
+			fflush(logFile);
+		}
+		
 		if (MOD_BIN_HOOKS)
 		{
 			DWORD deactivateModsAddr = 0;
@@ -712,10 +798,31 @@ void CvDllGame::InitExeStuff()
 			else if (binType == BIN_TABLET)
 				deactivateModsAddr = 0x007C2C60;  // sub_7C2C60 - calls "UPDATE Mods Set Activated = 0"
 
+			if (logFile) {
+				fprintf(logFile, "[MOD_HOOK] InitExeStuff: deactivateModsAddr = 0x%08X, totalOffset = 0x%08X\n", 
+					deactivateModsAddr, totalOffset);
+				fflush(logFile);
+			}
+
 			if (deactivateModsAddr != 0)
 			{
+				if (logFile) {
+					fprintf(logFile, "[MOD_HOOK] InitExeStuff: Calling HookDeactivateModsFunction\n");
+					fflush(logFile);
+				}
 				HookDeactivateModsFunction(deactivateModsAddr + totalOffset);
 			}
+			else
+			{
+				if (logFile) {
+					fprintf(logFile, "[MOD_HOOK] InitExeStuff: No address found for binType %d\n", binType);
+					fflush(logFile);
+				}
+			}
+		}
+		
+		if (logFile) {
+			fclose(logFile);
 		}
 	}
 #endif
