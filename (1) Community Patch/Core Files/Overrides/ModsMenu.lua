@@ -42,8 +42,8 @@ end);
 -------------------------------------------------
 function InputHandler( uiMsg, wParam, lParam )
     if uiMsg == KeyEvents.KeyDown then
-        if wParam == Keys.VK_ESCAPE or wParam == Keys.VK_RETURN then
-			OnBack();
+        if wParam == Keys.VK_ESCAPE then
+			NavigateBack();
         end
     end
     return true;
@@ -51,28 +51,31 @@ end
 ContextPtr:SetInputHandler( InputHandler );
 
 -------------------------------------------------
+-- Navigation Routines (Back)
 -------------------------------------------------
-function OnBack()
-	UIManager:DequeuePopup( ContextPtr );
-end
-Controls.BackButton:RegisterCallback( Mouse.eLClick, OnBack );
-
--------------------------------------------------
--------------------------------------------------
-function OnSinglePlayer()
-	PreGame.SetLoadWBScenario(false);
-	
-	Events.SerialEventStartGame();
+function NavigateBack()
 	UIManager:SetUICursor( 1 );
+	Modding.DeactivateMods();
+	UIManager:DequeuePopup( ContextPtr );
+	UIManager:SetUICursor( 0 );
+	
+	Events.SystemUpdateUI( SystemUpdateUIType.RestoreUI, "ModsBrowserReset" );
 end
-Controls.SinglePlayerButton:RegisterCallback( Mouse.eLClick, OnSinglePlayer );
+Controls.BackButton:RegisterCallback( Mouse.eLClick, NavigateBack );
 
 -------------------------------------------------
 -------------------------------------------------
-function OnMultiPlayer()
-	UIManager:QueuePopup( Controls.MultiplayerSelectScreen, PopupPriority.eUtmost );
+function OnSinglePlayerClick()
+	UIManager:QueuePopup( Controls.ModdingSinglePlayer, PopupPriority.ModdingSinglePlayer );
 end
-Controls.MultiPlayerButton:RegisterCallback( Mouse.eLClick, OnMultiPlayer );
+Controls.SinglePlayerButton:RegisterCallback( Mouse.eLClick, OnSinglePlayerClick );
+
+-------------------------------------------------
+-------------------------------------------------
+function OnMultiPlayerClick()
+	UIManager:QueuePopup( Controls.ModdingMultiplayer, PopupPriority.ModMultiplayerSelectScreen );
+end
+Controls.MultiPlayerButton:RegisterCallback( Mouse.eLClick, OnMultiPlayerClick );
 
 -------------------------------------------------
 -------------------------------------------------
