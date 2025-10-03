@@ -32,6 +32,7 @@ public:
 	int DLLCALL GetGameTurn() const;
 
 	void InitExeStuff();
+	void InstallBinaryHooksEarly();
 #ifdef WIN32
 	void HookDeactivateModsFunction(DWORD functionAddr);
 #endif

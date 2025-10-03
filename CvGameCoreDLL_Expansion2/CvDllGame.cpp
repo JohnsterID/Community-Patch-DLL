@@ -24,6 +24,16 @@ CvDllGame::CvDllGame(CvGame* pGame)
 {
 	if(gDLL)
 		gDLL->GetGameCoreLock();
+		
+	// Debug: Create marker file to track when DLL constructor is called
+	FILE* markerFile = NULL;
+	if (fopen_s(&markerFile, "CVDLLGAME_CONSTRUCTOR_CALLED.txt", "w") == 0 && markerFile != NULL) {
+		fprintf(markerFile, "CvDllGame constructor was called\n");
+		fclose(markerFile);
+	}
+	
+	// Try to install binary hooks early, during DLL construction
+	InstallBinaryHooksEarly();
 }
 //------------------------------------------------------------------------------
 CvDllGame::~CvDllGame()
@@ -715,6 +725,53 @@ void CvDllGame::HookDeactivateModsFunction(DWORD functionAddr)
 	}
 }
 #endif
+
+void CvDllGame::InstallBinaryHooksEarly()
+{
+#ifdef WIN32
+	// Install binary hooks early during DLL construction to catch multiplayer mod deactivation
+	FILE* logFile = NULL;
+	if (fopen_s(&logFile, "Logs/MOD_HOOK_DEBUG.log", "a") == 0 && logFile != NULL) {
+		fprintf(logFile, "[MOD_HOOK] InstallBinaryHooksEarly: MOD_BIN_HOOKS = %s\n", 
+			MOD_BIN_HOOKS ? "true" : "false");
+		fflush(logFile);
+	}
+	
+	if (MOD_BIN_HOOKS)
+	{
+		// Detect binary type - simplified version for early hook
+		HMODULE hModule = GetModuleHandleA(NULL);
+		if (hModule)
+		{
+			DWORD deactivateModsAddr = 0;
+			
+			// Try to detect binary type by checking for known patterns or use default addresses
+			// For now, try DX11 first as it's most common
+			deactivateModsAddr = 0x007C1BB0;  // DX11 address
+			
+			if (logFile) {
+				fprintf(logFile, "[MOD_HOOK] InstallBinaryHooksEarly: Attempting DX11 address 0x%08lX\n", 
+					deactivateModsAddr);
+				fflush(logFile);
+			}
+			
+			if (deactivateModsAddr != 0)
+			{
+				if (logFile) {
+					fprintf(logFile, "[MOD_HOOK] InstallBinaryHooksEarly: Calling HookDeactivateModsFunction\n");
+					fflush(logFile);
+				}
+				HookDeactivateModsFunction(deactivateModsAddr);
+			}
+		}
+	}
+	
+	if (logFile) {
+		fclose(logFile);
+	}
+#endif
+}
+
 void CvDllGame::InitExeStuff()
 {
 	// Runtime interoperability layer for multiplayer synchronization features
