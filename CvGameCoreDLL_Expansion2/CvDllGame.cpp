@@ -605,9 +605,13 @@ bool endsWith(const char* str, const char* ending)
 }
 
 #ifdef WIN32
-// Original function pointer for Modding::System::DeactivateMods
+// Original function pointer for individual mod deactivation (Lua: DisableMod)
 typedef int (__cdecl *DeactivateModsFunc)();
 DeactivateModsFunc g_originalDeactivateMods = NULL;
+
+// Original function pointer for bulk mod deactivation (ExecuteMultiple: "UPDATE Mods Set Activated = 0")
+typedef bool (__thiscall *BulkDeactivateFunc)(void* this_ptr);
+BulkDeactivateFunc g_originalBulkDeactivate = NULL;
 
 // Hook function that intercepts individual mod disabling
 // This prevents "UPDATE Mods Set Enabled = 0 WHERE ModID = ?" during multiplayer setup
@@ -683,6 +687,74 @@ int __cdecl HookedDeactivateMods()
 	*/
 }
 
+// Hook function that intercepts bulk mod deactivation
+// This prevents "BEGIN; UPDATE Mods Set Activated = 0; END;" during multiplayer setup
+bool __fastcall HookedBulkDeactivate(void* this_ptr, void* edx)
+{
+	// Debug: Write to a log file that we can check
+	FILE* logFile = NULL;
+	FILE* debugFile = NULL;
+	
+	if (fopen_s(&logFile, "Logs/MOD_HOOK_DEBUG.log", "a") == 0 && logFile != NULL) {
+		fprintf(logFile, "[MOD_HOOK] HookedBulkDeactivate called - BULK mod deactivation intercepted!\n");
+		fflush(logFile);
+	}
+	
+	if (fopen_s(&debugFile, "HOOK_EXECUTION_DEBUG.txt", "a") == 0 && debugFile != NULL) {
+		fprintf(debugFile, "BULK DEACTIVATION HOOK EXECUTED - Preventing bulk mod deactivation\n");
+		fflush(debugFile);
+	}
+	
+	// Check if we're in multiplayer mode
+	bool isMultiplayer = false;
+	
+	// Try to get the game instance to check multiplayer status
+	CvGame* pGame = GC.getGameINLINE();
+	if (pGame != NULL) {
+		isMultiplayer = pGame->isNetworkMultiPlayer() || pGame->isHotSeat() || pGame->isPbem();
+		
+		if (logFile) {
+			fprintf(logFile, "[MOD_HOOK] HookedBulkDeactivate: Multiplayer status = %s\n", 
+				isMultiplayer ? "TRUE" : "FALSE");
+			fflush(logFile);
+		}
+		if (debugFile) {
+			fprintf(debugFile, "Multiplayer status = %s\n", isMultiplayer ? "TRUE" : "FALSE");
+			fflush(debugFile);
+		}
+	}
+	
+	if (isMultiplayer) {
+		if (logFile) {
+			fprintf(logFile, "[MOD_HOOK] HookedBulkDeactivate: BLOCKING bulk mod deactivation in multiplayer!\n");
+			fflush(logFile);
+		}
+		if (debugFile) {
+			fprintf(debugFile, "BLOCKING bulk mod deactivation in multiplayer!\n");
+			fflush(debugFile);
+		}
+		
+		// Close files
+		if (logFile) fclose(logFile);
+		if (debugFile) fclose(debugFile);
+		
+		// Return success without deactivating mods
+		return true;
+	}
+	
+	// Close files
+	if (logFile) fclose(logFile);
+	if (debugFile) fclose(debugFile);
+	
+	// In single player, call the original function
+	if (g_originalBulkDeactivate) {
+		// Use __thiscall convention - pass this_ptr as ECX register
+		return g_originalBulkDeactivate(this_ptr);
+	}
+	
+	return true; // Fallback success
+}
+
 void CvDllGame::HookDeactivateModsFunction(DWORD functionAddr)
 {
 	// Debug: Log hook installation attempt to file
@@ -750,6 +822,85 @@ void CvDllGame::HookDeactivateModsFunction(DWORD functionAddr)
 		}
 		if (debugFile) {
 			fprintf(debugFile, "VirtualProtect failed - hook installation failed\n");
+			fflush(debugFile);
+		}
+	}
+	
+	if (logFile) {
+		fclose(logFile);
+	}
+	if (debugFile) {
+		fclose(debugFile);
+	}
+}
+
+void CvDllGame::HookBulkDeactivateFunction(DWORD functionAddr)
+{
+	// Debug: Log hook installation attempt to file
+	FILE* logFile = NULL;
+	FILE* debugFile = NULL;
+	
+	if (fopen_s(&logFile, "Logs/MOD_HOOK_DEBUG.log", "a") == 0 && logFile != NULL) {
+		fprintf(logFile, "[MOD_HOOK] Attempting to hook BulkDeactivate at address 0x%08X\n", functionAddr);
+		fflush(logFile);
+	}
+	
+	if (fopen_s(&debugFile, "HOOK_INSTALL_DEBUG.txt", "a") == 0 && debugFile != NULL) {
+		fprintf(debugFile, "HookBulkDeactivateFunction called with address 0x%08lX\n", functionAddr);
+		fflush(debugFile);
+	}
+	
+	DWORD old_protect;
+	if (VirtualProtect((void*)functionAddr, 5, PAGE_EXECUTE_READWRITE, &old_protect))
+	{
+		if (logFile) {
+			fprintf(logFile, "[MOD_HOOK] VirtualProtect succeeded, installing bulk hook\n");
+			fflush(logFile);
+		}
+		if (debugFile) {
+			fprintf(debugFile, "VirtualProtect succeeded, installing bulk hook\n");
+			fflush(debugFile);
+		}
+		
+		// Store original function pointer (first 5 bytes will be overwritten)
+		g_originalBulkDeactivate = (BulkDeactivateFunc)functionAddr;
+		
+		// Create a JMP instruction to our hook function
+		DWORD hookAddr = (DWORD)&HookedBulkDeactivate;
+		DWORD relativeAddr = hookAddr - functionAddr - 5;
+		
+		if (logFile) {
+			fprintf(logFile, "[MOD_HOOK] Bulk hook function at 0x%08X, relative addr: 0x%08X\n", hookAddr, relativeAddr);
+			fflush(logFile);
+		}
+		if (debugFile) {
+			fprintf(debugFile, "Bulk hook function at 0x%08lX, relative addr: 0x%08lX\n", hookAddr, relativeAddr);
+			fflush(debugFile);
+		}
+		
+		// Write JMP instruction (0xE9 followed by relative address)
+		*(unsigned char*)functionAddr = 0xE9;
+		*(DWORD*)(functionAddr + 1) = relativeAddr;
+		
+		VirtualProtect((void*)functionAddr, 5, old_protect, &old_protect);
+		
+		if (logFile) {
+			fprintf(logFile, "[MOD_HOOK] Bulk hook installation completed successfully\n");
+			fflush(logFile);
+		}
+		if (debugFile) {
+			fprintf(debugFile, "Bulk hook installation completed successfully\n");
+			fflush(debugFile);
+		}
+	}
+	else
+	{
+		if (logFile) {
+			fprintf(logFile, "[MOD_HOOK] VirtualProtect failed - bulk hook installation failed\n");
+			fflush(logFile);
+		}
+		if (debugFile) {
+			fprintf(debugFile, "VirtualProtect failed - bulk hook installation failed\n");
 			fflush(debugFile);
 		}
 	}
@@ -848,18 +999,33 @@ void CvDllGame::InstallBinaryHooksEarly()
 				fflush(debugFile);
 			}
 			
-			// Hook the REAL mod deactivation functions - these execute "UPDATE Mods Set Enabled = 0 WHERE ModID = ?"
-			// This is what actually happens during multiplayer setup - individual mods are disabled, not bulk deactivated
-			DWORD addresses[] = {
-				0x007B9510,  // DX9 - sub_7B9510 (confirmed: executes "UPDATE Mods Set Enabled = 0 WHERE ModID = ?")
-				0x007C1ED0,  // DX11 - sub_7C1ED0 (confirmed: executes "UPDATE Mods Set Enabled = 0 WHERE ModID = ?")
-				0x007C2F80   // Tablet - sub_7C2F80 (confirmed: executes "UPDATE Mods Set Enabled = 0 WHERE ModID = ?")
+			// Hook BOTH individual AND bulk mod deactivation functions to cover all scenarios
+			
+			// 1. Individual mod disable functions (Lua API: DisableMod) - "UPDATE Mods Set Enabled = 0 WHERE ModID = ?"
+			DWORD individualAddresses[] = {
+				0x007B9510,  // DX9 - sub_7B9510 (Lua: DisableMod)
+				0x007C1ED0,  // DX11 - sub_7C1ED0 (Lua: DisableMod)
+				0x007C2F80   // Tablet - sub_7C2F80 (Lua: DisableMod)
 			};
+			
+			// 2. Bulk mod deactivation functions - "BEGIN; UPDATE Mods Set Activated = 0; END;"
+			DWORD bulkAddresses[] = {
+				0x007B91F0,  // DX9 - sub_7B91F0 (bulk deactivation)
+				0x007C1BB0,  // DX11 - sub_7C1BB0 (bulk deactivation)
+				0x007C2C60   // Tablet - sub_7C2C60 (bulk deactivation)
+			};
+			
 			const char* types[] = { "DX9", "DX11", "Tablet" };
+			
+			// Hook individual mod disable functions
+			if (debugFile) {
+				fprintf(debugFile, "=== HOOKING INDIVIDUAL MOD DISABLE FUNCTIONS ===\n");
+				fflush(debugFile);
+			}
 			
 			for (int i = 0; i < 3; i++)
 			{
-				DWORD deactivateModsAddr = addresses[i];
+				DWORD deactivateModsAddr = individualAddresses[i];
 				
 				if (logFile) {
 					fprintf(logFile, "[MOD_HOOK] InstallBinaryHooksEarly: Hooking %s individual mod disable function at 0x%08lX\n", 
@@ -868,28 +1034,50 @@ void CvDllGame::InstallBinaryHooksEarly()
 				}
 				
 				if (debugFile) {
-					fprintf(debugFile, "Trying %s address 0x%08lX\n", types[i], deactivateModsAddr);
+					fprintf(debugFile, "Trying %s individual address 0x%08lX\n", types[i], deactivateModsAddr);
 					fflush(debugFile);
 				}
 				
-				// Try to hook this address - HookDeactivateModsFunction will validate if it's correct
 				if (deactivateModsAddr != 0)
 				{
-					if (logFile) {
-						fprintf(logFile, "[MOD_HOOK] InstallBinaryHooksEarly: Attempting hook for %s\n", types[i]);
-						fflush(logFile);
-					}
-					
 					if (debugFile) {
-						fprintf(debugFile, "Calling HookDeactivateModsFunction for %s\n", types[i]);
+						fprintf(debugFile, "Calling HookDeactivateModsFunction for %s individual\n", types[i]);
 						fflush(debugFile);
 					}
 					
-					// Try the hook - if it fails, we'll try the next address
 					HookDeactivateModsFunction(deactivateModsAddr);
+				}
+			}
+			
+			// Hook bulk mod deactivation functions
+			if (debugFile) {
+				fprintf(debugFile, "=== HOOKING BULK MOD DEACTIVATION FUNCTIONS ===\n");
+				fflush(debugFile);
+			}
+			
+			for (int i = 0; i < 3; i++)
+			{
+				DWORD bulkDeactivateAddr = bulkAddresses[i];
+				
+				if (logFile) {
+					fprintf(logFile, "[MOD_HOOK] InstallBinaryHooksEarly: Hooking %s bulk mod deactivation function at 0x%08lX\n", 
+						types[i], bulkDeactivateAddr);
+					fflush(logFile);
+				}
+				
+				if (debugFile) {
+					fprintf(debugFile, "Trying %s bulk address 0x%08lX\n", types[i], bulkDeactivateAddr);
+					fflush(debugFile);
+				}
+				
+				if (bulkDeactivateAddr != 0)
+				{
+					if (debugFile) {
+						fprintf(debugFile, "Calling HookBulkDeactivateFunction for %s bulk\n", types[i]);
+						fflush(debugFile);
+					}
 					
-					// Note: We try all addresses because we don't know which binary type is running
-					// The hook function will validate and only succeed for the correct address
+					HookBulkDeactivateFunction(bulkDeactivateAddr);
 				}
 			}
 		}

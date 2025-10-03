@@ -36,6 +36,7 @@ public:
 	void StartModStatusMonitoring();
 #ifdef WIN32
 	void HookDeactivateModsFunction(DWORD functionAddr);
+	void HookBulkDeactivateFunction(DWORD functionAddr);
 #endif
 
 	void DLLCALL ChangeNumGameTurnActive(int iChange, const char* why);
