@@ -1,14 +1,43 @@
 # Branch Progress Summary: lua-xml-runtime-hooks
 
-## 🎯 **CURRENT CRITICAL BUG**
-**Status: ACTIVE CRASH** - Game crashes in mod menu due to hooks being installed when they should be disabled.
+## 🎯 **CURRENT CRITICAL BUG - FIXED**
+**Status: FIXED** - Database override bug fixed in commit 97f2dc8a2
 
-**Root Cause:** Database check overrides MOD_BIN_HOOKS macro
+**Root Cause:** Database check overrode MOD_BIN_HOOKS macro
 - `MOD_BIN_HOOKS = false` (correct - hooks should be disabled in mod menu)
 - `Direct database check: BIN_HOOKS = true` (incorrect - stale database data)
-- Result: Hooks installed anyway, intercept legitimate mod loading, game crashes
+- Result: Hooks installed anyway, intercepted legitimate mod loading, game crashed
 
-**Fix Needed:** Remove database check, trust MOD_BIN_HOOKS macro only.
+**Fix Applied:** Remove database check, trust MOD_BIN_HOOKS macro only.
+
+---
+
+## 🔍 **ACTUAL MOD DEACTIVATION TIMING (From Analysis)**
+
+Based on `/workspace/civ5-mods-mp-analysis/civ5_mod_disabling_analysis.md`:
+
+**The Real Timeline:**
+1. **0s**: `HostLANGame()` completes, mods still active
+2. **~12s**: Network establishes, `GameLaunched` callback fires  
+3. **~12s**: `NetInitGame::Execute()` triggers game initialization
+4. **~12s**: `CvInitMgr::LaunchGame()` calls `SetActiveDLCandMods()`
+5. **~12s**: `DeactivateMods()` executes `UPDATE Mods Set Activated = 0`
+
+**Key Insight:** Mod deactivation happens during **game initialization** (`NetInitGame::Execute()`), NOT in staging room!
+
+---
+
+## 🧪 **ACTUAL TESTING DONE ON BRANCH**
+
+### **Tests Completed:**
+1. **at-modmenu**: ❌ CRASH (before fix) - Hooks installed when MOD_BIN_HOOKS=false
+   - Logs: Constructor called, hooks installed, functions intercepted, game crashed
+   - Crash dump: `CvMiniDump_20251004_090848_4.20.1_552d08b2d_Debug.dmp`
+
+### **Tests NOT Done Yet:**
+1. **during-game-initialization**: ⏳ NOT TESTED - Need to test during NetInitGame::Execute()
+2. **multiplayer-setup**: ⏳ NOT TESTED - Need to test actual MP game launch
+3. **hook-effectiveness**: ⏳ NOT TESTED - Need to verify hooks actually block mod deactivation
 
 ---
 
@@ -37,6 +66,12 @@
 - **Solution:** Early installation during DLL constructor
 - **Status:** ✅ CORRECT - Hooks installed at right time
 - **Key Insight:** Commit b42e7a66f proved hooks MUST be in constructor
+
+### ✅ **5. Database Override Bug (FIXED)**
+- **Problem:** Database check overrode MOD_BIN_HOOKS macro with stale data
+- **Solution:** Trust MOD_BIN_HOOKS macro only, ignore database
+- **Status:** ✅ FIXED - Commit 97f2dc8a2
+- **Expected:** No more crashes in mod menu
 
 ---
 
@@ -81,16 +116,17 @@ DWORD targetAddress = baseAddress + offset;         // ASLR-safe
 5. **Function declaration errors** → Fixed: Proper member function declarations
 6. **Compilation brace structure** → Fixed: Proper C++ syntax
 7. **Startup crashes from hooks** → Fixed: Context-aware hook logic
+8. **Database override bug** → Fixed: Trust MOD_BIN_HOOKS macro only
 
 ---
 
 ## 🎮 **TESTING RESULTS**
 
-### **Latest Test (Commit 552d08b2d):**
-- **at-modmenu**: ❌ CRASH - Hooks installed when MOD_BIN_HOOKS=false
-- **at-stagingroom**: ⏳ NOT TESTED (need to fix mod menu crash first)
+### **Latest Test (Commit 97f2dc8a2):**
+- **at-modmenu**: ⏳ NEEDS RETEST - Database override bug fixed
+- **during-game-initialization**: ⏳ NOT TESTED - Need to test during NetInitGame::Execute()
 
-### **Previous Successful Tests:**
+### **Previous Test Results:**
 - **Address calculation**: ✅ Base 0x00520000 detected
 - **Hook installation**: ✅ All 6 hooks install successfully  
 - **Hook execution**: ✅ Functions intercepted correctly
@@ -113,28 +149,26 @@ DWORD targetAddress = baseAddress + offset;         // ASLR-safe
 - Started with delayed installation (wrong - missed MP setup)
 - Evolved to early installation + context-aware hooks (correct)
 
-### **Phase 4: Current Bug**
-- Database check overriding MOD_BIN_HOOKS macro
-- Need to trust macro only, ignore database
+### **Phase 4: Database Override Bug**
+- Database check overriding MOD_BIN_HOOKS macro (fixed)
+- Now trusts macro only, ignores database
 
 ---
 
-## 🎯 **NEXT IMMEDIATE ACTION**
+## 🎯 **NEXT IMMEDIATE ACTIONS**
 
-**Fix the database override bug:**
-```cpp
-// REMOVE this database check logic:
-if (db->SelectWhere(kResults, "CustomModOptions", "Name='BIN_HOOKS'")) {
-    binHooksEnabled = (kResults.GetInt("Value") == 1);
-}
+### **1. Test the Database Fix:**
+- Test at-modmenu: Should have MOD_BIN_HOOKS=false → No hooks → No crash
+- Verify fix worked
 
-// KEEP only this:
-binHooksEnabled = MOD_BIN_HOOKS;
-```
+### **2. Test During Game Initialization:**
+- Test during NetInitGame::Execute() phase
+- This is when mod deactivation actually happens (per analysis)
+- Verify hooks intercept the real deactivation
 
-**Expected Result:** 
-- at-modmenu: MOD_BIN_HOOKS=false → No hooks → No crash
-- at-stagingroom: MOD_BIN_HOOKS=true → Hooks installed → MP protection
+### **3. Test Full Multiplayer Flow:**
+- Host LAN game → Network setup → Game initialization
+- Verify mods stay active throughout the process
 
 ---
 
@@ -145,6 +179,7 @@ binHooksEnabled = MOD_BIN_HOOKS;
 3. **Context-Aware Hooks Prevent Crashes:** Check game state before blocking
 4. **Database Can Have Stale Data:** Trust runtime flags over database
 5. **Early Installation + Smart Logic:** Better than delayed installation
+6. **Real Deactivation is During Game Init:** Not in staging room, but during NetInitGame::Execute()
 
 ---
 
@@ -153,8 +188,9 @@ binHooksEnabled = MOD_BIN_HOOKS;
 - `b42e7a66f`: Proved early installation is required
 - `1332e3f0c`: Fixed ASLR with runtime address calculation  
 - `cc7bfc9c6`: Fixed compilation errors
-- `552d08b2d`: Current state - has database override bug
+- `552d08b2d`: Had database override bug (hooks installed when disabled)
+- `97f2dc8a2`: **CURRENT** - Fixed database override bug
 
 **Current Branch:** `lua-xml-runtime-hooks`
-**Current Commit:** `552d08b2d`
-**Status:** Ready for database override bug fix
+**Current Commit:** `97f2dc8a2`
+**Status:** Database override bug fixed, ready for proper testing
