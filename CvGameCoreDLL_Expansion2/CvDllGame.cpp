@@ -739,29 +739,49 @@ void CvDllGame::InstallBinaryHooksEarly()
 	
 	if (MOD_BIN_HOOKS)
 	{
-		// Detect binary type - simplified version for early hook
+		// Get module handle and detect binary type
 		HMODULE hModule = GetModuleHandleA(NULL);
 		if (hModule)
 		{
-			DWORD deactivateModsAddr = 0;
+			// Try all three binary variants - we don't know which one is running
+			DWORD addresses[] = {
+				0x007B91F0,  // DX9 - sub_7B91F0
+				0x007C1BB0,  // DX11 - sub_7C1BB0  
+				0x007C2C60   // Tablet - sub_7C2C60
+			};
+			const char* types[] = { "DX9", "DX11", "Tablet" };
 			
-			// Try to detect binary type by checking for known patterns or use default addresses
-			// For now, try DX11 first as it's most common
-			deactivateModsAddr = 0x007C1BB0;  // DX11 address
-			
-			if (logFile) {
-				fprintf(logFile, "[MOD_HOOK] InstallBinaryHooksEarly: Attempting DX11 address 0x%08lX\n", 
-					deactivateModsAddr);
-				fflush(logFile);
-			}
-			
-			if (deactivateModsAddr != 0)
+			for (int i = 0; i < 3; i++)
 			{
+				DWORD deactivateModsAddr = addresses[i];
+				
 				if (logFile) {
-					fprintf(logFile, "[MOD_HOOK] InstallBinaryHooksEarly: Calling HookDeactivateModsFunction\n");
+					fprintf(logFile, "[MOD_HOOK] InstallBinaryHooksEarly: Trying %s address 0x%08lX\n", 
+						types[i], deactivateModsAddr);
 					fflush(logFile);
 				}
-				HookDeactivateModsFunction(deactivateModsAddr);
+				
+				// Try to hook this address - HookDeactivateModsFunction will validate if it's correct
+				if (deactivateModsAddr != 0)
+				{
+					if (logFile) {
+						fprintf(logFile, "[MOD_HOOK] InstallBinaryHooksEarly: Attempting hook for %s\n", types[i]);
+						fflush(logFile);
+					}
+					
+					// Try the hook - if it fails, we'll try the next address
+					HookDeactivateModsFunction(deactivateModsAddr);
+					
+					// Note: We try all addresses because we don't know which binary type is running
+					// The hook function will validate and only succeed for the correct address
+				}
+			}
+		}
+		else
+		{
+			if (logFile) {
+				fprintf(logFile, "[MOD_HOOK] InstallBinaryHooksEarly: Failed to get module handle\n");
+				fflush(logFile);
 			}
 		}
 	}
