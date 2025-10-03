@@ -5,7 +5,7 @@ include( "IconSupport" );
 include( "InstanceManager" );
 include( "SupportFunctions" );
 
-local g_InstanceManager = InstanceManager:new( "ItemInstance", "Button", Controls.ItemStack );
+local g_InstanceManager = InstanceManager:new( "ModInstance", "Label", Controls.ModsStack );
 
 -------------------------------------------------
 -- Enable/Disable buttons based on mod compatibility
@@ -83,37 +83,9 @@ if Controls.WorldBuilderButton then
 	Controls.WorldBuilderButton:RegisterCallback( Mouse.eLClick, OnWorldBuilder );
 end
 
-----------------------------------------------------------------        
-----------------------------------------------------------------        
-ContextPtr:SetUpdate( function()
-	if( ContextPtr:IsHidden() == false ) then
-		Controls.VersionNumber:SetText( Locale.ConvertTextKey( "TXT_KEY_VERSION_NUMBER", UI.GetVersionString() ) );
-	end
-end );
 
-----------------------------------------------------------------        
-----------------------------------------------------------------        
-Events.SystemUpdateUI.Add(function()
-	if( ContextPtr:IsHidden() == false ) then
-		Controls.VersionNumber:SetText( Locale.ConvertTextKey( "TXT_KEY_VERSION_NUMBER", UI.GetVersionString() ) );
-	end
-end);
 
-----------------------------------------------------------------        
-----------------------------------------------------------------        
-Events.AfterModsActivate.Add(function()
-	if( ContextPtr:IsHidden() == false ) then
-		Controls.VersionNumber:SetText( Locale.ConvertTextKey( "TXT_KEY_VERSION_NUMBER", UI.GetVersionString() ) );
-	end
-end);
 
-----------------------------------------------------------------        
-----------------------------------------------------------------        
-Events.AfterModsDeactivate.Add(function()
-	if( ContextPtr:IsHidden() == false ) then
-		Controls.VersionNumber:SetText( Locale.ConvertTextKey( "TXT_KEY_VERSION_NUMBER", UI.GetVersionString() ) );
-	end
-end);
 
 -- Enable multiplayer button for modded games
 -- This works in conjunction with MOD_BIN_HOOKS to preserve compatible mods

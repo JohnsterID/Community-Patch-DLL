@@ -439,7 +439,7 @@
     <File md5="b01098492e7828c4e5853e2c670a2569" import="1">Core Files/Overrides/MPGameSetupScreen.lua</File>
     <File md5="56056a955c02e8ce5b69fad347435af3" import="1">Core Files/Overrides/MPGameSetupScreen.xml</File>
     <File md5="2BFE0E6D6EAE4917F5068B6084CF75A2" import="1">Core Files/Overrides/MPTurnPanel.lua</File>
-    <File md5="6c58e8b1dbfa600226439754a769fd33" import="1">Core Files/Overrides/ModsMenu.lua</File>
+    <File md5="498bd1a1835fe3ad9f4cacfebb49eb5f" import="1">Core Files/Overrides/ModsMenu.lua</File>
 
     <File md5="A9FEDE41B8D28348DDD9FD51E905C096" import="1">Core Files/Overrides/NaturalWonderPopup.lua</File>
     <File md5="91DEEC22E933A63497BBDA0E5066D8D3" import="1">Core Files/Overrides/NewEraPopup.lua</File>
