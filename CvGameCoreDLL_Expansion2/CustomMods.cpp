@@ -233,9 +233,27 @@ void CustomMods::preloadCache() {
 }
 
 void CustomMods::reloadCache() {
+	// Debug: Track when CustomMods cache gets reloaded (this changes MOD_BIN_HOOKS values)
+	FILE* debugFile = NULL;
+	if (fopen_s(&debugFile, "CUSTOMMODS_RELOAD.txt", "a") == 0 && debugFile != NULL) {
+		fprintf(debugFile, "=== CustomMods::reloadCache() called ===\n");
+		fprintf(debugFile, "Before reload - BIN_HOOKS: %s\n", m_bBIN_HOOKS ? "true" : "false");
+		fprintf(debugFile, "Time: %d\n", GetTickCount());
+		fflush(debugFile);
+		fclose(debugFile);
+	}
+	
 	m_bInit = false;
 
 	preloadCache();
+	
+	// Debug: Track the value after reload
+	if (fopen_s(&debugFile, "CUSTOMMODS_RELOAD.txt", "a") == 0 && debugFile != NULL) {
+		fprintf(debugFile, "After reload - BIN_HOOKS: %s\n", m_bBIN_HOOKS ? "true" : "false");
+		fprintf(debugFile, "\n");
+		fflush(debugFile);
+		fclose(debugFile);
+	}
 }
 
 int CustomMods::getOption(const char* szOption, int defValue) {

@@ -30,10 +30,16 @@ CvDllGame::CvDllGame(CvGame* pGame)
 		
 	// Debug: Create marker file to track when DLL constructor is called
 	FILE* markerFile = NULL;
-	if (fopen_s(&markerFile, "CVDLLGAME_CONSTRUCTOR_CALLED.txt", "w") == 0 && markerFile != NULL) {
-		fprintf(markerFile, "CvDllGame constructor was called\n");
+	if (fopen_s(&markerFile, "CVDLLGAME_CONSTRUCTOR_CALLED.txt", "a") == 0 && markerFile != NULL) {
+		fprintf(markerFile, "=== CvDllGame constructor called ===\n");
+		fprintf(markerFile, "Instance address: %p\n", this);
 		fprintf(markerFile, "MOD_BIN_HOOKS = %s\n", MOD_BIN_HOOKS ? "true" : "false");
 		fprintf(markerFile, "Captured value: %s\n", m_bBinHooksEnabledAtConstruction ? "true" : "false");
+		fprintf(markerFile, "Member variable address: %p\n", &m_bBinHooksEnabledAtConstruction);
+		fprintf(markerFile, "gCustomMods.isBIN_HOOKS() = %s\n", gCustomMods.isBIN_HOOKS() ? "true" : "false");
+		fprintf(markerFile, "Time: %d\n", GetTickCount());
+		fprintf(markerFile, "\n");
+		fflush(markerFile);
 		fclose(markerFile);
 	}
 	
@@ -43,6 +49,18 @@ CvDllGame::CvDllGame(CvGame* pGame)
 //------------------------------------------------------------------------------
 CvDllGame::~CvDllGame()
 {
+	// Debug: Track destructor calls
+	FILE* markerFile = NULL;
+	if (fopen_s(&markerFile, "CVDLLGAME_DESTRUCTOR_CALLED.txt", "a") == 0 && markerFile != NULL) {
+		fprintf(markerFile, "=== CvDllGame destructor called ===\n");
+		fprintf(markerFile, "Instance address: %p\n", this);
+		fprintf(markerFile, "Captured value was: %s\n", m_bBinHooksEnabledAtConstruction ? "true" : "false");
+		fprintf(markerFile, "Time: %d\n", GetTickCount());
+		fprintf(markerFile, "\n");
+		fflush(markerFile);
+		fclose(markerFile);
+	}
+	
 	if(gDLL)
 		gDLL->ReleaseGameCoreLock();
 }
@@ -1196,9 +1214,8 @@ void CvDllGame::InstallBinaryHooksEarly()
 #ifdef WIN32
 	// Prevent multiple hook installations
 	static bool hooksInstalled = false;
-	if (hooksInstalled) {
-		return;
-	}
+	static int callCount = 0;
+	callCount++;
 	
 	// Install binary hooks early during DLL construction to catch multiplayer mod deactivation
 	FILE* logFile = NULL;
@@ -1212,10 +1229,25 @@ void CvDllGame::InstallBinaryHooksEarly()
 	}
 	
 	// Also create a simple debug file in current directory as fallback
-	if (fopen_s(&debugFile, "HOOK_DEBUG.txt", "w") == 0 && debugFile != NULL) {
-		fprintf(debugFile, "InstallBinaryHooksEarly called\n");
+	if (fopen_s(&debugFile, "HOOK_DEBUG.txt", "a") == 0 && debugFile != NULL) {
+		fprintf(debugFile, "=== InstallBinaryHooksEarly called (call #%d) ===\n", callCount);
+		fprintf(debugFile, "Instance address: %p\n", this);
 		fprintf(debugFile, "MOD_BIN_HOOKS = %s\n", MOD_BIN_HOOKS ? "true" : "false");
+		fprintf(debugFile, "gCustomMods.isBIN_HOOKS() = %s\n", gCustomMods.isBIN_HOOKS() ? "true" : "false");
+		fprintf(debugFile, "Member variable address: %p\n", &m_bBinHooksEnabledAtConstruction);
+		fprintf(debugFile, "Member variable value: %s\n", m_bBinHooksEnabledAtConstruction ? "true" : "false");
+		fprintf(debugFile, "hooksInstalled = %s\n", hooksInstalled ? "true" : "false");
+		fprintf(debugFile, "Time: %d\n", GetTickCount());
 		fflush(debugFile);
+	}
+	
+	if (hooksInstalled) {
+		if (debugFile) {
+			fprintf(debugFile, "Hooks already installed, returning early\n\n");
+			fflush(debugFile);
+			fclose(debugFile);
+		}
+		return;
 	}
 	
 	// Use captured BIN_HOOKS value from constructor - MOD_BIN_HOOKS may have changed due to mod deactivation
