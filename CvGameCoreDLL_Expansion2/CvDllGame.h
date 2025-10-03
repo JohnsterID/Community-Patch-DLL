@@ -32,6 +32,9 @@ public:
 	int DLLCALL GetGameTurn() const;
 
 	void InitExeStuff();
+#ifdef WIN32
+	void HookDeactivateModsFunction(DWORD functionAddr);
+#endif
 
 	void DLLCALL ChangeNumGameTurnActive(int iChange, const char* why);
 	int DLLCALL CountHumanPlayersAlive() const;

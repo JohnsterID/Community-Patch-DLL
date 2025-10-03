@@ -592,6 +592,50 @@ bool endsWith(const char* str, const char* ending)
 	size_t ending_len = strlen(ending);
 	return str_len >= ending_len && !strcmp(str + str_len - ending_len, ending);
 }
+
+#ifdef WIN32
+// Original function pointer for Modding::System::DeactivateMods
+typedef int (__cdecl *DeactivateModsFunc)();
+DeactivateModsFunc g_originalDeactivateMods = nullptr;
+
+// Hook function that preserves multiplayer-compatible mods
+int __cdecl HookedDeactivateMods()
+{
+	// Check if we're in multiplayer mode and should preserve compatible mods
+	if (GC.getGame().isNetworkMultiPlayer() || GC.getGame().isHotSeat() || GC.getGame().isPbem())
+	{
+		// In multiplayer, we skip the deactivation to preserve mod compatibility
+		// This prevents the problematic "UPDATE Mods Set Activated = 0" SQL query
+		return 1; // Return success without deactivating mods
+	}
+	
+	// In single player, call the original function
+	if (g_originalDeactivateMods)
+		return g_originalDeactivateMods();
+	
+	return 1; // Fallback success
+}
+
+void CvDllGame::HookDeactivateModsFunction(DWORD functionAddr)
+{
+	DWORD old_protect;
+	if (VirtualProtect((void*)functionAddr, 5, PAGE_EXECUTE_READWRITE, &old_protect))
+	{
+		// Store original function pointer (first 5 bytes will be overwritten)
+		g_originalDeactivateMods = (DeactivateModsFunc)functionAddr;
+		
+		// Create a JMP instruction to our hook function
+		DWORD hookAddr = (DWORD)&HookedDeactivateMods;
+		DWORD relativeAddr = hookAddr - functionAddr - 5;
+		
+		// Write JMP instruction (0xE9 followed by relative address)
+		*(unsigned char*)functionAddr = 0xE9;
+		*(DWORD*)(functionAddr + 1) = relativeAddr;
+		
+		VirtualProtect((void*)functionAddr, 5, old_protect, &old_protect);
+	}
+}
+#endif
 void CvDllGame::InitExeStuff()
 {
 	// Runtime interoperability layer for multiplayer synchronization features
@@ -655,6 +699,23 @@ void CvDllGame::InitExeStuff()
 		{
 			int* s_wantForceResync = reinterpret_cast<int*>(wantForceResyncAddr + totalOffset);
 			m_pGame->SetExeWantForceResyncPointer(s_wantForceResync);
+		}
+
+		// Hook Modding::System::DeactivateMods to preserve multiplayer-compatible mods
+		if (MOD_BIN_HOOKS)
+		{
+			DWORD deactivateModsAddr = 0;
+			if (binType == BIN_DX11)
+				deactivateModsAddr = 0x007C1BB0;  // sub_7C1BB0 - calls "UPDATE Mods Set Activated = 0"
+			else if (binType == BIN_DX9)
+				deactivateModsAddr = 0x007B91F0;  // sub_7B91F0 - calls "UPDATE Mods Set Activated = 0"
+			else if (binType == BIN_TABLET)
+				deactivateModsAddr = 0x007C2C60;  // sub_7C2C60 - calls "UPDATE Mods Set Activated = 0"
+
+			if (deactivateModsAddr != 0)
+			{
+				HookDeactivateModsFunction(deactivateModsAddr + totalOffset);
+			}
 		}
 	}
 #endif
