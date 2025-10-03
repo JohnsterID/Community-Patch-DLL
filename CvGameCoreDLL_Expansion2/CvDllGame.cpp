@@ -1273,7 +1273,8 @@ void CvDllGame::InstallBinaryHooksEarly()
 				if (deactivateModsAddr != 0)
 				{
 					// Check if we can read the first few bytes (function prologue)
-					__try {
+					// Use IsBadReadPtr instead of SEH since we already have C++ try in this function
+					if (!IsBadReadPtr((void*)deactivateModsAddr, 5)) {
 						unsigned char firstBytes[5];
 						memcpy(firstBytes, (void*)deactivateModsAddr, 5);
 						
@@ -1294,8 +1295,7 @@ void CvDllGame::InstallBinaryHooksEarly()
 						}
 						
 						HookDeactivateModsFunction(deactivateModsAddr);
-					}
-					__except(EXCEPTION_EXECUTE_HANDLER) {
+					} else {
 						if (logFile) {
 							fprintf(logFile, "[MOD_HOOK] ERROR: Cannot read memory at %s individual address 0x%08lX\n", types[i], deactivateModsAddr);
 							fflush(logFile);
@@ -1333,7 +1333,8 @@ void CvDllGame::InstallBinaryHooksEarly()
 				if (bulkDeactivateAddr != 0)
 				{
 					// Check if we can read the first few bytes (function prologue)
-					__try {
+					// Use IsBadReadPtr instead of SEH since we already have C++ try in this function
+					if (!IsBadReadPtr((void*)bulkDeactivateAddr, 5)) {
 						unsigned char firstBytes[5];
 						memcpy(firstBytes, (void*)bulkDeactivateAddr, 5);
 						
@@ -1354,8 +1355,7 @@ void CvDllGame::InstallBinaryHooksEarly()
 						}
 						
 						HookBulkDeactivateFunction(bulkDeactivateAddr);
-					}
-					__except(EXCEPTION_EXECUTE_HANDLER) {
+					} else {
 						if (logFile) {
 							fprintf(logFile, "[MOD_HOOK] ERROR: Cannot read memory at %s bulk address 0x%08lX\n", types[i], bulkDeactivateAddr);
 							fflush(logFile);
@@ -1373,61 +1373,60 @@ void CvDllGame::InstallBinaryHooksEarly()
 				fprintf(debugFile, "=== HOOKING SQLITE DATABASE FUNCTIONS ===\n");
 				fflush(debugFile);
 			}
-				
-				// We need to find sqlite3_exec and sqlite3_prepare addresses dynamically
-				// These are typically in sqlite3.dll or statically linked
-				HMODULE sqlite3Module = GetModuleHandleA("sqlite3.dll");
-				if (!sqlite3Module) {
-					// Try the main executable (statically linked SQLite)
-					sqlite3Module = hModule;
+			
+			// We need to find sqlite3_exec and sqlite3_prepare addresses dynamically
+			// These are typically in sqlite3.dll or statically linked
+			HMODULE sqlite3Module = GetModuleHandleA("sqlite3.dll");
+			if (!sqlite3Module) {
+				// Try the main executable (statically linked SQLite)
+				sqlite3Module = hModule;
+			}
+			
+			if (sqlite3Module) {
+				// Try to get sqlite3_exec address
+				DWORD sqlite3_exec_addr = (DWORD)GetProcAddress(sqlite3Module, "sqlite3_exec");
+				if (sqlite3_exec_addr) {
+					if (logFile) {
+						fprintf(logFile, "[SQLITE_HOOK] Found sqlite3_exec at 0x%08lX\n", sqlite3_exec_addr);
+						fflush(logFile);
+					}
+					if (debugFile) {
+						fprintf(debugFile, "Hooking sqlite3_exec at 0x%08lX\n", sqlite3_exec_addr);
+						fflush(debugFile);
+					}
+					HookSqliteFunction("sqlite3_exec", sqlite3_exec_addr, (void*)HookedSqlite3Exec, (void**)&g_original_sqlite3_exec);
 				}
 				
-				if (sqlite3Module) {
-					// Try to get sqlite3_exec address
-					DWORD sqlite3_exec_addr = (DWORD)GetProcAddress(sqlite3Module, "sqlite3_exec");
-					if (sqlite3_exec_addr) {
-						if (logFile) {
-							fprintf(logFile, "[SQLITE_HOOK] Found sqlite3_exec at 0x%08lX\n", sqlite3_exec_addr);
-							fflush(logFile);
-						}
-						if (debugFile) {
-							fprintf(debugFile, "Hooking sqlite3_exec at 0x%08lX\n", sqlite3_exec_addr);
-							fflush(debugFile);
-						}
-						HookSqliteFunction("sqlite3_exec", sqlite3_exec_addr, (void*)HookedSqlite3Exec, (void**)&g_original_sqlite3_exec);
-					}
-					
-					// Try to get sqlite3_prepare address
-					DWORD sqlite3_prepare_addr = (DWORD)GetProcAddress(sqlite3Module, "sqlite3_prepare");
-					if (sqlite3_prepare_addr) {
-						if (logFile) {
-							fprintf(logFile, "[SQLITE_HOOK] Found sqlite3_prepare at 0x%08lX\n", sqlite3_prepare_addr);
-							fflush(logFile);
-						}
-						if (debugFile) {
-							fprintf(debugFile, "Hooking sqlite3_prepare at 0x%08lX\n", sqlite3_prepare_addr);
-							fflush(debugFile);
-						}
-						HookSqliteFunction("sqlite3_prepare", sqlite3_prepare_addr, (void*)HookedSqlite3Prepare, (void**)&g_original_sqlite3_prepare);
-					}
-					
+				// Try to get sqlite3_prepare address
+				DWORD sqlite3_prepare_addr = (DWORD)GetProcAddress(sqlite3Module, "sqlite3_prepare");
+				if (sqlite3_prepare_addr) {
 					if (logFile) {
-						fprintf(logFile, "[SQLITE_HOOK] SQLite hook installation completed\n");
+						fprintf(logFile, "[SQLITE_HOOK] Found sqlite3_prepare at 0x%08lX\n", sqlite3_prepare_addr);
 						fflush(logFile);
 					}
 					if (debugFile) {
-						fprintf(debugFile, "SQLite hook installation completed\n");
+						fprintf(debugFile, "Hooking sqlite3_prepare at 0x%08lX\n", sqlite3_prepare_addr);
 						fflush(debugFile);
 					}
-				} else {
-					if (logFile) {
-						fprintf(logFile, "[SQLITE_HOOK] Could not find SQLite module\n");
-						fflush(logFile);
-					}
-					if (debugFile) {
-						fprintf(debugFile, "Could not find SQLite module\n");
-						fflush(debugFile);
-					}
+					HookSqliteFunction("sqlite3_prepare", sqlite3_prepare_addr, (void*)HookedSqlite3Prepare, (void**)&g_original_sqlite3_prepare);
+				}
+				
+				if (logFile) {
+					fprintf(logFile, "[SQLITE_HOOK] SQLite hook installation completed\n");
+					fflush(logFile);
+				}
+				if (debugFile) {
+					fprintf(debugFile, "SQLite hook installation completed\n");
+					fflush(debugFile);
+				}
+			} else {
+				if (logFile) {
+					fprintf(logFile, "[SQLITE_HOOK] Could not find SQLite module\n");
+					fflush(logFile);
+				}
+				if (debugFile) {
+					fprintf(debugFile, "Could not find SQLite module\n");
+					fflush(debugFile);
 				}
 			}
 		}
