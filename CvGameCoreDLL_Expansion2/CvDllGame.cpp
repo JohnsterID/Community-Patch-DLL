@@ -1214,30 +1214,11 @@ void CvDllGame::InstallBinaryHooksEarly()
 		fflush(debugFile);
 	}
 	
-	// Force early check of BIN_HOOKS directly from database since CustomMods might not be initialized yet
-	bool binHooksEnabled = false;
-	try {
-		// Try to get BIN_HOOKS value directly from database
-		Database::Connection* db = GC.GetGameDatabase();
-		if (db) {
-			Database::Results kResults;
-			if (db->SelectWhere(kResults, "CustomModOptions", "Name='BIN_HOOKS'")) {
-				if (kResults.Step()) {
-					binHooksEnabled = (kResults.GetInt("Value") == 1);
-					if (debugFile) {
-						fprintf(debugFile, "Direct database check: BIN_HOOKS = %s\n", binHooksEnabled ? "true" : "false");
-						fflush(debugFile);
-					}
-				}
-			}
-		}
-	} catch (...) {
-		// Fallback to MOD_BIN_HOOKS macro if database access fails
-		binHooksEnabled = MOD_BIN_HOOKS;
-		if (debugFile) {
-			fprintf(debugFile, "Database access failed, using MOD_BIN_HOOKS macro: %s\n", binHooksEnabled ? "true" : "false");
-			fflush(debugFile);
-		}
+	// Use MOD_BIN_HOOKS macro directly - don't trust database as it may have stale data
+	bool binHooksEnabled = MOD_BIN_HOOKS;
+	if (debugFile) {
+		fprintf(debugFile, "Using MOD_BIN_HOOKS macro directly: %s\n", binHooksEnabled ? "true" : "false");
+		fflush(debugFile);
 	}
 	
 	if (binHooksEnabled)
