@@ -1500,13 +1500,21 @@ void CvDllGame::InstallBinaryHooksEarly()
 				fflush(debugFile);
 			}
 		}
+		
+		// Mark hooks as installed ONLY if they were actually installed
+		hooksInstalled = true;
+		
+		// Start monitoring mod status to detect when deactivation occurs
+		StartModStatusMonitoring();
 	}
 	else
 	{
 		if (debugFile) {
 			fprintf(debugFile, "MOD_BIN_HOOKS is disabled - no hook installation\n");
+			fprintf(debugFile, "NOT setting hooksInstalled flag - allowing future instances to try\n");
 			fflush(debugFile);
 		}
+		// DO NOT set hooksInstalled = true here! Let future instances with binHooksEnabled=true install hooks
 	}
 	
 	if (logFile) {
@@ -1515,12 +1523,6 @@ void CvDllGame::InstallBinaryHooksEarly()
 	if (debugFile) {
 		fclose(debugFile);
 	}
-	
-	// Mark hooks as installed to prevent repeated installations
-	hooksInstalled = true;
-	
-	// Start monitoring mod status to detect when deactivation occurs
-	StartModStatusMonitoring();
 #endif
 }
 
