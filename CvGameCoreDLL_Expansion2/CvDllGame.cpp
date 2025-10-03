@@ -709,7 +709,7 @@ bool __fastcall HookedBulkDeactivate(void* this_ptr, void* edx)
 	bool isMultiplayer = false;
 	
 	// Try to get the game instance to check multiplayer status
-	CvGame* pGame = GC.getGameINLINE();
+	CvGame* pGame = GC.getGamePointer();
 	if (pGame != NULL) {
 		isMultiplayer = pGame->isNetworkMultiPlayer() || pGame->isHotSeat() || pGame->isPbem();
 		
@@ -762,7 +762,7 @@ void CvDllGame::HookDeactivateModsFunction(DWORD functionAddr)
 	FILE* debugFile = NULL;
 	
 	if (fopen_s(&logFile, "Logs/MOD_HOOK_DEBUG.log", "a") == 0 && logFile != NULL) {
-		fprintf(logFile, "[MOD_HOOK] Attempting to hook DeactivateMods at address 0x%08X\n", functionAddr);
+		fprintf(logFile, "[MOD_HOOK] Attempting to hook DeactivateMods at address 0x%08lX\n", functionAddr);
 		fflush(logFile);
 	}
 	
@@ -791,7 +791,7 @@ void CvDllGame::HookDeactivateModsFunction(DWORD functionAddr)
 		DWORD relativeAddr = hookAddr - functionAddr - 5;
 		
 		if (logFile) {
-			fprintf(logFile, "[MOD_HOOK] Hook function at 0x%08X, relative addr: 0x%08X\n", hookAddr, relativeAddr);
+			fprintf(logFile, "[MOD_HOOK] Hook function at 0x%08lX, relative addr: 0x%08lX\n", hookAddr, relativeAddr);
 			fflush(logFile);
 		}
 		if (debugFile) {
@@ -841,7 +841,7 @@ void CvDllGame::HookBulkDeactivateFunction(DWORD functionAddr)
 	FILE* debugFile = NULL;
 	
 	if (fopen_s(&logFile, "Logs/MOD_HOOK_DEBUG.log", "a") == 0 && logFile != NULL) {
-		fprintf(logFile, "[MOD_HOOK] Attempting to hook BulkDeactivate at address 0x%08X\n", functionAddr);
+		fprintf(logFile, "[MOD_HOOK] Attempting to hook BulkDeactivate at address 0x%08lX\n", functionAddr);
 		fflush(logFile);
 	}
 	
@@ -870,7 +870,7 @@ void CvDllGame::HookBulkDeactivateFunction(DWORD functionAddr)
 		DWORD relativeAddr = hookAddr - functionAddr - 5;
 		
 		if (logFile) {
-			fprintf(logFile, "[MOD_HOOK] Bulk hook function at 0x%08X, relative addr: 0x%08X\n", hookAddr, relativeAddr);
+			fprintf(logFile, "[MOD_HOOK] Bulk hook function at 0x%08lX, relative addr: 0x%08lX\n", hookAddr, relativeAddr);
 			fflush(logFile);
 		}
 		if (debugFile) {
@@ -1207,7 +1207,7 @@ void CvDllGame::InitExeStuff()
 				deactivateModsAddr = 0x007C2C60;  // sub_7C2C60 - calls "UPDATE Mods Set Activated = 0"
 
 			if (logFile) {
-				fprintf(logFile, "[MOD_HOOK] InitExeStuff: deactivateModsAddr = 0x%08X, totalOffset = 0x%08X\n", 
+				fprintf(logFile, "[MOD_HOOK] InitExeStuff: deactivateModsAddr = 0x%08lX, totalOffset = 0x%08lX\n", 
 					deactivateModsAddr, totalOffset);
 				fflush(logFile);
 			}
