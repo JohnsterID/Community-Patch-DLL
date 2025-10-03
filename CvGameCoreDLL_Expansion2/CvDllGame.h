@@ -33,6 +33,7 @@ public:
 
 	void InitExeStuff();
 	void InstallBinaryHooksEarly();
+	void StartModStatusMonitoring();
 #ifdef WIN32
 	void HookDeactivateModsFunction(DWORD functionAddr);
 #endif

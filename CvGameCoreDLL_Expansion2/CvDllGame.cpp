@@ -609,7 +609,8 @@ bool endsWith(const char* str, const char* ending)
 typedef int (__cdecl *DeactivateModsFunc)();
 DeactivateModsFunc g_originalDeactivateMods = NULL;
 
-// Hook function that preserves multiplayer-compatible mods
+// Hook function that intercepts individual mod disabling
+// This prevents "UPDATE Mods Set Enabled = 0 WHERE ModID = ?" during multiplayer setup
 int __cdecl HookedDeactivateMods()
 {
 	// Debug: Write to a log file that we can check
@@ -617,13 +618,13 @@ int __cdecl HookedDeactivateMods()
 	FILE* debugFile = NULL;
 	
 	if (fopen_s(&logFile, "Logs/MOD_HOOK_DEBUG.log", "a") == 0 && logFile != NULL) {
-		fprintf(logFile, "[MOD_HOOK] HookedDeactivateMods called\n");
+		fprintf(logFile, "[MOD_HOOK] Individual mod disable function intercepted!\n");
 		fflush(logFile);
 	}
 	
 	// Also create a simple debug file to make it obvious the hook was called
 	if (fopen_s(&debugFile, "HOOK_EXECUTION_DEBUG.txt", "a") == 0 && debugFile != NULL) {
-		fprintf(debugFile, "HookedDeactivateMods called!\n");
+		fprintf(debugFile, "Individual mod disable function intercepted!\n");
 		fflush(debugFile);
 		fclose(debugFile);
 	}
@@ -762,6 +763,22 @@ void CvDllGame::HookDeactivateModsFunction(DWORD functionAddr)
 }
 #endif
 
+void CvDllGame::StartModStatusMonitoring()
+{
+	// Create a background thread to monitor mod status changes
+	// This will help us detect when mods get deactivated even if our hooks aren't called
+	
+	FILE* monitorFile = NULL;
+	if (fopen_s(&monitorFile, "MOD_MONITOR_STARTED.txt", "w") == 0 && monitorFile != NULL) {
+		fprintf(monitorFile, "Mod status monitoring started\n");
+		fclose(monitorFile);
+	}
+	
+	// For now, just log that monitoring started
+	// In a full implementation, we'd create a thread that periodically checks the database
+	// and logs when the mod count changes
+}
+
 void CvDllGame::InstallBinaryHooksEarly()
 {
 #ifdef WIN32
@@ -831,11 +848,12 @@ void CvDllGame::InstallBinaryHooksEarly()
 				fflush(debugFile);
 			}
 			
-			// Try all three binary variants - we don't know which one is running
+			// Hook the REAL mod deactivation functions - these execute "UPDATE Mods Set Enabled = 0 WHERE ModID = ?"
+			// This is what actually happens during multiplayer setup - individual mods are disabled, not bulk deactivated
 			DWORD addresses[] = {
-				0x007B91F0,  // DX9 - sub_7B91F0
-				0x007C1BB0,  // DX11 - sub_7C1BB0  
-				0x007C2C60   // Tablet - sub_7C2C60
+				0x007B9510,  // DX9 - sub_7B9510 (confirmed: executes "UPDATE Mods Set Enabled = 0 WHERE ModID = ?")
+				0x007C1ED0,  // DX11 - sub_7C1ED0 (confirmed: executes "UPDATE Mods Set Enabled = 0 WHERE ModID = ?")
+				0x007C2F80   // Tablet - sub_7C2F80 (confirmed: executes "UPDATE Mods Set Enabled = 0 WHERE ModID = ?")
 			};
 			const char* types[] = { "DX9", "DX11", "Tablet" };
 			
@@ -844,7 +862,7 @@ void CvDllGame::InstallBinaryHooksEarly()
 				DWORD deactivateModsAddr = addresses[i];
 				
 				if (logFile) {
-					fprintf(logFile, "[MOD_HOOK] InstallBinaryHooksEarly: Trying %s address 0x%08lX\n", 
+					fprintf(logFile, "[MOD_HOOK] InstallBinaryHooksEarly: Hooking %s individual mod disable function at 0x%08lX\n", 
 						types[i], deactivateModsAddr);
 					fflush(logFile);
 				}
@@ -904,6 +922,9 @@ void CvDllGame::InstallBinaryHooksEarly()
 	
 	// Mark hooks as installed to prevent repeated installations
 	hooksInstalled = true;
+	
+	// Start monitoring mod status to detect when deactivation occurs
+	StartModStatusMonitoring();
 #endif
 }
 
