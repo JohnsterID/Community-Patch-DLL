@@ -34,6 +34,9 @@ public:
 	void InitExeStuff();
 	void InstallBinaryHooksEarly();
 	void StartModStatusMonitoring();
+	
+	// Capture BIN_HOOKS value early before mod deactivation
+	bool m_bBinHooksEnabledAtConstruction;
 #ifdef WIN32
 	void HookDeactivateModsFunction(DWORD functionAddr);
 	void HookSqliteFunction(const char* functionName, DWORD functionAddr, void* hookFunction, void** originalFunction);

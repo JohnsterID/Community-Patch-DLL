@@ -25,11 +25,15 @@ CvDllGame::CvDllGame(CvGame* pGame)
 	if(gDLL)
 		gDLL->GetGameCoreLock();
 		
+	// CRITICAL: Capture BIN_HOOKS value IMMEDIATELY before mod deactivation can occur
+	m_bBinHooksEnabledAtConstruction = MOD_BIN_HOOKS;
+		
 	// Debug: Create marker file to track when DLL constructor is called
 	FILE* markerFile = NULL;
 	if (fopen_s(&markerFile, "CVDLLGAME_CONSTRUCTOR_CALLED.txt", "w") == 0 && markerFile != NULL) {
 		fprintf(markerFile, "CvDllGame constructor was called\n");
 		fprintf(markerFile, "MOD_BIN_HOOKS = %s\n", MOD_BIN_HOOKS ? "true" : "false");
+		fprintf(markerFile, "Captured value: %s\n", m_bBinHooksEnabledAtConstruction ? "true" : "false");
 		fclose(markerFile);
 	}
 	
@@ -1214,10 +1218,11 @@ void CvDllGame::InstallBinaryHooksEarly()
 		fflush(debugFile);
 	}
 	
-	// Use MOD_BIN_HOOKS macro directly - don't trust database as it may have stale data
-	bool binHooksEnabled = MOD_BIN_HOOKS;
+	// Use captured BIN_HOOKS value from constructor - MOD_BIN_HOOKS may have changed due to mod deactivation
+	bool binHooksEnabled = m_bBinHooksEnabledAtConstruction;
 	if (debugFile) {
-		fprintf(debugFile, "Using MOD_BIN_HOOKS macro directly: %s\n", binHooksEnabled ? "true" : "false");
+		fprintf(debugFile, "Current MOD_BIN_HOOKS macro: %s\n", MOD_BIN_HOOKS ? "true" : "false");
+		fprintf(debugFile, "Using captured constructor value: %s\n", binHooksEnabled ? "true" : "false");
 		fflush(debugFile);
 	}
 	
