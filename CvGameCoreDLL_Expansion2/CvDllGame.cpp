@@ -1996,64 +1996,7 @@ void CvDllGame::InstallBinaryHooksEarly()
 			
 			const char* types[] = { "DX9", "DX11", "Tablet" };
 			
-			// Hook SetActiveDLCandMods function - MPPatch-inspired approach
-			if (debugFile) {
-				fprintf(debugFile, "=== HOOKING SETACTIVEDLCANDMODS FUNCTION (MPPATCH APPROACH) ===\n");
-				fprintf(debugFile, "STRATEGY: Intercept main mod activation function to restore mods after deactivation\n");
-				fflush(debugFile);
-			}
-			
-			// SetActiveDLCandMods function address from Civ5XP.c analysis: 0x0898B5A8
-			DWORD setActiveOffset = 0x898B5A8 - expectedBase;
-			DWORD setActiveDLCandModsAddr = baseAddress + setActiveOffset;
-			
-			if (logFile) {
-				fprintf(logFile, "[SETACTIVE_HOOK] InstallBinaryHooksEarly: Calculated SetActiveDLCandMods address: 0x%08lX (base: 0x%08lX + offset: 0x%08lX)\n", 
-					setActiveDLCandModsAddr, baseAddress, setActiveOffset);
-				fflush(logFile);
-			}
-			
-			if (debugFile) {
-				fprintf(debugFile, "Trying SetActiveDLCandMods address 0x%08lX (base + 0x%08lX)\n", setActiveDLCandModsAddr, setActiveOffset);
-				fflush(debugFile);
-			}
-			
-			// Validate the address points to executable memory
-			if (setActiveDLCandModsAddr != 0)
-			{
-				// Check if we can read the first few bytes (function prologue)
-				if (!IsBadReadPtr((void*)setActiveDLCandModsAddr, 5)) {
-					unsigned char firstBytes[5];
-					memcpy(firstBytes, (void*)setActiveDLCandModsAddr, 5);
-					
-					if (logFile) {
-						fprintf(logFile, "[SETACTIVE_HOOK] SetActiveDLCandMods function bytes: %02X %02X %02X %02X %02X\n", 
-							firstBytes[0], firstBytes[1], firstBytes[2], firstBytes[3], firstBytes[4]);
-						fflush(logFile);
-					}
-					if (debugFile) {
-						fprintf(debugFile, "SetActiveDLCandMods bytes: %02X %02X %02X %02X %02X\n", 
-							firstBytes[0], firstBytes[1], firstBytes[2], firstBytes[3], firstBytes[4]);
-						fflush(debugFile);
-					}
-					
-					if (debugFile) {
-						fprintf(debugFile, "Calling HookSetActiveDLCandMods\n");
-						fflush(debugFile);
-					}
-					
-					HookSetActiveDLCandMods(setActiveDLCandModsAddr);
-				} else {
-					if (logFile) {
-						fprintf(logFile, "[SETACTIVE_HOOK] ERROR: Cannot read memory at SetActiveDLCandMods address 0x%08lX\n", setActiveDLCandModsAddr);
-						fflush(logFile);
-					}
-					if (debugFile) {
-						fprintf(debugFile, "ERROR: Cannot read SetActiveDLCandMods address 0x%08lX\n", setActiveDLCandModsAddr);
-						fflush(debugFile);
-					}
-				}
-			}
+
 			
 			// 3. SQLite function hooks - catch ANY database operations
 			if (debugFile) {
@@ -2265,6 +2208,37 @@ void CvDllGame::InitExeStuff()
 			{
 				if (logFile) {
 					fprintf(logFile, "[MOD_HOOK] InitExeStuff: No address found for binType %d\n", binType);
+					fflush(logFile);
+				}
+			}
+			
+			// Hook SetActiveDLCandMods function - MPPatch-inspired approach
+			DWORD setActiveDLCandModsAddr = 0;
+			if (binType == BIN_DX11)
+				setActiveDLCandModsAddr = 0x006B8E50;  // sub_6B8E50 - SetActiveDLCandMods parent function
+			else if (binType == BIN_DX9)
+				setActiveDLCandModsAddr = 0x006B8E00;  // sub_6B8E00 - SetActiveDLCandMods parent function  
+			else if (binType == BIN_TABLET)
+				setActiveDLCandModsAddr = 0x006B8E50;  // Assume same as DX11 for now
+			
+			if (logFile) {
+				fprintf(logFile, "[SETACTIVE_HOOK] InitExeStuff: setActiveDLCandModsAddr = 0x%08lX, totalOffset = 0x%08lX\n", 
+					setActiveDLCandModsAddr, totalOffset);
+				fflush(logFile);
+			}
+			
+			if (setActiveDLCandModsAddr != 0)
+			{
+				if (logFile) {
+					fprintf(logFile, "[SETACTIVE_HOOK] InitExeStuff: Calling HookSetActiveDLCandMods\n");
+					fflush(logFile);
+				}
+				HookSetActiveDLCandMods(setActiveDLCandModsAddr + totalOffset);
+			}
+			else
+			{
+				if (logFile) {
+					fprintf(logFile, "[SETACTIVE_HOOK] InitExeStuff: No SetActiveDLCandMods address found for binType %d\n", binType);
 					fflush(logFile);
 				}
 			}
