@@ -61,6 +61,15 @@ CvDllGame::~CvDllGame()
 		fclose(markerFile);
 	}
 	
+	// Add crash analysis logging
+	FILE* crashAnalysisFile = NULL;
+	if (fopen_s(&crashAnalysisFile, "CRASH_ANALYSIS_DEBUG.txt", "a") == 0 && crashAnalysisFile != NULL) {
+		fprintf(crashAnalysisFile, "[%lu] CvDllGame destructor called - instance %p being destroyed\n", GetTickCount(), this);
+		fprintf(crashAnalysisFile, "[%lu] If crash happens during destructor, it might be related to DLL unloading\n", GetTickCount());
+		fflush(crashAnalysisFile);
+		fclose(crashAnalysisFile);
+	}
+	
 	if(gDLL)
 		gDLL->ReleaseGameCoreLock();
 }
@@ -856,30 +865,40 @@ bool __thiscall HookedBulkDeactivate(void* this_ptr)
 	
 	if (isMultiplayer) {
 		if (logFile) {
-			fprintf(logFile, "[MOD_HOOK] HookedBulkDeactivate: ALLOWING deactivation but will restore mods immediately!\n");
+			fprintf(logFile, "[MOD_HOOK] HookedBulkDeactivate: BLOCKING bulk mod deactivation in multiplayer (FIXED APPROACH)!\n");
 			fflush(logFile);
 		}
 		if (debugFile) {
-			fprintf(debugFile, "ALLOWING deactivation then restoring mods - calling original function!\n");
+			fprintf(debugFile, "BLOCKING bulk mod deactivation - NOT calling original function (prevents infinite recursion)!\n");
 			fflush(debugFile);
 		}
 		
-		// Close files before calling original function
+		// Close files
 		if (logFile) fclose(logFile);
 		if (debugFile) fclose(debugFile);
 		
-		// Reset re-entry guard before calling original
+		// CRITICAL INSIGHT: We cannot call g_originalBulkDeactivate because it points to the hooked address
+		// The hook installation overwrites the original function with a JMP to our hook
+		// So calling g_originalBulkDeactivate(this_ptr) creates infinite recursion
+		
+		// SOLUTION: Don't call the original function at all
+		// The game expects this function to return success, so we return true
+		// This prevents the "UPDATE Mods Set Activated = 0" SQL from executing
+		// The mods stay active, which is what we want
+		
+		// Add detailed logging to understand what happens after we return
+		FILE* crashAnalysisFile = NULL;
+		if (fopen_s(&crashAnalysisFile, "CRASH_ANALYSIS_DEBUG.txt", "a") == 0 && crashAnalysisFile != NULL) {
+			fprintf(crashAnalysisFile, "[%lu] HookedBulkDeactivate: Returning success without deactivation - preventing SQL execution\n", GetTickCount());
+			fprintf(crashAnalysisFile, "[%lu] If game crashes after this, the issue is NOT the deactivation SQL itself\n", GetTickCount());
+			fprintf(crashAnalysisFile, "[%lu] The crash must be caused by something else in the multiplayer initialization process\n", GetTickCount());
+			fflush(crashAnalysisFile);
+			fclose(crashAnalysisFile);
+		}
+		
+		// Reset re-entry guard before returning
 		inHook = false;
-		
-		// CALL the original function to allow deactivation
-		// This lets the game's normal process continue
-		bool result = g_originalBulkDeactivate(this_ptr);
-		
-		// Now immediately re-activate the mods we want to keep
-		// This happens after the deactivation but before the DLL reload
-		RestoreModsAfterDeactivation();
-		
-		return result;
+		return true; // Return success without deactivating mods
 	}
 	
 	// Close files
