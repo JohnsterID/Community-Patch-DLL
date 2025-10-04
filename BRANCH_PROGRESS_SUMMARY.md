@@ -258,9 +258,9 @@ DWORD targetAddress = baseAddress + offset;         // ASLR-safe
 - Use reverse-engineered code to find better intervention points
 
 ### **4. Research Available Binaries:**
-- **Primary:** `/workspace/Civ5XP.c` (Linux - most detailed information)
-- **Secondary:** `/workspace/CivilizationV_DX11.exe.c` (Windows DX11)
-- **Tertiary:** `/workspace/CivilizationV_Tablet.exe.c`, `/workspace/CivilizationV.exe.c` (DX9)
+- **Primary:** `/workspace/Civ5XP.c` (Linux - most detailed information with names preserved)
+- **Secondary:** `/workspace/CivilizationV.exe.c` (DX9)
+- **Tertiary:** `/workspace/CivilizationV_Tablet.exe.c`, ``/workspace/CivilizationV_DX11.exe.c` (DX11)
 
 ---
 
