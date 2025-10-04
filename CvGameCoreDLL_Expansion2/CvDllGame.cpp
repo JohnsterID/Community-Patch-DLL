@@ -37,41 +37,28 @@ CvDllGame::CvDllGame(CvGame* pGame)
 		DeleteFileA("FIRST_HOOK_CALL.timestamp");
 		DeleteFileA("CONSTRUCTOR_PROTECTION_ACTIVE.flag");
 		DeleteFileA("CONSTRUCTOR_COUNT.txt");
+		DeleteFileA("CONSTRUCTOR_IN_PROGRESS.lock");
 		protectionFilesCleanedUp = true;
 	}
 	
-	// CONSTRUCTOR-LEVEL PROTECTION: Track constructor calls to prevent infinite recursion
-	// The recursion happens at constructor level, not just InstallBinaryHooksEarly level
+	// STRATEGIC CONSTRUCTOR MANAGEMENT: Allow first few constructors, prevent excessive recursion
+	// GOAL: Let first constructor install hooks, prevent infinite recursion from subsequent calls
+	
+	// Track constructor count for debugging
 	const char* constructorCountFile = "CONSTRUCTOR_COUNT.txt";
 	int constructorCount = 0;
-	
-	// Read current constructor count
 	FILE* countFile = NULL;
 	if (fopen_s(&countFile, constructorCountFile, "r") == 0 && countFile != NULL) {
 		fscanf_s(countFile, "%d", &constructorCount);
 		fclose(countFile);
 	}
-	
-	// Increment and write back
 	constructorCount++;
 	if (fopen_s(&countFile, constructorCountFile, "w") == 0 && countFile != NULL) {
 		fprintf(countFile, "%d", constructorCount);
 		fclose(countFile);
 	}
 	
-	// If we have too many constructor calls in rapid succession, skip hook installation
-	if (constructorCount > 3) {
-		FILE* recursionLog = NULL;
-		if (fopen_s(&recursionLog, "CONSTRUCTOR_RECURSION_DETECTED.txt", "a") == 0 && recursionLog != NULL) {
-			fprintf(recursionLog, "[%lu] CONSTRUCTOR #%d - instance %p (RECURSION LIKELY)\n", GetTickCount(), constructorCount, this);
-			fprintf(recursionLog, "[%lu] Will skip InstallBinaryHooksEarly to prevent infinite loop\n", GetTickCount());
-			fclose(recursionLog);
-		}
-		// Set a flag to skip hook installation for this instance
-		m_bSkipHookInstallation = true;
-	} else {
-		m_bSkipHookInstallation = false;
-	}
+	m_bSkipHookInstallation = false;
 		
 	// ADVANCED DEBUG: Create comprehensive constructor tracking
 	FILE* markerFile = NULL;
@@ -1742,23 +1729,28 @@ void CvDllGame::InstallBinaryHooksEarly()
 		fclose(timeFile);
 	}
 	
-	// If this is the very first call ever, record it and allow hooks
+	// STRATEGIC HOOK INSTALLATION: Install hooks on first call to protect mods
+	// GOAL: Keep mods active during multiplayer setup by blocking deactivation
 	if (firstCallTime == 0) {
+		// This is the very first call - ALWAYS install hooks regardless of MOD_BIN_HOOKS
+		// This is our chance to install the protection before SP->MP transition
 		if (fopen_s(&timeFile, firstCallFile, "w") == 0 && timeFile != NULL) {
 			fprintf(timeFile, "%lu", currentTime);
 			fclose(timeFile);
 		}
 		if (debugFile) {
-			fprintf(debugFile, "FILE-BASED PROTECTION: First call ever - hook installation ALLOWED\n");
+			fprintf(debugFile, "STRATEGIC HOOK INSTALLATION: First call - installing hooks to protect mods\n");
+			fprintf(debugFile, "MOD_BIN_HOOKS = %s (installing regardless to prevent future deactivation)\n", MOD_BIN_HOOKS ? "true" : "false");
 			fprintf(debugFile, "Created timestamp file: %s with time %lu\n", firstCallFile, currentTime);
 			fflush(debugFile);
 		}
+		// Continue with hook installation below
 	} else {
-		// This is a subsequent call - check if we should activate protection
+		// This is a subsequent call - activate protection to prevent recursion
 		DWORD timeSinceFirst = currentTime - firstCallTime;
 		
-		// If MOD_BIN_HOOKS becomes true after the first call, activate protection
-		if (MOD_BIN_HOOKS && !hookProtectionActive) {
+		// Always activate protection for subsequent calls to prevent recursion
+		if (!hookProtectionActive) {
 			// Create protection file
 			if (fopen_s(&protFile, protectionFile, "w") == 0 && protFile != NULL) {
 				fprintf(protFile, "HOOK_PROTECTION_ACTIVE");
@@ -1766,28 +1758,27 @@ void CvDllGame::InstallBinaryHooksEarly()
 			}
 			hookProtectionActive = true;
 			if (debugFile) {
-				fprintf(debugFile, "FILE-BASED PROTECTION: ACTIVATED - MOD_BIN_HOOKS became true %lu ms after first call\n", timeSinceFirst);
+				fprintf(debugFile, "RECURSION PROTECTION: ACTIVATED for subsequent call %lu ms after first\n", timeSinceFirst);
+				fprintf(debugFile, "MOD_BIN_HOOKS = %s (blocking to prevent recursion)\n", MOD_BIN_HOOKS ? "true" : "false");
 				fprintf(debugFile, "Created protection file: %s\n", protectionFile);
 				fflush(debugFile);
 			}
 		}
 		
-		// If protection is active, block all hook installation
-		if (hookProtectionActive) {
-			if (debugFile) {
-				fprintf(debugFile, "FILE-BASED PROTECTION: Hook installation BLOCKED\n");
-				fprintf(debugFile, "Protection active since MOD_BIN_HOOKS became true during SP->MP transition\n");
-				fprintf(debugFile, "This prevents the GameCore::GetGame recursion that causes infinite loops\n");
-				fflush(debugFile);
-				fclose(debugFile);
-			}
-			if (logFile) {
-				fprintf(logFile, "[MOD_HOOK] FILE-BASED PROTECTION: Hook installation BLOCKED (protection active)\n");
-				fflush(logFile);
-				fclose(logFile);
-			}
-			return; // Exit early to prevent recursion
+		// Block all subsequent hook installation attempts to prevent recursion
+		if (debugFile) {
+			fprintf(debugFile, "RECURSION PROTECTION: Hook installation BLOCKED\n");
+			fprintf(debugFile, "Hooks already installed on first call - preventing recursion\n");
+			fprintf(debugFile, "Installed hooks will block mod deactivation during SP->MP transition\n");
+			fflush(debugFile);
+			fclose(debugFile);
 		}
+		if (logFile) {
+			fprintf(logFile, "[MOD_HOOK] RECURSION PROTECTION: Hook installation BLOCKED (preventing recursion)\n");
+			fflush(logFile);
+			fclose(logFile);
+		}
+		return; // Exit early to prevent recursion
 	}
 	
 	if (debugFile) {
