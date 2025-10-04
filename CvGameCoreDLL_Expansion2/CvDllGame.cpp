@@ -1428,13 +1428,13 @@ void CvDllGame::InstallBinaryHooksEarly()
 			fprintf(advancedDebugFile, "- Process ID: %lu\n", GetCurrentProcessId());
 			
 			// Check current database state
-			Database::Connection* db = gCustomMods.getDatabase();
+			Database::Connection* db = GC.GetGameDatabase();
 			if (db != NULL) {
 				fprintf(advancedDebugFile, "DATABASE STATE BEFORE HOOK INSTALLATION:\n");
 				
 				// Query current mod activation state
 				Database::Results results;
-				if (db->Execute(&results, "SELECT COUNT(*) FROM Mods WHERE Activated = 1", -1)) {
+				if (db->Execute(results, "SELECT COUNT(*) FROM Mods WHERE Activated = 1")) {
 					if (results.Step()) {
 						int activeMods = results.GetInt(0);
 						fprintf(advancedDebugFile, "- Active mods count: %d\n", activeMods);
@@ -1443,7 +1443,7 @@ void CvDllGame::InstallBinaryHooksEarly()
 				}
 				
 				// Query total mods
-				if (db->Execute(&results, "SELECT COUNT(*) FROM Mods", -1)) {
+				if (db->Execute(results, "SELECT COUNT(*) FROM Mods")) {
 					if (results.Step()) {
 						int totalMods = results.GetInt(0);
 						fprintf(advancedDebugFile, "- Total mods count: %d\n", totalMods);
@@ -1452,7 +1452,7 @@ void CvDllGame::InstallBinaryHooksEarly()
 				}
 				
 				// Query mod details
-				if (db->Execute(&results, "SELECT ID, Name, Activated FROM Mods LIMIT 10", -1)) {
+				if (db->Execute(results, "SELECT ID, Name, Activated FROM Mods LIMIT 10")) {
 					fprintf(advancedDebugFile, "- First 10 mods:\n");
 					while (results.Step()) {
 						const char* id = results.GetText(0);
