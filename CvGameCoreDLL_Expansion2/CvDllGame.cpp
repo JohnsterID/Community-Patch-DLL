@@ -1800,18 +1800,27 @@ void CvDllGame::InstallBinaryHooksEarly()
 		return;
 	}
 	
-	// Use captured BIN_HOOKS value from constructor - MOD_BIN_HOOKS may have changed due to mod deactivation
+	// STRATEGIC DECISION: Install hooks on first call OR when binHooksEnabled=true
+	// GOAL: Protect mods during multiplayer setup by installing hooks before SP->MP transition
 	bool binHooksEnabled = m_bBinHooksEnabledAtConstruction;
+	bool isFirstCall = (firstCallTime == 0); // Check if this was the first call ever
+	
 	if (debugFile) {
 		fprintf(debugFile, "Current MOD_BIN_HOOKS macro: %s\n", MOD_BIN_HOOKS ? "true" : "false");
 		fprintf(debugFile, "Using captured constructor value: %s\n", binHooksEnabled ? "true" : "false");
+		fprintf(debugFile, "Is first call ever: %s\n", isFirstCall ? "true" : "false");
 		fflush(debugFile);
 	}
 	
-	if (binHooksEnabled)
+	// Install hooks if: (1) This is the first call ever (strategic installation), OR (2) binHooksEnabled=true
+	if (binHooksEnabled || isFirstCall)
 	{
 		if (debugFile) {
-			fprintf(debugFile, "BIN_HOOKS is enabled, proceeding with hook installation\n");
+			if (isFirstCall) {
+				fprintf(debugFile, "STRATEGIC INSTALLATION: First call - installing hooks to protect mods\n");
+			} else {
+				fprintf(debugFile, "BIN_HOOKS is enabled, proceeding with hook installation\n");
+			}
 			fflush(debugFile);
 		}
 		
@@ -2060,11 +2069,11 @@ void CvDllGame::InstallBinaryHooksEarly()
 	else
 	{
 		if (debugFile) {
-			fprintf(debugFile, "MOD_BIN_HOOKS is disabled - no hook installation\n");
-			fprintf(debugFile, "NOT setting hooksInstalled flag - allowing future instances to try\n");
+			fprintf(debugFile, "HOOK INSTALLATION SKIPPED: Not first call and MOD_BIN_HOOKS disabled\n");
+			fprintf(debugFile, "This should not happen with strategic installation logic\n");
 			fflush(debugFile);
 		}
-		// DO NOT set hooksInstalled = true here! Let future instances with binHooksEnabled=true install hooks
+		// This branch should rarely be reached with strategic installation
 	}
 	
 	if (logFile) {
