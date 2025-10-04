@@ -5670,31 +5670,31 @@ void CvPlayerPolicies::SetPolicyBranchFinished(PolicyBranchTypes eBranchType, bo
 						{
 						case NO_POLICY_BRANCH_TYPE:
 							UNREACHABLE(); // It would be a logic error to complete `NO_POLICY_BRANCH_TYPE`.
-						case 0:
+						case static_cast<PolicyBranchTypes>(0):
 							gDLL->UnlockAchievement(ACHIEVEMENT_POLICY_TRADITION);
 							break;
-						case 1:
+						case static_cast<PolicyBranchTypes>(1):
 							gDLL->UnlockAchievement(ACHIEVEMENT_POLICY_LIBERTY);
 							break;
-						case 2:
+						case static_cast<PolicyBranchTypes>(2):
 							gDLL->UnlockAchievement(ACHIEVEMENT_POLICY_HONOR);
 							break;
-						case 3:
+						case static_cast<PolicyBranchTypes>(3):
 							gDLL->UnlockAchievement(ACHIEVEMENT_POLICY_PIETY);
 							break;
-						case 4:
+						case static_cast<PolicyBranchTypes>(4):
 							gDLL->UnlockAchievement(ACHIEVEMENT_POLICY_PATRONAGE);
 							break;
-						case 5:	//Aesthetics
+						case static_cast<PolicyBranchTypes>(5):	//Aesthetics
 							gDLL->UnlockAchievement(ACHIEVEMENT_XP2_48);
 							break;
-						case 6:
+						case static_cast<PolicyBranchTypes>(6):
 							gDLL->UnlockAchievement(ACHIEVEMENT_POLICY_COMMERCE);
 							break;
-						case 7: //Exploration
+						case static_cast<PolicyBranchTypes>(7): //Exploration
 							gDLL->UnlockAchievement(ACHIEVEMENT_XP2_47);
 							break;
-						case 8:
+						case static_cast<PolicyBranchTypes>(8):
 							gDLL->UnlockAchievement(ACHIEVEMENT_POLICY_RATIONALISM);
 							break;
 						}

@@ -429,10 +429,10 @@ bool CvNotifications::MayUserDismiss(int iLookupIndex)
 				return true;
 				break;
 
-			case -364200720:
-			case 826076831:
-			case 419811917:
-			case -1608954742:
+			case static_cast<NotificationTypes>(-364200720):
+			case static_cast<NotificationTypes>(826076831):
+			case static_cast<NotificationTypes>(419811917):
+			case static_cast<NotificationTypes>(-1608954742):
 				return false;
 				break;
 
@@ -623,15 +623,15 @@ bool CvNotifications::GetEndTurnBlockedType(EndTurnBlockingTypes& eBlockingType,
 				return true;
 				break;
 
-			case 826076831:
-			case 419811917:
-			case -1608954742:
+			case static_cast<NotificationTypes>(826076831):
+			case static_cast<NotificationTypes>(419811917):
+			case static_cast<NotificationTypes>(-1608954742):
 				eBlockingType = ENDTURN_BLOCKING_EVENT_CHOICE;
 				iNotificationIndex = m_aNotifications[iIndex].m_iLookupIndex;
 				return true;
 				break;
 
-			case -364200720:
+			case static_cast<NotificationTypes>(-364200720):
 				eBlockingType = ENDTURN_BLOCKING_CHOOSE_CITY_FATE;
 				iNotificationIndex = m_aNotifications[iIndex].m_iLookupIndex;
 				return true;
@@ -1068,7 +1068,7 @@ void CvNotifications::Activate(Notification& notification)
 			GC.GetEngineUserInterface()->AddPopup(kPopup);
 		}
 		break;
-	case 826076831:
+	case static_cast<NotificationTypes>(826076831):
 		PRECONDITION(notification.m_iGameDataIndex >= 0, "notification.m_iGameDataIndex is out of bounds");
 		if (notification.m_iGameDataIndex >= 0)
 		{
@@ -1092,7 +1092,7 @@ void CvNotifications::Activate(Notification& notification)
 			}
 		}
 		break;
-	case -364200720:
+	case static_cast<NotificationTypes>(-364200720):
 		if (GC.getMap().plot(notification.m_iX, notification.m_iY) != NULL)
 		{
 			CvPlot* pPlot = GC.getMap().plot(notification.m_iX, notification.m_iY);
@@ -1870,7 +1870,7 @@ bool CvNotifications::IsNotificationExpired(int iIndex)
 		}
 	}
 	break;
-	case 826076831: // City Event Notification
+	case static_cast<NotificationTypes>(826076831): // City Event Notification
 	{
 		CityEventTypes eCityEvent = (CityEventTypes)m_aNotifications[iIndex].m_iGameDataIndex;
 		if(eCityEvent != NO_EVENT_CITY)
@@ -1980,7 +1980,7 @@ bool CvNotifications::IsNotificationExpired(int iIndex)
 		return true;
 	}
 	break;
-	case -364200720:
+	case static_cast<NotificationTypes>(-364200720):
 	{
 		CvCity* pCity = GC.getMap().plot(m_aNotifications[iIndex].m_iX, m_aNotifications[iIndex].m_iY)->getPlotCity();
 		if (!pCity)

@@ -1485,10 +1485,16 @@ int CvLuaCity::lGetBuildingYieldRateTimes100(lua_State* L)
 
 	// Input validations
 	if (eYield <= NO_YIELD || eYield >= GC.getNUM_YIELD_TYPES())
-		return luaL_error(L, "Invalid yield ID %d", eYield);
+	{
+		luaL_error(L, "Invalid yield ID %d", eYield);
+		UNREACHABLE();
+	}
 
 	if (eBuilding <= NO_BUILDING || eBuilding >= GC.getNumBuildingInfos())
-		return luaL_error(L, "Invalid building ID %d", eBuilding);
+	{
+		luaL_error(L, "Invalid building ID %d", eBuilding);
+		UNREACHABLE();
+	}
 
 	const PlayerTypes ePlayer = pCity->getOwner();
 	const CvPlayer& kPlayer = GET_PLAYER(ePlayer);
@@ -1697,10 +1703,16 @@ int CvLuaCity::lGetBuildingYieldModifier(lua_State* L)
 
 	// Input validations
 	if (eYield <= NO_YIELD || eYield >= GC.getNUM_YIELD_TYPES())
-		return luaL_error(L, "Invalid yield ID %d", eYield);
+	{
+		luaL_error(L, "Invalid yield ID %d", eYield);
+		UNREACHABLE();
+	}
 
 	if (eBuilding <= NO_BUILDING || eBuilding >= GC.getNumBuildingInfos())
-		return luaL_error(L, "Invalid building ID %d", eBuilding);
+	{
+		luaL_error(L, "Invalid building ID %d", eBuilding);
+		UNREACHABLE();
+	}
 
 	PlayerTypes ePlayer = pCity->getOwner();
 	CvPlayer& kPlayer = GET_PLAYER(ePlayer);
@@ -3046,7 +3058,10 @@ int CvLuaCity::lGetSpecialistRate(lua_State* L)
 	CvCity* pCity = GetInstance(L);
 	const SpecialistTypes eSpecialist = toValue<SpecialistTypes>(L, 2);
 	if (eSpecialist <= NO_SPECIALIST || eSpecialist >= GC.getNumSpecialistInfos())
-		return luaL_error(L, "Invalid specialist ID %d", eSpecialist);
+	{
+		luaL_error(L, "Invalid specialist ID %d", eSpecialist);
+		UNREACHABLE();
+	}
 
 	const bool bTooltip = luaL_optbool(L, 3, false);
 	if (bTooltip)
@@ -7057,7 +7072,10 @@ int CvLuaCity::lGetCompetitiveSpawnUnitType(lua_State* L)
 	const bool bRandom = luaL_optbool(L, 8, false);
 	vector<int> viUnitCombat;
 	if (!(lua_istable(L, 9) || lua_isnoneornil(L, 9)))
-		return luaL_error(L, "Argument must be table or nil");
+	{
+		luaL_error(L, "Argument must be table or nil");
+		UNREACHABLE();
+	}
 
 	const int iLength = lua_objlen(L, 9);
 	for (int i = 1; i <= iLength; i++)
@@ -7065,7 +7083,10 @@ int CvLuaCity::lGetCompetitiveSpawnUnitType(lua_State* L)
 		lua_rawgeti(L, 9, i);
 		const int iUnitCombat = lua_tointeger(L, -1);
 		if (!lua_isnumber(L, -1) || lua_tonumber(L, -1) != iUnitCombat)
-			return luaL_error(L, "Table values must be integers");
+		{
+			luaL_error(L, "Table values must be integers");
+			UNREACHABLE();
+		}
 
 		viUnitCombat.push_back(iUnitCombat);
 		lua_pop(L, 1);

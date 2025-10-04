@@ -2445,24 +2445,24 @@ void setGameSpeed(GameSpeedTypes g)
 
 	switch(s_gameSpeed)
 	{
-	case 0: // GAMESPEED_MARATHON
+	case static_cast<GameSpeedTypes>(0): // GAMESPEED_MARATHON
 	{
 		// No turn timer
 	}
 	break;
-	case 1: //  GAMESPEED_EPIC
+	case static_cast<GameSpeedTypes>(1): //  GAMESPEED_EPIC
 	{
 		// TURN_TIMER_SNAIL, 1
 		setTurnTimer(static_cast<TurnTimerTypes>(1));
 	}
 	break;
-	case 2: // GAMESPEED_STANDARD
+	case static_cast<GameSpeedTypes>(2): // GAMESPEED_STANDARD
 	{
 		// TUNRTIMER_MEDIUM, 3
 		setTurnTimer(static_cast<TurnTimerTypes>(3));
 	}
 	break;
-	case 3: // GAMESPEED_QUICK
+	case static_cast<GameSpeedTypes>(3): // GAMESPEED_QUICK
 	{
 		// TURNTIMER_FAST, 4
 		setTurnTimer(static_cast<TurnTimerTypes>(4));

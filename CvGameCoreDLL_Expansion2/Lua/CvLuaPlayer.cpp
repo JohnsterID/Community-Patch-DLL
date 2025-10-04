@@ -19040,7 +19040,10 @@ int CvLuaPlayer::lGetCompetitiveSpawnUnitType(lua_State* L)
 	const bool bRandom = luaL_optbool(L, 8, false);
 	vector<int> viUnitCombat;
 	if (!(lua_istable(L, 9) || lua_isnoneornil(L, 9)))
-		return luaL_error(L, "Argument must be table or nil");
+	{
+		luaL_error(L, "Argument must be table or nil");
+		UNREACHABLE();
+	}
 
 	const int iLength = lua_objlen(L, 9);
 	for (int i = 1; i <= iLength; i++)
@@ -19048,7 +19051,10 @@ int CvLuaPlayer::lGetCompetitiveSpawnUnitType(lua_State* L)
 		lua_rawgeti(L, 9, i);
 		const int iUnitCombat = lua_tointeger(L, -1);
 		if (!lua_isnumber(L, -1) || lua_tonumber(L, -1) != iUnitCombat)
-			return luaL_error(L, "Table values must be integers");
+		{
+			luaL_error(L, "Table values must be integers");
+			UNREACHABLE();
+		}
 
 		viUnitCombat.push_back(iUnitCombat);
 		lua_pop(L, 1);
