@@ -6957,28 +6957,28 @@ void CvGame::setWinner(TeamTypes eNewWinner, VictoryTypes eNewVictory)
 					{
 						switch(winnerHandicapType)
 						{
-						case 0:
+						case static_cast<HandicapTypes>(0):
 							gDLL->UnlockAchievement(ACHIEVEMENT_DIFLEVEL_SETTLER);
 							break;
-						case 1:
+						case static_cast<HandicapTypes>(1):
 							gDLL->UnlockAchievement(ACHIEVEMENT_DIFLEVEL_CHIEFTAIN);
 							break;
-						case 2:
+						case static_cast<HandicapTypes>(2):
 							gDLL->UnlockAchievement(ACHIEVEMENT_DIFLEVEL_WARLORD);
 							break;
-						case 3:
+						case static_cast<HandicapTypes>(3):
 							gDLL->UnlockAchievement(ACHIEVEMENT_DIFLEVEL_PRINCE);
 							break;
-						case 4:
+						case static_cast<HandicapTypes>(4):
 							gDLL->UnlockAchievement(ACHIEVEMENT_DIFLEVEL_KING);
 							break;
-						case 5:
+						case static_cast<HandicapTypes>(5):
 							gDLL->UnlockAchievement(ACHIEVEMENT_DIFLEVEL_EMPEROR);
 							break;
-						case 6:
+						case static_cast<HandicapTypes>(6):
 							gDLL->UnlockAchievement(ACHIEVEMENT_DIFLEVEL_IMMORTAL);
 							break;
-						case 7:
+						case static_cast<HandicapTypes>(7):
 							gDLL->UnlockAchievement(ACHIEVEMENT_DIFLEVEL_DEITY);
 							break;
 						default:
@@ -6988,13 +6988,13 @@ void CvGame::setWinner(TeamTypes eNewWinner, VictoryTypes eNewVictory)
 						//Different Victory Win Types
 						switch(eNewVictory)
 						{
-						case 0:
+						case static_cast<VictoryTypes>(0):
 							OutputDebugString("No current Achievement for a time victory");
 							break;
-						case 1:
+						case static_cast<VictoryTypes>(1):
 							gDLL->UnlockAchievement(ACHIEVEMENT_VICTORY_SPACE);
 							break;
-						case 2:
+						case static_cast<VictoryTypes>(2):
 							{
 								if(!bUsingXP1Scenario1)
 								{
@@ -7002,10 +7002,10 @@ void CvGame::setWinner(TeamTypes eNewWinner, VictoryTypes eNewVictory)
 								}
 							}
 							break;
-						case 3:
+						case static_cast<VictoryTypes>(3):
 							gDLL->UnlockAchievement(ACHIEVEMENT_VICTORY_CULTURE);
 							break;
-						case 4:
+						case static_cast<VictoryTypes>(4):
 							gDLL->UnlockAchievement(ACHIEVEMENT_VICTORY_DIPLO);
 							break;
 						default:
@@ -7322,13 +7322,13 @@ void CvGame::setWinner(TeamTypes eNewWinner, VictoryTypes eNewVictory)
 
 						switch(winnerHandicapType)
 						{
-						case 5:	//	Win scenario on Emperor (any civ)  YOU! The Conqueror
+						case static_cast<HandicapTypes>(5):	//	Win scenario on Emperor (any civ)  YOU! The Conqueror
 							gDLL->UnlockAchievement(ACHIEVEMENT_SCENARIO_04_WIN_EMPEROR);
 							break;
-						case 6:	//	Win scenario on Immortal (any civ)  Surviving Domesday
+						case static_cast<HandicapTypes>(6):	//	Win scenario on Immortal (any civ)  Surviving Domesday
 							gDLL->UnlockAchievement(ACHIEVEMENT_SCENARIO_04_WIN_IMMORTAL);
 							break;
-						case 7:	//	Win scenario on Deity (any civ)  Surviving Ragnarok
+						case static_cast<HandicapTypes>(7):	//	Win scenario on Deity (any civ)  Surviving Ragnarok
 							gDLL->UnlockAchievement(ACHIEVEMENT_SCENARIO_04_WIN_DEITY);
 							break;
 						default:
@@ -7353,13 +7353,13 @@ void CvGame::setWinner(TeamTypes eNewWinner, VictoryTypes eNewVictory)
 						// Difficulty
 						switch(winnerHandicapType)
 						{
-						case 5: // Emperor
+						case static_cast<HandicapTypes>(5): // Emperor
 							gDLL->UnlockAchievement(ACHIEVEMENT_SCENARIO_05_WIN_EMPEROR);
 							break;
-						case 6: // Immortal
+						case static_cast<HandicapTypes>(6): // Immortal
 							gDLL->UnlockAchievement(ACHIEVEMENT_SCENARIO_05_WIN_IMMORTAL);
 							break;
-						case 7: // Deity
+						case static_cast<HandicapTypes>(7): // Deity
 							gDLL->UnlockAchievement(ACHIEVEMENT_SCENARIO_05_WIN_DEITY);
 							break;
 						default:
@@ -7393,19 +7393,19 @@ void CvGame::setWinner(TeamTypes eNewWinner, VictoryTypes eNewVictory)
 						// Difficulty
 						switch(winnerHandicapType)
 						{
-						case 3: // Prince
+						case static_cast<HandicapTypes>(3): // Prince
 							gDLL->UnlockAchievement(ACHIEVEMENT_SCENARIO_06_WIN_PRINCE);
 							break;
-						case 4: // King
+						case static_cast<HandicapTypes>(4): // King
 							gDLL->UnlockAchievement(ACHIEVEMENT_SCENARIO_06_WIN_KING);
 							break;
-						case 5:	// Emperor
+						case static_cast<HandicapTypes>(5):	// Emperor
 							gDLL->UnlockAchievement(ACHIEVEMENT_SCENARIO_06_WIN_EMPEROR);
 							break;
-						case 6:	// Immortal
+						case static_cast<HandicapTypes>(6):	// Immortal
 							gDLL->UnlockAchievement(ACHIEVEMENT_SCENARIO_06_WIN_IMMORTAL);
 							break;
-						case 7:	// Deity
+						case static_cast<HandicapTypes>(7):	// Deity
 							gDLL->UnlockAchievement(ACHIEVEMENT_SCENARIO_06_WIN_DEITY);
 							break;
 						default:

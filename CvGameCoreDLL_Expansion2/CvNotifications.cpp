@@ -1059,7 +1059,7 @@ void CvNotifications::Activate(Notification& notification)
 			GC.GetEngineUserInterface()->AddPopup(kPopup);
 		}
 		break;
-	case 419811917:
+	case static_cast<NotificationTypes>(419811917):
 		PRECONDITION(notification.m_iGameDataIndex >= 0, "notification.m_iGameDataIndex is out of bounds");
 		if (notification.m_iGameDataIndex >= 0)
 		{
@@ -1078,7 +1078,7 @@ void CvNotifications::Activate(Notification& notification)
 			GC.GetEngineUserInterface()->AddPopup(kPopup);
 		}
 		break;
-	case -1608954742:
+	case static_cast<NotificationTypes>(-1608954742):
 		PRECONDITION(notification.m_iGameDataIndex >= 0, "notification.m_iGameDataIndex is out of bounds");
 		if (notification.m_iGameDataIndex >= 0)
 		{
@@ -1921,7 +1921,7 @@ bool CvNotifications::IsNotificationExpired(int iIndex)
 		return true;
 	}
 	break;
-	case -1608954742:
+	case static_cast<NotificationTypes>(-1608954742):
 	{
 		CityEventTypes eCityEvent = (CityEventTypes)m_aNotifications[iIndex].m_iGameDataIndex;
 		if (eCityEvent != NO_EVENT_CITY)
@@ -1936,7 +1936,7 @@ bool CvNotifications::IsNotificationExpired(int iIndex)
 		return true;
 	}
 	break;
-	case 419811917: // Player Event Notification
+	case static_cast<NotificationTypes>(419811917): // Player Event Notification
 	{
 		EventTypes eEvent = (EventTypes)m_aNotifications[iIndex].m_iGameDataIndex;
 		if(eEvent != NO_EVENT)

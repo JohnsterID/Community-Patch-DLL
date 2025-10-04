@@ -4196,17 +4196,17 @@ MultiunitFormationTypes MilitaryAIHelpers::GetCurrentBestFormationTypeForLandAtt
 {
 	switch (GC.getGame().getCurrentEra())
 	{
-	case 0: //ancient
+	case static_cast<EraTypes>(0): //ancient
 		return MUFORMATION_EARLY_RUSH;
-	case 1: //classic
-	case 2: //medieval
+	case static_cast<EraTypes>(1): //classic
+	case static_cast<EraTypes>(2): //medieval
 		return MUFORMATION_SMALL_CITY_ATTACK_FORCE;
-	case 3: //renaissance
-	case 4: //industrial
+	case static_cast<EraTypes>(3): //renaissance
+	case static_cast<EraTypes>(4): //industrial
 		return MUFORMATION_BASIC_CITY_ATTACK_FORCE;
-	case 5: //modern
-	case 6: //atomic
-	case 7: //information
+	case static_cast<EraTypes>(5): //modern
+	case static_cast<EraTypes>(6): //atomic
+	case static_cast<EraTypes>(7): //information
 		return MUFORMATION_BIGGER_CITY_ATTACK_FORCE;
 	default:
 		return MUFORMATION_BASIC_CITY_ATTACK_FORCE;
