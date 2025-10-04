@@ -84,14 +84,14 @@ CvDllGame::CvDllGame(CvGame* pGame)
 		}
 		
 		// Check module information
-		HMODULE hMod = GetModuleHandle(L"CvGameCoreDLL_Expansion2.dll");
+		HMODULE hMod = GetModuleHandleA("CvGameCoreDLL_Expansion2.dll");
 		if (hMod) {
 			fprintf(stackTraceFile, "[%lu] DLL Module Handle: %p\n", GetTickCount(), hMod);
 			
 			// Get module file name
-			wchar_t modulePath[MAX_PATH];
-			if (GetModuleFileName(hMod, modulePath, MAX_PATH)) {
-				fprintf(stackTraceFile, "[%lu] DLL Path: %ls\n", GetTickCount(), modulePath);
+			char modulePath[MAX_PATH];
+			if (GetModuleFileNameA(hMod, modulePath, MAX_PATH)) {
+				fprintf(stackTraceFile, "[%lu] DLL Path: %s\n", GetTickCount(), modulePath);
 			}
 		}
 		
