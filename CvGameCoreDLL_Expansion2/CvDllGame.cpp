@@ -801,69 +801,7 @@ struct HookInfo {
 HookInfo g_individualHookInfo[3] = {0}; // DX9, DX11, Tablet
 HookInfo g_bulkHookInfo[3] = {0}; // DX9, DX11, Tablet
 
-// Background thread function for mod restoration
-DWORD WINAPI RestoreModsThread(LPVOID lpParam)
-{
-	// Wait a short time to let the game stabilize after deactivation
-	Sleep(1000); // 1 second delay
-	
-	FILE* threadLogFile = NULL;
-	if (fopen_s(&threadLogFile, "RESTORATION_THREAD.txt", "a") == 0 && threadLogFile != NULL) {
-		fprintf(threadLogFile, "[%lu] RestoreModsThread: Starting mod restoration process\n", GetTickCount());
-		fflush(threadLogFile);
-	}
-	
-	// Try to restore mods through database access
-	// We'll use the same approach as the SQLite hooks but in a separate thread
-	try {
-		// Get database connection through game interface
-		CvGame* pGame = GC.getGamePointer();
-		if (pGame != NULL) {
-			if (threadLogFile) {
-				fprintf(threadLogFile, "[%lu] RestoreModsThread: Got game pointer, attempting restoration\n", GetTickCount());
-				fflush(threadLogFile);
-			}
-			
-			// Try to access the mod database and restore mods
-			// This is a simplified approach - in practice we'd need proper database access
-			Database::Connection* pDB = GC.GetGameDatabase();
-			if (pDB != NULL) {
-				if (threadLogFile) {
-					fprintf(threadLogFile, "[%lu] RestoreModsThread: Got database connection\n", GetTickCount());
-					fflush(threadLogFile);
-				}
-				
-				// Execute restoration SQL
-				const char* restoreSQL = "UPDATE Mods SET Activated = 1 WHERE Type IN ('MOD_COMMUNITY_PATCH', 'MOD_COMMUNITY_BALANCE_OVERHAUL', 'MOD_EVENTS_AND_DECISIONS', 'MOD_MORE_LUXURIES', 'MOD_CQUI_COMMUNITY_EDITION')";
-				
-				if (threadLogFile) {
-					fprintf(threadLogFile, "[%lu] RestoreModsThread: Executing restoration SQL\n", GetTickCount());
-					fflush(threadLogFile);
-				}
-				
-				// Note: This is a simplified approach - proper database access would require more complex code
-				// For now, just log that we attempted restoration
-				if (threadLogFile) {
-					fprintf(threadLogFile, "[%lu] RestoreModsThread: Restoration attempt completed\n", GetTickCount());
-					fflush(threadLogFile);
-				}
-			}
-		}
-	}
-	catch (...) {
-		if (threadLogFile) {
-			fprintf(threadLogFile, "[%lu] RestoreModsThread: Exception during restoration\n", GetTickCount());
-			fflush(threadLogFile);
-		}
-	}
-	
-	if (threadLogFile) {
-		fprintf(threadLogFile, "[%lu] RestoreModsThread: Thread ending\n", GetTickCount());
-		fclose(threadLogFile);
-	}
-	
-	return 0;
-}
+// Removed background thread function - was causing crashes due to thread safety issues
 
 
 
@@ -1087,40 +1025,26 @@ bool __thiscall HookedBulkDeactivate(void* this_ptr)
 		if (logFile) fclose(logFile);
 		if (debugFile) fclose(debugFile);
 		
-		// NEW APPROACH: Pass-through with restoration
-		// Instead of blocking deactivation completely, we'll use a different strategy
+		// SIMPLE APPROACH: Just prevent deactivation completely
+		// Based on branch progress analysis, this approach was working before
+		// The crashes were caused by other factors, not by blocking deactivation
 		
-		// STRATEGY: Return success to let the game think deactivation worked
-		// But schedule a restoration to happen shortly after
-		// This maintains game state consistency while preserving mods
-		
-		FILE* restorationFile = NULL;
-		if (fopen_s(&restorationFile, "RESTORATION_SCHEDULED.txt", "a") == 0 && restorationFile != NULL) {
-			fprintf(restorationFile, "[%lu] HookedBulkDeactivate: Scheduling mod restoration\n", GetTickCount());
-			fprintf(restorationFile, "[%lu] STRATEGY: Let game think deactivation succeeded, restore mods afterward\n", GetTickCount());
-			fflush(restorationFile);
-			fclose(restorationFile);
-		}
-		
-		// Schedule restoration using a simple approach
-		// Create a restoration flag file that can be checked later
-		FILE* flagFile = NULL;
-		if (fopen_s(&flagFile, "RESTORE_MODS_FLAG.txt", "w") == 0 && flagFile != NULL) {
-			fprintf(flagFile, "RESTORE_MODS_NEEDED\n");
-			fprintf(flagFile, "Time: %lu\n", GetTickCount());
-			fclose(flagFile);
-		}
-		
-		// Start a background restoration process
-		// Use CreateThread to restore mods after a short delay
-		HANDLE hThread = CreateThread(NULL, 0, RestoreModsThread, NULL, 0, NULL);
-		if (hThread) {
-			CloseHandle(hThread); // Don't wait for it, let it run in background
+		FILE* preventionFile = NULL;
+		if (fopen_s(&preventionFile, "DEACTIVATION_PREVENTED.txt", "a") == 0 && preventionFile != NULL) {
+			fprintf(preventionFile, "[%lu] HookedBulkDeactivate: Preventing mod deactivation\n", GetTickCount());
+			fprintf(preventionFile, "[%lu] STRATEGY: Block deactivation completely to preserve mods\n", GetTickCount());
+			fprintf(preventionFile, "[%lu] This approach was working before - crashes were from other causes\n", GetTickCount());
+			fflush(preventionFile);
+			fclose(preventionFile);
 		}
 		
 		// Reset re-entry guard before returning
 		inHook = false;
-		return true; // Return success - let game continue normally
+		
+		// Return success without executing deactivation
+		// This prevents the "UPDATE Mods Set Activated = 0" SQL from executing
+		// Mods stay active, which is what we want for staging room
+		return true; // Block deactivation, preserve mods
 	}
 	
 	// Close files
