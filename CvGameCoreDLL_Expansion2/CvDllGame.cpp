@@ -102,6 +102,25 @@ CvDllGame::CvDllGame(CvGame* pGame)
 			fprintf(stackTraceFile, "[%lu] WARNING: Constructor called while JMP_INSTALL_DEBUG.txt exists - possible hook installation recursion!\n", GetTickCount());
 		}
 		
+		// Add call stack analysis to identify recursion source
+		fprintf(stackTraceFile, "[%lu] Call Stack Analysis:\n", GetTickCount());
+		fprintf(stackTraceFile, "[%lu] - Constructor called from: %p\n", GetTickCount(), _ReturnAddress());
+		fprintf(stackTraceFile, "[%lu] - Frame pointer: %p\n", GetTickCount(), _AddressOfReturnAddress());
+		
+		// Check if GameCore functions are being called
+		HMODULE hCiv5 = GetModuleHandleA("CivilizationV_DX11.exe");
+		if (hCiv5) {
+			fprintf(stackTraceFile, "[%lu] CivilizationV_DX11.exe base: %p\n", GetTickCount(), hCiv5);
+			
+			// Check if return address is in main executable (potential GameCore call)
+			DWORD_PTR returnAddr = (DWORD_PTR)_ReturnAddress();
+			DWORD_PTR baseAddr = (DWORD_PTR)hCiv5;
+			if (returnAddr >= baseAddr && returnAddr < baseAddr + 0x1000000) { // Rough size check
+				fprintf(stackTraceFile, "[%lu] RECURSION SOURCE: Called from main executable at offset +%X\n", 
+					GetTickCount(), (DWORD)(returnAddr - baseAddr));
+			}
+		}
+		
 		// Add call frequency analysis
 		static DWORD lastConstructorCall = 0;
 		static int rapidCallCount = 0;
@@ -1406,7 +1425,52 @@ void CvDllGame::InstallBinaryHooksEarly()
 	// Prevent multiple hook installations
 	static bool hooksInstalled = false;
 	static int callCount = 0;
+	static bool inHookInstallation = false;
 	callCount++;
+	
+	// CRITICAL: Detect and prevent recursion
+	if (inHookInstallation) {
+		FILE* recursionFile = NULL;
+		if (fopen_s(&recursionFile, "RECURSION_DETECTED.txt", "a") == 0 && recursionFile != NULL) {
+			fprintf(recursionFile, "[%lu] RECURSION DETECTED in InstallBinaryHooksEarly!\n", GetTickCount());
+			fprintf(recursionFile, "[%lu] - Call #%d, Instance: %p\n", GetTickCount(), callCount, this);
+			fprintf(recursionFile, "[%lu] - Called from: %p\n", GetTickCount(), _ReturnAddress());
+			fclose(recursionFile);
+		}
+		return; // PREVENT RECURSION
+	}
+	
+	inHookInstallation = true;
+	
+	// Add call stack debugging for hook installation
+	FILE* hookCallStackFile = NULL;
+	if (fopen_s(&hookCallStackFile, "HOOK_CALL_STACK_DEBUG.txt", "a") == 0 && hookCallStackFile != NULL) {
+		fprintf(hookCallStackFile, "[%lu] InstallBinaryHooksEarly called (call #%d)\n", GetTickCount(), callCount);
+		fprintf(hookCallStackFile, "[%lu] - Called from: %p\n", GetTickCount(), _ReturnAddress());
+		fprintf(hookCallStackFile, "[%lu] - Instance: %p\n", GetTickCount(), this);
+		
+		// Check if called from main executable
+		HMODULE hCiv5 = GetModuleHandleA("CivilizationV_DX11.exe");
+		if (hCiv5) {
+			DWORD_PTR returnAddr = (DWORD_PTR)_ReturnAddress();
+			DWORD_PTR baseAddr = (DWORD_PTR)hCiv5;
+			if (returnAddr >= baseAddr && returnAddr < baseAddr + 0x1000000) {
+				fprintf(hookCallStackFile, "[%lu] - Called from main executable at offset +%X\n", 
+					GetTickCount(), (DWORD)(returnAddr - baseAddr));
+			}
+		}
+		
+		// Check if this is a rapid call (potential recursion)
+		static DWORD lastHookCall = 0;
+		DWORD currentTime = GetTickCount();
+		if (lastHookCall != 0 && (currentTime - lastHookCall) < 100) {
+			fprintf(hookCallStackFile, "[%lu] - RAPID HOOK CALL: %lu ms since last call\n", 
+				GetTickCount(), currentTime - lastHookCall);
+		}
+		lastHookCall = currentTime;
+		
+		fclose(hookCallStackFile);
+	}
 	
 	// Install binary hooks early during DLL construction to catch multiplayer mod deactivation
 	FILE* logFile = NULL;
@@ -2027,4 +2091,7 @@ void CvDllGame::InitExeStuff()
 			VirtualProtect((void*)(hookResultAddress), 16, old_protect, &old_protect);
 		}
 	}*/
+        
+        // Reset recursion flag
+        inHookInstallation = false;
 }
