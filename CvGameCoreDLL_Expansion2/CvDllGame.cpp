@@ -33,6 +33,30 @@ CvDllGame::CvDllGame(CvGame* pGame)
 	if (fopen_s(&markerFile, "CVDLLGAME_CONSTRUCTOR_CALLED.txt", "a") == 0 && markerFile != NULL) {
 		fprintf(markerFile, "=== CvDllGame constructor called ===\n");
 		fprintf(markerFile, "Instance address: %p\n", this);
+	}
+	
+	// CRITICAL: Add stack trace debugging to see what's calling the constructor
+	FILE* stackTraceFile = NULL;
+	if (fopen_s(&stackTraceFile, "CONSTRUCTOR_STACK_TRACE.txt", "a") == 0 && stackTraceFile != NULL) {
+		fprintf(stackTraceFile, "[%lu] Constructor called for instance %p\n", GetTickCount(), this);
+		
+		// Try to get some basic stack information (this is a simple approach)
+		void* stackPtr = NULL;
+		__asm { mov stackPtr, esp }
+		fprintf(stackTraceFile, "[%lu] Stack pointer: %p\n", GetTickCount(), stackPtr);
+		
+		// Check if we're being called during hook installation by looking for our debug files
+		FILE* testFile = NULL;
+		if (fopen_s(&testFile, "JMP_INSTALL_DEBUG.txt", "r") == 0 && testFile != NULL) {
+			fclose(testFile);
+			fprintf(stackTraceFile, "[%lu] WARNING: Constructor called while JMP_INSTALL_DEBUG.txt exists - possible hook installation recursion!\n", GetTickCount());
+		}
+		
+		fflush(stackTraceFile);
+		fclose(stackTraceFile);
+	}
+	
+	if (markerFile) {
 		fprintf(markerFile, "MOD_BIN_HOOKS = %s\n", MOD_BIN_HOOKS ? "true" : "false");
 		fprintf(markerFile, "Captured value: %s\n", m_bBinHooksEnabledAtConstruction ? "true" : "false");
 		fprintf(markerFile, "Member variable address: %p\n", &m_bBinHooksEnabledAtConstruction);
@@ -1165,9 +1189,23 @@ void CvDllGame::HookBulkDeactivateFunction(DWORD functionAddr)
 			fflush(debugFile);
 		}
 		
+		// CRITICAL: Add debugging before writing JMP instruction
+		FILE* jmpDebugFile = NULL;
+		if (fopen_s(&jmpDebugFile, "JMP_INSTALL_DEBUG.txt", "a") == 0 && jmpDebugFile != NULL) {
+			fprintf(jmpDebugFile, "[%lu] BEFORE BULK JMP install: functionAddr=0x%08lX, hookAddr=0x%08lX, relativeAddr=0x%08lX\n", 
+				GetTickCount(), functionAddr, hookAddr, relativeAddr);
+			fflush(jmpDebugFile);
+		}
+		
 		// Write JMP instruction (0xE9 followed by relative address)
 		*(unsigned char*)functionAddr = 0xE9;
 		*(DWORD*)(functionAddr + 1) = relativeAddr;
+		
+		if (jmpDebugFile) {
+			fprintf(jmpDebugFile, "[%lu] AFTER BULK JMP install: JMP instruction written successfully\n", GetTickCount());
+			fflush(jmpDebugFile);
+			fclose(jmpDebugFile);
+		}
 		
 		VirtualProtect((void*)functionAddr, 5, old_protect, &old_protect);
 		
@@ -1318,6 +1356,38 @@ void CvDllGame::InstallBinaryHooksEarly()
 	if (fopen_s(&debugFile, "HOOK_DEBUG.txt", "a") == 0 && debugFile != NULL) {
 		fprintf(debugFile, "=== InstallBinaryHooksEarly called (call #%d) ===\n", callCount);
 		fprintf(debugFile, "Instance address: %p\n", this);
+	}
+	
+	// CRITICAL: Add debugging to track when hook installation happens
+	FILE* installTimingFile = NULL;
+	if (fopen_s(&installTimingFile, "HOOK_INSTALL_TIMING.txt", "a") == 0 && installTimingFile != NULL) {
+		fprintf(installTimingFile, "[%lu] InstallBinaryHooksEarly: Call #%d, Instance %p\n", GetTickCount(), callCount, this);
+		fprintf(installTimingFile, "[%lu] MOD_BIN_HOOKS = %s, Captured = %s, hooksInstalled = %s\n", 
+			GetTickCount(), 
+			MOD_BIN_HOOKS ? "true" : "false",
+			m_bBinHooksEnabledAtConstruction ? "true" : "false",
+			hooksInstalled ? "true" : "false");
+		fflush(installTimingFile);
+		fclose(installTimingFile);
+	}
+	
+	// TEMPORARY TEST: Disable hook installation to see if it's causing the infinite loop
+	bool DISABLE_HOOKS_FOR_TESTING = true;
+	if (DISABLE_HOOKS_FOR_TESTING) {
+		if (debugFile) {
+			fprintf(debugFile, "TESTING: Hook installation DISABLED to test if it causes infinite constructor loop\n");
+			fflush(debugFile);
+			fclose(debugFile);
+		}
+		if (logFile) {
+			fprintf(logFile, "[MOD_HOOK] TESTING: Hook installation DISABLED\n");
+			fflush(logFile);
+			fclose(logFile);
+		}
+		return; // Exit early without installing hooks
+	}
+	
+	if (debugFile) {
 		fprintf(debugFile, "MOD_BIN_HOOKS = %s\n", MOD_BIN_HOOKS ? "true" : "false");
 		fprintf(debugFile, "gCustomMods.isBIN_HOOKS() = %s\n", gCustomMods.isBIN_HOOKS() ? "true" : "false");
 		fprintf(debugFile, "Member variable address: %p\n", &m_bBinHooksEnabledAtConstruction);
