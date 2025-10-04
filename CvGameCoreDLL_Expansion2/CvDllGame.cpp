@@ -733,6 +733,7 @@ int __cdecl HookedDeactivateMods()
 	// In single player, we also just return success for now
 	// The original mod deactivation logic may not be necessary for single player
 	// since mods are typically managed through the UI
+	inHook = false;
 	return 1; // Return success
 }
 
@@ -740,6 +741,14 @@ int __cdecl HookedDeactivateMods()
 // This allows deactivation but can restore mods afterwards to prevent crashes
 bool __thiscall HookedBulkDeactivate(void* this_ptr)
 {
+	// Prevent infinite recursion - critical fix!
+	static bool inHook = false;
+	if (inHook) {
+		// We're already in the hook, don't recurse
+		return true;
+	}
+	inHook = true;
+	
 	// Debug: Write to a log file that we can check
 	FILE* logFile = NULL;
 	FILE* debugFile = NULL;
@@ -794,16 +803,17 @@ bool __thiscall HookedBulkDeactivate(void* this_ptr)
 		}
 		
 		// During startup, just return success without doing anything
+		inHook = false;
 		return true; // Return success
 	}
 	
 	if (isMultiplayer) {
 		if (logFile) {
-			fprintf(logFile, "[MOD_HOOK] HookedBulkDeactivate: ALLOWING bulk mod deactivation but will restore afterwards!\n");
+			fprintf(logFile, "[MOD_HOOK] HookedBulkDeactivate: BLOCKING bulk mod deactivation in multiplayer!\n");
 			fflush(logFile);
 		}
 		if (debugFile) {
-			fprintf(debugFile, "ALLOWING bulk mod deactivation - will restore mods afterwards!\n");
+			fprintf(debugFile, "BLOCKING bulk mod deactivation - returning success without calling original!\n");
 			fflush(debugFile);
 		}
 		
@@ -811,18 +821,17 @@ bool __thiscall HookedBulkDeactivate(void* this_ptr)
 		if (logFile) fclose(logFile);
 		if (debugFile) fclose(debugFile);
 		
-		// Call original function to let deactivation happen (prevents crash)
-		// The game expects this deactivation as part of multiplayer initialization
-		bool result = true;
-		if (g_originalBulkDeactivate) {
-			result = g_originalBulkDeactivate(this_ptr);
-		}
+		// DON'T call original function - just return success
+		// This prevents the "UPDATE Mods Set Activated = 0" from executing
+		// The game will think the operation succeeded but mods stay active
 		
 		// Schedule mod restoration after a short delay
 		// This allows the game's initialization to complete normally
 		// TODO: Implement delayed mod restoration mechanism
 		
-		return result;
+		// Reset re-entry guard before returning
+		inHook = false;
+		return true; // Return success without deactivating mods
 	}
 	
 	// Close files
