@@ -666,32 +666,19 @@ void RestoreModsAfterDeactivation()
 		fflush(logFile);
 	}
 	
-	// Try to get the database connection and re-activate mods
+	// For now, just log that we would restore mods here
+	// TODO: Implement actual mod restoration logic using available APIs
 	try {
-		// Get the custom mods system
-		CvModdingFrameworkAppSide* pModding = gCustomMods.getModdingFramework();
-		if (pModding) {
-			// Re-activate all mods that were previously enabled
-			// This SQL will restore the mods that were active before deactivation
-			// We need to execute: "UPDATE Mods SET Activated = 1 WHERE Enabled = 1"
-			
-			if (logFile) {
-				fprintf(logFile, "[MOD_HOOK] RestoreModsAfterDeactivation: Found modding framework, attempting to restore mods\n");
-				fflush(logFile);
-			}
-			
-			// TODO: Implement actual mod restoration logic
-			// For now, just log that we would restore mods here
-			if (logFile) {
-				fprintf(logFile, "[MOD_HOOK] RestoreModsAfterDeactivation: Mod restoration logic would execute here\n");
-				fflush(logFile);
-			}
-		} else {
-			if (logFile) {
-				fprintf(logFile, "[MOD_HOOK] RestoreModsAfterDeactivation: Could not get modding framework\n");
-				fflush(logFile);
-			}
+		if (logFile) {
+			fprintf(logFile, "[MOD_HOOK] RestoreModsAfterDeactivation: Mod restoration logic would execute here\n");
+			fprintf(logFile, "[MOD_HOOK] RestoreModsAfterDeactivation: Need to implement SQL: UPDATE Mods SET Activated = 1 WHERE Enabled = 1\n");
+			fflush(logFile);
 		}
+		
+		// The key insight is that we need to execute SQL to restore mods
+		// This should happen immediately after the deactivation but before DLL reload
+		// For now, we're just logging to verify the timing is correct
+		
 	} catch (...) {
 		if (logFile) {
 			fprintf(logFile, "[MOD_HOOK] RestoreModsAfterDeactivation: Exception occurred during mod restoration\n");
