@@ -107,17 +107,22 @@ CvDllGame::CvDllGame(CvGame* pGame)
 		fprintf(stackTraceFile, "[%lu] - Constructor called from: %p\n", GetTickCount(), _ReturnAddress());
 		fprintf(stackTraceFile, "[%lu] - Frame pointer: %p\n", GetTickCount(), _AddressOfReturnAddress());
 		
-		// Check if GameCore functions are being called
+		// Check if GameCore functions are being called (support both DX9 and DX11)
 		HMODULE hCiv5 = GetModuleHandleA("CivilizationV_DX11.exe");
+		const char* exeName = "CivilizationV_DX11.exe";
+		if (!hCiv5) {
+			hCiv5 = GetModuleHandleA("CivilizationV.exe");
+			exeName = "CivilizationV.exe";
+		}
 		if (hCiv5) {
-			fprintf(stackTraceFile, "[%lu] CivilizationV_DX11.exe base: %p\n", GetTickCount(), hCiv5);
+			fprintf(stackTraceFile, "[%lu] %s base: %p\n", GetTickCount(), exeName, hCiv5);
 			
 			// Check if return address is in main executable (potential GameCore call)
 			DWORD_PTR returnAddr = (DWORD_PTR)_ReturnAddress();
 			DWORD_PTR baseAddr = (DWORD_PTR)hCiv5;
 			if (returnAddr >= baseAddr && returnAddr < baseAddr + 0x1000000) { // Rough size check
-				fprintf(stackTraceFile, "[%lu] RECURSION SOURCE: Called from main executable at offset +%X\n", 
-					GetTickCount(), (DWORD)(returnAddr - baseAddr));
+				fprintf(stackTraceFile, "[%lu] RECURSION SOURCE: Called from main executable (%s) at offset +%X\n", 
+					GetTickCount(), exeName, (DWORD)(returnAddr - baseAddr));
 			}
 		}
 		
@@ -1449,14 +1454,19 @@ void CvDllGame::InstallBinaryHooksEarly()
 		fprintf(hookCallStackFile, "[%lu] - Called from: %p\n", GetTickCount(), _ReturnAddress());
 		fprintf(hookCallStackFile, "[%lu] - Instance: %p\n", GetTickCount(), this);
 		
-		// Check if called from main executable
+		// Check if called from main executable (support both DX9 and DX11)
 		HMODULE hCiv5 = GetModuleHandleA("CivilizationV_DX11.exe");
+		const char* exeName = "CivilizationV_DX11.exe";
+		if (!hCiv5) {
+			hCiv5 = GetModuleHandleA("CivilizationV.exe");
+			exeName = "CivilizationV.exe";
+		}
 		if (hCiv5) {
 			DWORD_PTR returnAddr = (DWORD_PTR)_ReturnAddress();
 			DWORD_PTR baseAddr = (DWORD_PTR)hCiv5;
 			if (returnAddr >= baseAddr && returnAddr < baseAddr + 0x1000000) {
-				fprintf(hookCallStackFile, "[%lu] - Called from main executable at offset +%X\n", 
-					GetTickCount(), (DWORD)(returnAddr - baseAddr));
+				fprintf(hookCallStackFile, "[%lu] - Called from main executable (%s) at offset +%X\n", 
+					GetTickCount(), exeName, (DWORD)(returnAddr - baseAddr));
 			}
 		}
 		
