@@ -436,7 +436,11 @@
     <File md5="7DF4AF6E9D5F16CD06D0CD576615869F" import="1">Core Files/Overrides/LeagueOverview.lua</File>
     <File md5="D1B2B6362725A779E49BAD0C8366DE6A" import="1">Core Files/Overrides/LeagueOverview.xml</File>
     <File md5="125DBB3FDF354092B6DA2FADB20C5849" import="1">Core Files/Overrides/MPList.lua</File>
+    <File md5="b01098492e7828c4e5853e2c670a2569" import="1">Core Files/Overrides/MPGameSetupScreen.lua</File>
+    <File md5="56056a955c02e8ce5b69fad347435af3" import="1">Core Files/Overrides/MPGameSetupScreen.xml</File>
     <File md5="2BFE0E6D6EAE4917F5068B6084CF75A2" import="1">Core Files/Overrides/MPTurnPanel.lua</File>
+    <File md5="ea95c858d8dff3e0dbc59a0c91d18e51" import="1">Core Files/Overrides/ModsMenu.lua</File>
+
     <File md5="A9FEDE41B8D28348DDD9FD51E905C096" import="1">Core Files/Overrides/NaturalWonderPopup.lua</File>
     <File md5="91DEEC22E933A63497BBDA0E5066D8D3" import="1">Core Files/Overrides/NewEraPopup.lua</File>
     <File md5="34AF515180770B3554A250F1D77329A1" import="1">Core Files/Overrides/PathHelpManager.lua</File>
@@ -448,7 +452,7 @@
     <File md5="2EDB54EB7721D8240EAF44B71BCE74D6" import="1">Core Files/Overrides/SaveMenu.lua</File>
     <File md5="FB5ADB053B50EFAC805CCB9EE0425137" import="1">Core Files/Overrides/SaveMenu.xml</File>
     <File md5="710424C27FAC6C807302F68A7C729370" import="1">Core Files/Overrides/SimpleDiploTrade.xml</File>
-    <File md5="F4BD8D98536B2532C02E1CA4EC1732CF" import="1">Core Files/Overrides/StagingRoom.lua</File>
+    <File md5="4648992a27ceaf9d70069495acc20f44" import="1">Core Files/Overrides/StagingRoom.lua</File>
     <File md5="5D757712B38D037DBAA2155C04ADDD07" import="1">Core Files/Overrides/TechAwardPopup.lua</File>
     <File md5="3AEA3154A06B8B69762F22A642C8ED1D" import="1">Core Files/Overrides/TechAwardPopup.xml</File>
     <File md5="EAD1D8F2F2B295F9A6EE040FC67EDA53" import="1">Core Files/Overrides/TechPanel.lua</File>
