@@ -1,17 +1,16 @@
 # Branch Progress Summary: lua-xml-runtime-hooks
 
-## 🚨 **CURRENT CRITICAL STATUS - HOOK EXECUTION TRIGGERS INFINITE CONSTRUCTOR LOOP**
-**Status: CRITICAL DISCOVERY** - Hook execution itself causes infinite constructor loop in commit 2b862aa6f
+## 🚨 **CURRENT CRITICAL STATUS - COMPREHENSIVE DLL LIFECYCLE DEBUGGING DEPLOYED**
+**Status: ENHANCED DEBUGGING** - Comprehensive debugging system deployed to investigate infinite constructor loop
 
-**Major Breakthrough:** Hook approach is fundamentally flawed
-- **Delayed installation worked** (38,593ms delay) - hooks installed successfully
-- **Hook executed successfully** - blocked deactivation SQL as intended
-- **BUT: Infinite destructor loop started IMMEDIATELY after hook execution**
-- **Root cause:** Blocking deactivation causes game state inconsistency
-- **Game expects deactivation to succeed** - when blocked, enters infinite loop trying to fix state
+**Major Breakthrough:** Hook approach is NOT fundamentally flawed
+- **Baseline test completed** - Infinite constructor loop occurs EVEN WITH HOOKS COMPLETELY DISABLED
+- **Root cause identified** - DLL lifecycle issue during SP→MP transition, NOT hook execution
+- **Timeline confirmed** - Loop starts at ~38 seconds during multiplayer setup phase
+- **Evidence gathered** - Same instance called 64+ times rapidly without any hook interference
 
-**Current Test:** Hooks COMPLETELY DISABLED to establish baseline behavior
-**Next Step:** Need completely different approach that doesn't cause state inconsistency
+**Current Status:** Enhanced debugging system deployed (commit 7574d2ed1)
+**Next Step:** Analyze comprehensive DLL lifecycle logs to identify reload trigger
 
 ---
 
@@ -135,11 +134,16 @@ Based on reverse-engineered code analysis from **Civ5XP.c** (Linux binary with m
 - **Status:** ❌ CRITICAL - Hook approach fundamentally flawed
 - **Evidence:** Infinite destructor loop starts immediately after successful hook execution
 
-### 🔬 **8. Comprehensive Debugging System (IMPLEMENTED)**
-- **Problem:** Need to understand exact crash sequence and timing
-- **Solution:** Advanced debugging with database state, memory tracking, constructor monitoring
-- **Status:** ✅ IMPLEMENTED - Commit 2b862aa6f
-- **Features:** ADVANCED_DEBUG_ANALYSIS.txt, infinite loop detection, timing analysis
+### 🔬 **8. Enhanced DLL Lifecycle Debugging System (IMPLEMENTED)**
+- **Problem:** Infinite constructor loop occurs even with hooks completely disabled
+- **Solution:** Comprehensive DLL lifecycle debugging to identify root cause
+- **Status:** ✅ ENHANCED - Commit 7574d2ed1
+- **Features:** 
+  - **DLL Lifecycle Tracking:** DllMain ATTACH/DETACH cycles with timestamps
+  - **Constructor Analysis:** Memory usage, rapid call detection, module tracking
+  - **Game State Monitoring:** SP→MP transitions, multiplayer state changes
+  - **Instance Tracking:** DLL instance changes, call frequency analysis
+  - **Process Debugging:** Memory counters, module handles, thread information
 
 ---
 
@@ -240,20 +244,22 @@ DWORD targetAddress = baseAddress + offset;         // ASLR-safe
 
 ## 🎯 **NEXT IMMEDIATE ACTIONS**
 
-### **1. Test Baseline Behavior (CRITICAL):**
-- Test at-stagingroom with hooks COMPLETELY DISABLED (commit 2b862aa6f)
-- Analyze comprehensive debugging output from ADVANCED_DEBUG_ANALYSIS.txt
-- Determine if game works without any hook interference
+### **1. Analyze Enhanced DLL Lifecycle Logs (CRITICAL):**
+- Test at-stagingroom with enhanced debugging system (commit 7574d2ed1)
+- Analyze comprehensive logs: DLL_LIFECYCLE_DEBUG.txt, CONSTRUCTOR_STACK_TRACE.txt, ADVANCED_DEBUG_ANALYSIS.txt
+- Identify what triggers DLL reload cycles during SP→MP transition
 
-### **2. Analyze Debugging Output:**
-- Check database state before/during multiplayer setup
-- Monitor infinite constructor loop patterns (normal vs abnormal)
-- Identify exact timing when crashes occur
+### **2. Correlate Debugging Data:**
+- Match DLL ATTACH/DETACH cycles with constructor calls
+- Identify game state changes that trigger DLL reloads
+- Analyze memory usage patterns during infinite loop
+- Track timing correlation between state transitions and loops
 
-### **3. Design Alternative Approach:**
-- If baseline works: Hook approach is fundamentally flawed
-- Consider: Database-level hooks, post-deactivation restoration, configuration-based approach
-- Use reverse-engineered code to find better intervention points
+### **3. Identify DLL Reload Root Cause:**
+- Determine if multiple processes are involved
+- Check if game is intentionally reloading DLL during MP setup
+- Identify Windows API calls causing LoadLibrary/FreeLibrary cycles
+- Find intervention point to prevent unnecessary reloads
 
 ### **4. Research Available Binaries:**
 - **Primary:** `/workspace/Civ5XP.c` (Linux - most detailed information with names preserved)
@@ -273,9 +279,10 @@ DWORD targetAddress = baseAddress + offset;         // ASLR-safe
 7. **CRITICAL: Never Call Hooked Function from Hook:** Creates infinite recursion
 8. **Hook Installation Overwrites Original:** `g_originalBulkDeactivate` points to hooked address
 9. **Return Success Without Calling Original:** Prevents SQL execution and infinite loops
-10. **CRITICAL: Hook Execution Triggers Constructor Loop:** Blocking deactivation causes game state inconsistency
-11. **Game Expects Deactivation to Succeed:** Part of larger process including DLL reload
-12. **Research Method:** Check Civ5XP.c first (most detailed), then map to Windows binaries
+10. **CRITICAL DISCOVERY: Hook Approach NOT Fundamentally Flawed:** Infinite constructor loop occurs even with hooks completely disabled
+11. **Root Cause is DLL Lifecycle Issue:** SP→MP transition triggers DLL reload cycles, not hook execution
+12. **Comprehensive Debugging is Essential:** DLL lifecycle, constructor, and game state monitoring required
+13. **Research Method:** Check Civ5XP.c first (most detailed), then map to Windows binaries
 
 ---
 
