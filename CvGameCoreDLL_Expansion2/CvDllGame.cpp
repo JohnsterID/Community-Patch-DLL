@@ -29,6 +29,14 @@ CvDllGame::CvDllGame(CvGame* pGame)
 		
 	// CRITICAL: Capture BIN_HOOKS value IMMEDIATELY before mod deactivation can occur
 	m_bBinHooksEnabledAtConstruction = MOD_BIN_HOOKS;
+	
+	// Clean up protection files from previous game sessions (only on first constructor)
+	static bool protectionFilesCleanedUp = false;
+	if (!protectionFilesCleanedUp) {
+		DeleteFileA("HOOK_PROTECTION_ACTIVE.flag");
+		DeleteFileA("FIRST_HOOK_CALL.timestamp");
+		protectionFilesCleanedUp = true;
+	}
 		
 	// ADVANCED DEBUG: Create comprehensive constructor tracking
 	FILE* markerFile = NULL;
@@ -1664,54 +1672,76 @@ void CvDllGame::InstallBinaryHooksEarly()
 		}
 	}
 	
-	// PERMANENT SOLUTION: Implement robust global hook management to prevent recursion
-	// Based on Civ5XP.c analysis and log analysis, the recursion happens when:
-	// 1. GameCore::GetGame() calls dword_A3E565C (DllGetGameContext)
-	// 2. DllGetGameContext creates CvDllGame instance
-	// 3. Constructor calls InstallBinaryHooksEarly
-	// 4. Hook installation somehow triggers GameCore::GetGame() again
+	// PERMANENT SOLUTION: File-based hook protection that persists across DLL reloads
+	// CRITICAL DISCOVERY: Static variables don't work because DLL gets unloaded/reloaded during SP->MP transition
+	// This resets all static variables, making in-memory protection ineffective
 	
-	// GLOBAL solution: Use truly global flags that persist across ALL constructor instances
-	static bool g_globalHookInstallationAllowed = true;
-	static DWORD g_firstConstructorTime = 0;
-	static int g_totalConstructorCalls = 0;
+	// Use file-based protection that survives DLL reloads
+	const char* protectionFile = "HOOK_PROTECTION_ACTIVE.flag";
+	const char* firstCallFile = "FIRST_HOOK_CALL.timestamp";
 	DWORD currentTime = GetTickCount();
+	bool hookProtectionActive = false;
 	
-	// Track the very first constructor call across all instances
-	if (g_firstConstructorTime == 0) {
-		g_firstConstructorTime = currentTime;
+	// Check if protection is already active
+	FILE* protFile = NULL;
+	if (fopen_s(&protFile, protectionFile, "r") == 0 && protFile != NULL) {
+		hookProtectionActive = true;
+		fclose(protFile);
 	}
 	
-	// Count total constructor calls across all instances
-	g_totalConstructorCalls++;
-	
-	// CRITICAL: After the first constructor, implement a "hook installation forbidden period"
-	// This prevents ANY hook installation during the problematic SP->MP transition period
-	DWORD timeSinceFirstConstructor = currentTime - g_firstConstructorTime;
-	if (g_totalConstructorCalls > 1 && timeSinceFirstConstructor < 60000) { // 60 second forbidden period
-		g_globalHookInstallationAllowed = false;
-		if (debugFile) {
-			fprintf(debugFile, "GLOBAL HOOK PROTECTION: Hook installation FORBIDDEN (constructor #%d)\n", g_totalConstructorCalls);
-			fprintf(debugFile, "Time since first constructor: %lu ms (forbidden period: 60000ms)\n", timeSinceFirstConstructor);
-			fprintf(debugFile, "This prevents GameCore::GetGame recursion from ANY constructor instance\n");
-			fprintf(debugFile, "Previous logs showed call #2 was blocked but call #3 from new instance caused recursion\n");
-			fflush(debugFile);
-			fclose(debugFile);
-		}
-		if (logFile) {
-			fprintf(logFile, "[MOD_HOOK] GLOBAL PROTECTION: Hook installation FORBIDDEN (preventing recursion from constructor #%d)\n", g_totalConstructorCalls);
-			fflush(logFile);
-			fclose(logFile);
-		}
-		return; // Exit early to prevent recursion from ANY instance
+	// Check when first call happened
+	DWORD firstCallTime = 0;
+	FILE* timeFile = NULL;
+	if (fopen_s(&timeFile, firstCallFile, "r") == 0 && timeFile != NULL) {
+		fscanf_s(timeFile, "%lu", &firstCallTime);
+		fclose(timeFile);
 	}
 	
-	// Allow hook installation only for the very first constructor call
-	if (g_totalConstructorCalls == 1) {
-		g_globalHookInstallationAllowed = true;
+	// If this is the very first call ever, record it and allow hooks
+	if (firstCallTime == 0) {
+		if (fopen_s(&timeFile, firstCallFile, "w") == 0 && timeFile != NULL) {
+			fprintf(timeFile, "%lu", currentTime);
+			fclose(timeFile);
+		}
 		if (debugFile) {
-			fprintf(debugFile, "GLOBAL HOOK PROTECTION: First constructor - hook installation ALLOWED\n");
+			fprintf(debugFile, "FILE-BASED PROTECTION: First call ever - hook installation ALLOWED\n");
+			fprintf(debugFile, "Created timestamp file: %s with time %lu\n", firstCallFile, currentTime);
 			fflush(debugFile);
+		}
+	} else {
+		// This is a subsequent call - check if we should activate protection
+		DWORD timeSinceFirst = currentTime - firstCallTime;
+		
+		// If MOD_BIN_HOOKS becomes true after the first call, activate protection
+		if (MOD_BIN_HOOKS && !hookProtectionActive) {
+			// Create protection file
+			if (fopen_s(&protFile, protectionFile, "w") == 0 && protFile != NULL) {
+				fprintf(protFile, "HOOK_PROTECTION_ACTIVE");
+				fclose(protFile);
+			}
+			hookProtectionActive = true;
+			if (debugFile) {
+				fprintf(debugFile, "FILE-BASED PROTECTION: ACTIVATED - MOD_BIN_HOOKS became true %lu ms after first call\n", timeSinceFirst);
+				fprintf(debugFile, "Created protection file: %s\n", protectionFile);
+				fflush(debugFile);
+			}
+		}
+		
+		// If protection is active, block all hook installation
+		if (hookProtectionActive) {
+			if (debugFile) {
+				fprintf(debugFile, "FILE-BASED PROTECTION: Hook installation BLOCKED\n");
+				fprintf(debugFile, "Protection active since MOD_BIN_HOOKS became true during SP->MP transition\n");
+				fprintf(debugFile, "This prevents the GameCore::GetGame recursion that causes infinite loops\n");
+				fflush(debugFile);
+				fclose(debugFile);
+			}
+			if (logFile) {
+				fprintf(logFile, "[MOD_HOOK] FILE-BASED PROTECTION: Hook installation BLOCKED (protection active)\n");
+				fflush(logFile);
+				fclose(logFile);
+			}
+			return; // Exit early to prevent recursion
 		}
 	}
 	
