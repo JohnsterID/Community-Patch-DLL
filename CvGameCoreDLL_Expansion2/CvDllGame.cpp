@@ -18,6 +18,7 @@
 
 #include "CvGameTextMgr.h"
 #include <psapi.h>  // For PROCESS_MEMORY_COUNTERS
+#include <intrin.h> // For _AddressOfReturnAddress and _ReturnAddress
 
 CvDllGame::CvDllGame(CvGame* pGame)
 	: m_pGame(pGame)
@@ -121,7 +122,7 @@ CvDllGame::CvDllGame(CvGame* pGame)
 			DWORD_PTR returnAddr = (DWORD_PTR)_ReturnAddress();
 			DWORD_PTR baseAddr = (DWORD_PTR)hCiv5;
 			if (returnAddr >= baseAddr && returnAddr < baseAddr + 0x1000000) { // Rough size check
-				fprintf(stackTraceFile, "[%lu] RECURSION SOURCE: Called from main executable (%s) at offset +%X\n", 
+				fprintf(stackTraceFile, "[%lu] RECURSION SOURCE: Called from main executable (%s) at offset +%lX\n", 
 					GetTickCount(), exeName, (DWORD)(returnAddr - baseAddr));
 			}
 		}
@@ -1465,7 +1466,7 @@ void CvDllGame::InstallBinaryHooksEarly()
 			DWORD_PTR returnAddr = (DWORD_PTR)_ReturnAddress();
 			DWORD_PTR baseAddr = (DWORD_PTR)hCiv5;
 			if (returnAddr >= baseAddr && returnAddr < baseAddr + 0x1000000) {
-				fprintf(hookCallStackFile, "[%lu] - Called from main executable (%s) at offset +%X\n", 
+				fprintf(hookCallStackFile, "[%lu] - Called from main executable (%s) at offset +%lX\n", 
 					GetTickCount(), exeName, (DWORD)(returnAddr - baseAddr));
 			}
 		}
@@ -2072,6 +2073,9 @@ void CvDllGame::InitExeStuff()
 		if (logFile) {
 			fclose(logFile);
 		}
+		
+		// Reset recursion flag
+		inHookInstallation = false;
 	}
 #endif
 
@@ -2101,7 +2105,4 @@ void CvDllGame::InitExeStuff()
 			VirtualProtect((void*)(hookResultAddress), 16, old_protect, &old_protect);
 		}
 	}*/
-        
-        // Reset recursion flag
-        inHookInstallation = false;
 }
