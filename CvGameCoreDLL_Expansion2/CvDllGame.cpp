@@ -1371,54 +1371,25 @@ void CvDllGame::InstallBinaryHooksEarly()
 		fclose(installTimingFile);
 	}
 	
-	// BREAKTHROUGH: Hook installation causes crash, but infinite constructor loop is normal game behavior
-	// Solution: Use delayed hook installation to avoid interfering with the constructor loop
+	// CRITICAL DISCOVERY: Hook execution itself triggers infinite constructor loop
+	// Even with delayed installation, blocking deactivation causes game state inconsistency
+	// TEMPORARY SOLUTION: Completely disable hooks to get game working first
 	
-	// Use a simple delay mechanism - only install hooks after sufficient time has passed
-	static DWORD firstCallTime = 0;
-	static bool delayedInstallCompleted = false;
-	
-	if (firstCallTime == 0) {
-		firstCallTime = GetTickCount();
-	}
-	
-	DWORD currentTime = GetTickCount();
-	DWORD timeSinceFirst = currentTime - firstCallTime;
-	
-	// Wait at least 1000ms (1 second) after first call to let constructor loop settle
-	if (timeSinceFirst < 1000 && !delayedInstallCompleted) {
+	bool COMPLETELY_DISABLE_HOOKS = true;
+	if (COMPLETELY_DISABLE_HOOKS) {
 		if (debugFile) {
-			fprintf(debugFile, "DELAYED INSTALL: Waiting %lu ms (need 1000ms) - instance %p\n", timeSinceFirst, this);
+			fprintf(debugFile, "CRITICAL TEST: Hooks COMPLETELY DISABLED - testing if game works without any hook interference\n");
+			fprintf(debugFile, "This will allow mod deactivation to proceed normally during multiplayer setup\n");
+			fprintf(debugFile, "If game works, we know the issue is with our hook approach, not the installation timing\n");
 			fflush(debugFile);
 			fclose(debugFile);
 		}
 		if (logFile) {
-			fprintf(logFile, "[MOD_HOOK] DELAYED INSTALL: Waiting %lu ms\n", timeSinceFirst);
+			fprintf(logFile, "[MOD_HOOK] CRITICAL TEST: Hooks COMPLETELY DISABLED\n");
 			fflush(logFile);
 			fclose(logFile);
 		}
-		return; // Exit early - wait for constructor loop to settle
-	}
-	
-	// Only install once after delay
-	if (delayedInstallCompleted) {
-		if (debugFile) {
-			fprintf(debugFile, "ALREADY INSTALLED: Hooks already installed, skipping\n");
-			fflush(debugFile);
-			fclose(debugFile);
-		}
-		if (logFile) {
-			fprintf(logFile, "[MOD_HOOK] ALREADY INSTALLED: Hooks already installed\n");
-			fflush(logFile);
-			fclose(logFile);
-		}
-		return;
-	}
-	
-	delayedInstallCompleted = true;
-	if (debugFile) {
-		fprintf(debugFile, "DELAYED INSTALL: Installing hooks after %lu ms delay - instance %p\n", timeSinceFirst, this);
-		fflush(debugFile);
+		return; // Exit early without installing any hooks
 	}
 	
 	if (debugFile) {
