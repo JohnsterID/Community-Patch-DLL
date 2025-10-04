@@ -24,6 +24,59 @@ BOOL APIENTRY DllMain(HANDLE hModule,
                       DWORD  ul_reason_for_call,
                       LPVOID)
 {
+	// CRITICAL DLL LIFECYCLE DEBUGGING: Track load/unload cycles causing infinite constructor loop
+	FILE* dllLifecycleFile = NULL;
+	if (fopen_s(&dllLifecycleFile, "DLL_LIFECYCLE_DEBUG.txt", "a") == 0 && dllLifecycleFile != NULL) {
+		DWORD currentTime = GetTickCount();
+		DWORD threadId = GetCurrentThreadId();
+		DWORD processId = GetCurrentProcessId();
+		
+		static DWORD firstCallTime = 0;
+		static int attachCount = 0;
+		static int detachCount = 0;
+		static DWORD lastAttachTime = 0;
+		
+		if (firstCallTime == 0) {
+			firstCallTime = currentTime;
+		}
+		
+		switch(ul_reason_for_call) {
+		case DLL_PROCESS_ATTACH:
+			attachCount++;
+			fprintf(dllLifecycleFile, "\n=== DLL_PROCESS_ATTACH #%d ===\n", attachCount);
+			fprintf(dllLifecycleFile, "Timestamp: %lu (Time since first: %lu ms)\n", currentTime, currentTime - firstCallTime);
+			fprintf(dllLifecycleFile, "Thread ID: %lu\n", threadId);
+			fprintf(dllLifecycleFile, "Process ID: %lu\n", processId);
+			fprintf(dllLifecycleFile, "Module Handle: %p\n", hModule);
+			if (attachCount > 1) {
+				fprintf(dllLifecycleFile, "WARNING: Multiple DLL_PROCESS_ATTACH calls detected!\n");
+				fprintf(dllLifecycleFile, "Time since last attach: %lu ms\n", currentTime - lastAttachTime);
+			}
+			lastAttachTime = currentTime;
+			break;
+			
+		case DLL_PROCESS_DETACH:
+			detachCount++;
+			fprintf(dllLifecycleFile, "\n=== DLL_PROCESS_DETACH #%d ===\n", detachCount);
+			fprintf(dllLifecycleFile, "Timestamp: %lu (Time since first: %lu ms)\n", currentTime, currentTime - firstCallTime);
+			fprintf(dllLifecycleFile, "Thread ID: %lu\n", threadId);
+			fprintf(dllLifecycleFile, "Process ID: %lu\n", processId);
+			fprintf(dllLifecycleFile, "Module Handle: %p\n", hModule);
+			fprintf(dllLifecycleFile, "Attach/Detach ratio: %d/%d\n", attachCount, detachCount);
+			break;
+			
+		case DLL_THREAD_ATTACH:
+			fprintf(dllLifecycleFile, "DLL_THREAD_ATTACH - Thread: %lu, Time: %lu ms\n", threadId, currentTime - firstCallTime);
+			break;
+			
+		case DLL_THREAD_DETACH:
+			fprintf(dllLifecycleFile, "DLL_THREAD_DETACH - Thread: %lu, Time: %lu ms\n", threadId, currentTime - firstCallTime);
+			break;
+		}
+		
+		fclose(dllLifecycleFile);
+	}
+
 	switch(ul_reason_for_call)
 	{
 	case DLL_PROCESS_ATTACH:

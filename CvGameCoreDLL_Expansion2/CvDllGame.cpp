@@ -17,6 +17,7 @@
 #include "CvDllCity.h"
 
 #include "CvGameTextMgr.h"
+#include <psapi.h>  // For PROCESS_MEMORY_COUNTERS
 
 CvDllGame::CvDllGame(CvGame* pGame)
 	: m_pGame(pGame)
@@ -62,7 +63,7 @@ CvDllGame::CvDllGame(CvGame* pGame)
 		fclose(markerFile);
 	}
 	
-	// CRITICAL: Add stack trace debugging to see what's calling the constructor
+	// CRITICAL: Add comprehensive stack trace and process debugging
 	FILE* stackTraceFile = NULL;
 	if (fopen_s(&stackTraceFile, "CONSTRUCTOR_STACK_TRACE.txt", "a") == 0 && stackTraceFile != NULL) {
 		fprintf(stackTraceFile, "[%lu] Constructor called for instance %p\n", GetTickCount(), this);
@@ -72,12 +73,51 @@ CvDllGame::CvDllGame(CvGame* pGame)
 		__asm { mov stackPtr, esp }
 		fprintf(stackTraceFile, "[%lu] Stack pointer: %p\n", GetTickCount(), stackPtr);
 		
+		// Add comprehensive process and memory state
+		HANDLE currentProcess = GetCurrentProcess();
+		PROCESS_MEMORY_COUNTERS memInfo;
+		if (GetProcessMemoryInfo(currentProcess, &memInfo, sizeof(memInfo))) {
+			fprintf(stackTraceFile, "[%lu] Memory - Working Set: %lu KB, Peak: %lu KB\n", 
+				GetTickCount(), memInfo.WorkingSetSize / 1024, memInfo.PeakWorkingSetSize / 1024);
+			fprintf(stackTraceFile, "[%lu] Memory - Page File Usage: %lu KB, Peak: %lu KB\n", 
+				GetTickCount(), memInfo.PagefileUsage / 1024, memInfo.PeakPagefileUsage / 1024);
+		}
+		
+		// Check module information
+		HMODULE hMod = GetModuleHandle(L"CvGameCoreDLL_Expansion2.dll");
+		if (hMod) {
+			fprintf(stackTraceFile, "[%lu] DLL Module Handle: %p\n", GetTickCount(), hMod);
+			
+			// Get module file name
+			wchar_t modulePath[MAX_PATH];
+			if (GetModuleFileName(hMod, modulePath, MAX_PATH)) {
+				fprintf(stackTraceFile, "[%lu] DLL Path: %ls\n", GetTickCount(), modulePath);
+			}
+		}
+		
 		// Check if we're being called during hook installation by looking for our debug files
 		FILE* testFile = NULL;
 		if (fopen_s(&testFile, "JMP_INSTALL_DEBUG.txt", "r") == 0 && testFile != NULL) {
 			fclose(testFile);
 			fprintf(stackTraceFile, "[%lu] WARNING: Constructor called while JMP_INSTALL_DEBUG.txt exists - possible hook installation recursion!\n", GetTickCount());
 		}
+		
+		// Add call frequency analysis
+		static DWORD lastConstructorCall = 0;
+		static int rapidCallCount = 0;
+		DWORD currentTime = GetTickCount();
+		
+		if (lastConstructorCall != 0) {
+			DWORD timeDiff = currentTime - lastConstructorCall;
+			if (timeDiff < 100) { // Less than 100ms between calls
+				rapidCallCount++;
+				fprintf(stackTraceFile, "[%lu] RAPID CALL DETECTED: %lu ms since last call (rapid call #%d)\n", 
+					currentTime, timeDiff, rapidCallCount);
+			} else {
+				rapidCallCount = 0; // Reset counter for normal calls
+			}
+		}
+		lastConstructorCall = currentTime;
 		
 		fflush(stackTraceFile);
 		fclose(stackTraceFile);
@@ -1482,6 +1522,47 @@ void CvDllGame::InstallBinaryHooksEarly()
 			fprintf(advancedDebugFile, "- MOD_BIN_HOOKS macro: %s\n", MOD_BIN_HOOKS ? "true" : "false");
 			fprintf(advancedDebugFile, "- gCustomMods.isBIN_HOOKS(): %s\n", gCustomMods.isBIN_HOOKS() ? "true" : "false");
 			fprintf(advancedDebugFile, "- gCustomMods address: %p\n", &gCustomMods);
+			
+			// Add game state transition monitoring
+			fprintf(advancedDebugFile, "GAME STATE TRANSITION ANALYSIS:\n");
+			static int lastGameState = -1;
+			static bool lastMultiplayerState = false;
+			static DWORD lastStateChangeTime = 0;
+			
+			if (pGame != NULL) {
+				int currentGameState = pGame->getGameState();
+				bool currentMultiplayerState = pGame->isNetworkMultiPlayer();
+				DWORD currentTime = GetTickCount();
+				
+				if (lastGameState != -1) {
+					if (currentGameState != lastGameState) {
+						fprintf(advancedDebugFile, "- Game state changed: %d -> %d (Time: %lu ms)\n", 
+							lastGameState, currentGameState, currentTime - lastStateChangeTime);
+					}
+					if (currentMultiplayerState != lastMultiplayerState) {
+						fprintf(advancedDebugFile, "- Multiplayer state changed: %s -> %s (Time: %lu ms)\n", 
+							lastMultiplayerState ? "YES" : "NO", 
+							currentMultiplayerState ? "YES" : "NO",
+							currentTime - lastStateChangeTime);
+					}
+				}
+				
+				lastGameState = currentGameState;
+				lastMultiplayerState = currentMultiplayerState;
+				lastStateChangeTime = currentTime;
+			}
+			
+			// Add DLL instance tracking
+			fprintf(advancedDebugFile, "DLL INSTANCE TRACKING:\n");
+			static void* lastInstanceAddr = NULL;
+			static int instanceChangeCount = 0;
+			
+			if (lastInstanceAddr != NULL && lastInstanceAddr != this) {
+				instanceChangeCount++;
+				fprintf(advancedDebugFile, "- Instance changed: %p -> %p (Change #%d)\n", 
+					lastInstanceAddr, this, instanceChangeCount);
+			}
+			lastInstanceAddr = this;
 			
 			fflush(advancedDebugFile);
 			fclose(advancedDebugFile);
