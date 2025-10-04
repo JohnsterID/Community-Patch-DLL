@@ -44,6 +44,7 @@ public:
 	void HookDeactivateModsFunction(DWORD functionAddr);
 	void HookSqliteFunction(const char* functionName, DWORD functionAddr, void* hookFunction, void** originalFunction);
 	void HookBulkDeactivateFunction(DWORD functionAddr);
+	void HookSetActiveDLCandMods(DWORD functionAddr);
 #endif
 
 

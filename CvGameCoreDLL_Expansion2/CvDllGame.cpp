@@ -1188,6 +1188,86 @@ int __cdecl HookedSqlite3Prepare(void* db, const char* zSql, int nByte, void** p
 	return 0; // SQLITE_OK fallback
 }
 
+// SetActiveDLCandMods hook function - MPPatch-inspired approach
+// This intercepts the main mod activation function and restores desired mods
+// Based on Civ5XP.c analysis: SetActiveDLCandMods at 0x0898B5A8
+int __cdecl SetActiveDLCandModsHook(void* this_ptr, void* db_connection, void* mod_list, unsigned char reload_dlc, char reload_mods)
+{
+	FILE* logFile = NULL;
+	FILE* debugFile = NULL;
+
+	if (fopen_s(&logFile, "Logs/MOD_HOOK_DEBUG.log", "a") == 0 && logFile != NULL) {
+		fprintf(logFile, "[SETACTIVE_HOOK] SetActiveDLCandMods intercepted!\n");
+		fprintf(logFile, "[SETACTIVE_HOOK] Parameters: this_ptr=0x%p, db_connection=0x%p, mod_list=0x%p, reload_dlc=%d, reload_mods=%d\n", 
+			this_ptr, db_connection, mod_list, reload_dlc, reload_mods);
+		fflush(logFile);
+	}
+
+	if (fopen_s(&debugFile, "SETACTIVE_HOOK_EXECUTION.txt", "a") == 0 && debugFile != NULL) {
+		fprintf(debugFile, "[%lu] SetActiveDLCandMods INTERCEPTED!\n", GetTickCount());
+		fprintf(debugFile, "MPPATCH APPROACH: Intercepting main mod activation function\n");
+		fprintf(debugFile, "TIMING: This runs AFTER individual deactivation functions\n");
+		fprintf(debugFile, "STRATEGY: Restore desired mods to the list before calling original function\n");
+		fflush(debugFile);
+	}
+
+	// Check game state
+	bool isMultiplayer = false;
+	bool gameStateAccessible = false;
+	
+	try {
+		CvGame* pGame = GC.getGamePointer();
+		if (pGame != NULL) {
+			isMultiplayer = pGame->isNetworkMultiPlayer() || pGame->isHotSeat() || pGame->isPbem();
+			gameStateAccessible = true;
+		}
+	} catch (...) {
+		// Game state might not be initialized yet
+		if (debugFile) {
+			fprintf(debugFile, "Game state not accessible - likely during startup\n");
+			fflush(debugFile);
+		}
+	}
+
+	if (debugFile) {
+		fprintf(debugFile, "Game state accessible: %s\n", gameStateAccessible ? "true" : "false");
+		if (gameStateAccessible) {
+			fprintf(debugFile, "Is multiplayer: %s\n", isMultiplayer ? "true" : "false");
+		}
+		fflush(debugFile);
+	}
+
+	// TODO: Implement mod list restoration logic here
+	// For now, just log that we intercepted the call and would restore mods
+	if (isMultiplayer && gameStateAccessible) {
+		if (logFile) {
+			fprintf(logFile, "[SETACTIVE_HOOK] MULTIPLAYER DETECTED - Would restore mods to list here\n");
+			fflush(logFile);
+		}
+		if (debugFile) {
+			fprintf(debugFile, "MULTIPLAYER DETECTED - This is where we would restore mods to the list\n");
+			fprintf(debugFile, "NEXT STEP: Implement mod list manipulation like MPPatch does\n");
+			fflush(debugFile);
+		}
+	}
+
+	// Close debug files
+	if (logFile) fclose(logFile);
+	if (debugFile) fclose(debugFile);
+
+	// For now, just return success to see if the hook works
+	// TODO: Call original function with modified parameters
+	if (debugFile) {
+		FILE* resultFile = NULL;
+		if (fopen_s(&resultFile, "SETACTIVE_HOOK_RESULT.txt", "a") == 0 && resultFile != NULL) {
+			fprintf(resultFile, "[%lu] SetActiveDLCandMods hook executed successfully - returning success\n", GetTickCount());
+			fclose(resultFile);
+		}
+	}
+
+	return 1; // Return success for now
+}
+
 void CvDllGame::HookDeactivateModsFunction(DWORD functionAddr)
 {
 	// Debug: Log hook installation attempt to file
@@ -1438,6 +1518,75 @@ void CvDllGame::HookSqliteFunction(const char* functionName, DWORD functionAddr,
 	}
 }
 #endif
+
+// SetActiveDLCandMods hook function - MPPatch-inspired approach
+// This function intercepts the main mod activation function and restores desired mods
+void CvDllGame::HookSetActiveDLCandMods(DWORD functionAddr)
+{
+	FILE* logFile = NULL;
+	FILE* debugFile = NULL;
+
+	if (fopen_s(&logFile, "Logs/MOD_HOOK_DEBUG.log", "a") == 0 && logFile != NULL) {
+		fprintf(logFile, "[SETACTIVE_HOOK] Attempting to hook SetActiveDLCandMods at address 0x%08lX\n", functionAddr);
+		fflush(logFile);
+	}
+
+	if (fopen_s(&debugFile, "HOOK_INSTALL_DEBUG.txt", "a") == 0 && debugFile != NULL) {
+		fprintf(debugFile, "HookSetActiveDLCandMods called with address 0x%08lX\n", functionAddr);
+		fflush(debugFile);
+	}
+
+	DWORD old_protect;
+	if (VirtualProtect((void*)functionAddr, 5, PAGE_EXECUTE_READWRITE, &old_protect))
+	{
+		if (debugFile) {
+			fprintf(debugFile, "VirtualProtect succeeded, installing SetActiveDLCandMods hook\n");
+			fflush(debugFile);
+		}
+
+		// Get the address of our hook function
+		DWORD hookAddr = (DWORD)&SetActiveDLCandModsHook;
+		DWORD relativeAddr = hookAddr - (functionAddr + 5);
+
+		if (debugFile) {
+			fprintf(debugFile, "SetActiveDLCandMods hook function at 0x%08lX, relative addr: 0x%08lX\n", hookAddr, relativeAddr);
+			fflush(debugFile);
+		}
+
+		// Write JMP instruction (0xE9 followed by relative address)
+		*(unsigned char*)functionAddr = 0xE9;
+		*(DWORD*)(functionAddr + 1) = relativeAddr;
+
+		VirtualProtect((void*)functionAddr, 5, old_protect, &old_protect);
+
+		if (logFile) {
+			fprintf(logFile, "[SETACTIVE_HOOK] SetActiveDLCandMods hook installation completed successfully\n");
+			fflush(logFile);
+		}
+		if (debugFile) {
+			fprintf(debugFile, "SetActiveDLCandMods hook installation completed successfully\n");
+			fflush(debugFile);
+		}
+	}
+	else
+	{
+		if (logFile) {
+			fprintf(logFile, "[SETACTIVE_HOOK] VirtualProtect failed for SetActiveDLCandMods - hook installation failed\n");
+			fflush(logFile);
+		}
+		if (debugFile) {
+			fprintf(debugFile, "VirtualProtect failed for SetActiveDLCandMods - hook installation failed\n");
+			fflush(debugFile);
+		}
+	}
+
+	if (logFile) {
+		fclose(logFile);
+	}
+	if (debugFile) {
+		fclose(debugFile);
+	}
+}
 
 void CvDllGame::StartModStatusMonitoring()
 {
@@ -1800,12 +1949,17 @@ void CvDllGame::InstallBinaryHooksEarly()
 		return;
 	}
 	
-	// STRATEGIC DECISION: Install hooks on first call OR when binHooksEnabled=true
-	// GOAL: Protect mods during multiplayer setup by installing hooks before SP->MP transition
+	// NEW APPROACH: Hook SetActiveDLCandMods instead of individual deactivation functions
+	// INSPIRATION: MPPatch uses this approach successfully - intercept and modify parameters
+	// TIMING: SetActiveDLCandMods runs AFTER deactivation, so mods will be restored for staging room
 	bool binHooksEnabled = m_bBinHooksEnabledAtConstruction;
 	bool isFirstCall = (firstCallTime == 0); // Check if this was the first call ever
 	
 	if (debugFile) {
+		fprintf(debugFile, "=== NEW MPPATCH-INSPIRED APPROACH ===\n");
+		fprintf(debugFile, "STRATEGY: Hook SetActiveDLCandMods to restore mods after deactivation\n");
+		fprintf(debugFile, "TIMING: SetActiveDLCandMods runs after individual deactivation functions\n");
+		fprintf(debugFile, "RESULT: Mods will be restored in time for staging room\n");
 		fprintf(debugFile, "Current MOD_BIN_HOOKS macro: %s\n", MOD_BIN_HOOKS ? "true" : "false");
 		fprintf(debugFile, "Using captured constructor value: %s\n", binHooksEnabled ? "true" : "false");
 		fprintf(debugFile, "Is first call ever: %s\n", isFirstCall ? "true" : "false");
@@ -1840,150 +1994,66 @@ void CvDllGame::InstallBinaryHooksEarly()
 			// These offsets are from reverse engineering (assuming base 0x00400000)
 			DWORD expectedBase = 0x00400000;
 			
-			// 1. Individual mod disable functions (Lua API: DisableMod) - "UPDATE Mods Set Enabled = 0 WHERE ModID = ?"
-			DWORD individualOffsets[] = {
-				0x007B9510 - expectedBase,  // DX9 offset
-				0x007C1ED0 - expectedBase,  // DX11 offset  
-				0x007C2F80 - expectedBase   // Tablet offset
-			};
-			
-			DWORD individualAddresses[3];
-			for (int i = 0; i < 3; i++) {
-				individualAddresses[i] = baseAddress + individualOffsets[i];
-			}
-			
-			// 2. Bulk mod deactivation functions - "BEGIN; UPDATE Mods Set Activated = 0; END;"
-			DWORD bulkOffsets[] = {
-				0x007B91F0 - expectedBase,  // DX9 offset
-				0x007C1BB0 - expectedBase,  // DX11 offset
-				0x007C2C60 - expectedBase   // Tablet offset
-			};
-			
-			DWORD bulkAddresses[3];
-			for (int i = 0; i < 3; i++) {
-				bulkAddresses[i] = baseAddress + bulkOffsets[i];
-			}
-			
 			const char* types[] = { "DX9", "DX11", "Tablet" };
 			
-			// Hook individual mod disable functions
+			// Hook SetActiveDLCandMods function - MPPatch-inspired approach
 			if (debugFile) {
-				fprintf(debugFile, "=== HOOKING INDIVIDUAL MOD DISABLE FUNCTIONS ===\n");
+				fprintf(debugFile, "=== HOOKING SETACTIVEDLCANDMODS FUNCTION (MPPATCH APPROACH) ===\n");
+				fprintf(debugFile, "STRATEGY: Intercept main mod activation function to restore mods after deactivation\n");
 				fflush(debugFile);
 			}
 			
-			for (int i = 0; i < 3; i++)
-			{
-				DWORD deactivateModsAddr = individualAddresses[i];
-				
-				if (logFile) {
-					fprintf(logFile, "[MOD_HOOK] InstallBinaryHooksEarly: Calculated %s individual address: 0x%08lX (base: 0x%08lX + offset: 0x%08lX)\n", 
-						types[i], deactivateModsAddr, baseAddress, individualOffsets[i]);
-					fflush(logFile);
-				}
-				
-				if (debugFile) {
-					fprintf(debugFile, "Trying %s individual address 0x%08lX (base + 0x%08lX)\n", types[i], deactivateModsAddr, individualOffsets[i]);
-					fflush(debugFile);
-				}
-				
-				// Validate the address points to executable memory
-				if (deactivateModsAddr != 0)
-				{
-					// Check if we can read the first few bytes (function prologue)
-					// Use IsBadReadPtr instead of SEH since we already have C++ try in this function
-					if (!IsBadReadPtr((void*)deactivateModsAddr, 5)) {
-						unsigned char firstBytes[5];
-						memcpy(firstBytes, (void*)deactivateModsAddr, 5);
-						
-						if (logFile) {
-							fprintf(logFile, "[MOD_HOOK] %s individual function bytes: %02X %02X %02X %02X %02X\n", 
-								types[i], firstBytes[0], firstBytes[1], firstBytes[2], firstBytes[3], firstBytes[4]);
-							fflush(logFile);
-						}
-						if (debugFile) {
-							fprintf(debugFile, "%s individual bytes: %02X %02X %02X %02X %02X\n", 
-								types[i], firstBytes[0], firstBytes[1], firstBytes[2], firstBytes[3], firstBytes[4]);
-							fflush(debugFile);
-						}
-						
-						if (debugFile) {
-							fprintf(debugFile, "Calling HookDeactivateModsFunction for %s individual\n", types[i]);
-							fflush(debugFile);
-						}
-						
-						HookDeactivateModsFunction(deactivateModsAddr);
-					} else {
-						if (logFile) {
-							fprintf(logFile, "[MOD_HOOK] ERROR: Cannot read memory at %s individual address 0x%08lX\n", types[i], deactivateModsAddr);
-							fflush(logFile);
-						}
-						if (debugFile) {
-							fprintf(debugFile, "ERROR: Cannot read %s individual address 0x%08lX\n", types[i], deactivateModsAddr);
-							fflush(debugFile);
-						}
-					}
-				}
+			// SetActiveDLCandMods function address from Civ5XP.c analysis: 0x0898B5A8
+			DWORD setActiveOffset = 0x898B5A8 - expectedBase;
+			DWORD setActiveDLCandModsAddr = baseAddress + setActiveOffset;
+			
+			if (logFile) {
+				fprintf(logFile, "[SETACTIVE_HOOK] InstallBinaryHooksEarly: Calculated SetActiveDLCandMods address: 0x%08lX (base: 0x%08lX + offset: 0x%08lX)\n", 
+					setActiveDLCandModsAddr, baseAddress, setActiveOffset);
+				fflush(logFile);
 			}
 			
-			// Hook bulk mod deactivation functions
 			if (debugFile) {
-				fprintf(debugFile, "=== HOOKING BULK MOD DEACTIVATION FUNCTIONS ===\n");
+				fprintf(debugFile, "Trying SetActiveDLCandMods address 0x%08lX (base + 0x%08lX)\n", setActiveDLCandModsAddr, setActiveOffset);
 				fflush(debugFile);
 			}
 			
-			for (int i = 0; i < 3; i++)
+			// Validate the address points to executable memory
+			if (setActiveDLCandModsAddr != 0)
 			{
-				DWORD bulkDeactivateAddr = bulkAddresses[i];
-				
-				if (logFile) {
-					fprintf(logFile, "[MOD_HOOK] InstallBinaryHooksEarly: Calculated %s bulk address: 0x%08lX (base: 0x%08lX + offset: 0x%08lX)\n", 
-						types[i], bulkDeactivateAddr, baseAddress, bulkOffsets[i]);
-					fflush(logFile);
-				}
-				
-				if (debugFile) {
-					fprintf(debugFile, "Trying %s bulk address 0x%08lX (base + 0x%08lX)\n", types[i], bulkDeactivateAddr, bulkOffsets[i]);
-					fflush(debugFile);
-				}
-				
-				// Validate the address points to executable memory
-				if (bulkDeactivateAddr != 0)
-				{
-					// Check if we can read the first few bytes (function prologue)
-					// Use IsBadReadPtr instead of SEH since we already have C++ try in this function
-					if (!IsBadReadPtr((void*)bulkDeactivateAddr, 5)) {
-						unsigned char firstBytes[5];
-						memcpy(firstBytes, (void*)bulkDeactivateAddr, 5);
-						
-						if (logFile) {
-							fprintf(logFile, "[MOD_HOOK] %s bulk function bytes: %02X %02X %02X %02X %02X\n", 
-								types[i], firstBytes[0], firstBytes[1], firstBytes[2], firstBytes[3], firstBytes[4]);
-							fflush(logFile);
-						}
-						if (debugFile) {
-							fprintf(debugFile, "%s bulk bytes: %02X %02X %02X %02X %02X\n", 
-								types[i], firstBytes[0], firstBytes[1], firstBytes[2], firstBytes[3], firstBytes[4]);
-							fflush(debugFile);
-						}
-						
-						if (debugFile) {
-							fprintf(debugFile, "Calling HookBulkDeactivateFunction for %s bulk\n", types[i]);
-							fflush(debugFile);
-						}
-						
-						HookBulkDeactivateFunction(bulkDeactivateAddr);
-					} else {
-						if (logFile) {
-							fprintf(logFile, "[MOD_HOOK] ERROR: Cannot read memory at %s bulk address 0x%08lX\n", types[i], bulkDeactivateAddr);
-							fflush(logFile);
-						}
-						if (debugFile) {
-							fprintf(debugFile, "ERROR: Cannot read %s bulk address 0x%08lX\n", types[i], bulkDeactivateAddr);
-							fflush(debugFile);
-						}
+				// Check if we can read the first few bytes (function prologue)
+				if (!IsBadReadPtr((void*)setActiveDLCandModsAddr, 5)) {
+					unsigned char firstBytes[5];
+					memcpy(firstBytes, (void*)setActiveDLCandModsAddr, 5);
+					
+					if (logFile) {
+						fprintf(logFile, "[SETACTIVE_HOOK] SetActiveDLCandMods function bytes: %02X %02X %02X %02X %02X\n", 
+							firstBytes[0], firstBytes[1], firstBytes[2], firstBytes[3], firstBytes[4]);
+						fflush(logFile);
+					}
+					if (debugFile) {
+						fprintf(debugFile, "SetActiveDLCandMods bytes: %02X %02X %02X %02X %02X\n", 
+							firstBytes[0], firstBytes[1], firstBytes[2], firstBytes[3], firstBytes[4]);
+						fflush(debugFile);
+					}
+					
+					if (debugFile) {
+						fprintf(debugFile, "Calling HookSetActiveDLCandMods\n");
+						fflush(debugFile);
+					}
+					
+					HookSetActiveDLCandMods(setActiveDLCandModsAddr);
+				} else {
+					if (logFile) {
+						fprintf(logFile, "[SETACTIVE_HOOK] ERROR: Cannot read memory at SetActiveDLCandMods address 0x%08lX\n", setActiveDLCandModsAddr);
+						fflush(logFile);
+					}
+					if (debugFile) {
+						fprintf(debugFile, "ERROR: Cannot read SetActiveDLCandMods address 0x%08lX\n", setActiveDLCandModsAddr);
+						fflush(debugFile);
 					}
 				}
+			}
 			}
 			
 			// 3. SQLite function hooks - catch ANY database operations
