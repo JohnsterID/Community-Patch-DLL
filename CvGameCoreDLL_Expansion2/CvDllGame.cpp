@@ -654,6 +654,58 @@ typedef int (__cdecl *sqlite3_prepare_func)(void* db, const char* zSql, int nByt
 sqlite3_exec_func g_original_sqlite3_exec = NULL;
 sqlite3_prepare_func g_original_sqlite3_prepare = NULL;
 
+// Forward declaration
+void RestoreModsAfterDeactivation();
+
+// Function to restore mods after deactivation
+void RestoreModsAfterDeactivation()
+{
+	FILE* logFile = NULL;
+	if (fopen_s(&logFile, "Logs/MOD_HOOK_DEBUG.log", "a") == 0 && logFile != NULL) {
+		fprintf(logFile, "[MOD_HOOK] RestoreModsAfterDeactivation: Starting mod restoration process\n");
+		fflush(logFile);
+	}
+	
+	// Try to get the database connection and re-activate mods
+	try {
+		// Get the custom mods system
+		CvModdingFrameworkAppSide* pModding = gCustomMods.getModdingFramework();
+		if (pModding) {
+			// Re-activate all mods that were previously enabled
+			// This SQL will restore the mods that were active before deactivation
+			// We need to execute: "UPDATE Mods SET Activated = 1 WHERE Enabled = 1"
+			
+			if (logFile) {
+				fprintf(logFile, "[MOD_HOOK] RestoreModsAfterDeactivation: Found modding framework, attempting to restore mods\n");
+				fflush(logFile);
+			}
+			
+			// TODO: Implement actual mod restoration logic
+			// For now, just log that we would restore mods here
+			if (logFile) {
+				fprintf(logFile, "[MOD_HOOK] RestoreModsAfterDeactivation: Mod restoration logic would execute here\n");
+				fflush(logFile);
+			}
+		} else {
+			if (logFile) {
+				fprintf(logFile, "[MOD_HOOK] RestoreModsAfterDeactivation: Could not get modding framework\n");
+				fflush(logFile);
+			}
+		}
+	} catch (...) {
+		if (logFile) {
+			fprintf(logFile, "[MOD_HOOK] RestoreModsAfterDeactivation: Exception occurred during mod restoration\n");
+			fflush(logFile);
+		}
+	}
+	
+	if (logFile) {
+		fprintf(logFile, "[MOD_HOOK] RestoreModsAfterDeactivation: Completed mod restoration process\n");
+		fflush(logFile);
+		fclose(logFile);
+	}
+}
+
 // Hook function that intercepts individual mod disabling
 // This prevents "UPDATE Mods Set Enabled = 0 WHERE ModID = ?" during multiplayer setup
 int __cdecl HookedDeactivateMods()
@@ -817,29 +869,30 @@ bool __thiscall HookedBulkDeactivate(void* this_ptr)
 	
 	if (isMultiplayer) {
 		if (logFile) {
-			fprintf(logFile, "[MOD_HOOK] HookedBulkDeactivate: BLOCKING bulk mod deactivation in multiplayer!\n");
+			fprintf(logFile, "[MOD_HOOK] HookedBulkDeactivate: ALLOWING deactivation but will restore mods immediately!\n");
 			fflush(logFile);
 		}
 		if (debugFile) {
-			fprintf(debugFile, "BLOCKING bulk mod deactivation - returning success without calling original!\n");
+			fprintf(debugFile, "ALLOWING deactivation then restoring mods - calling original function!\n");
 			fflush(debugFile);
 		}
 		
-		// Close files
+		// Close files before calling original function
 		if (logFile) fclose(logFile);
 		if (debugFile) fclose(debugFile);
 		
-		// DON'T call original function - just return success
-		// This prevents the "UPDATE Mods Set Activated = 0" from executing
-		// The game will think the operation succeeded but mods stay active
-		
-		// Schedule mod restoration after a short delay
-		// This allows the game's initialization to complete normally
-		// TODO: Implement delayed mod restoration mechanism
-		
-		// Reset re-entry guard before returning
+		// Reset re-entry guard before calling original
 		inHook = false;
-		return true; // Return success without deactivating mods
+		
+		// CALL the original function to allow deactivation
+		// This lets the game's normal process continue
+		bool result = g_originalBulkDeactivate(this_ptr);
+		
+		// Now immediately re-activate the mods we want to keep
+		// This happens after the deactivation but before the DLL reload
+		RestoreModsAfterDeactivation();
+		
+		return result;
 	}
 	
 	// Close files

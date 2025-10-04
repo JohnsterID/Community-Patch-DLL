@@ -43,6 +43,8 @@ public:
 	void HookBulkDeactivateFunction(DWORD functionAddr);
 #endif
 
+
+
 	void DLLCALL ChangeNumGameTurnActive(int iChange, const char* why);
 	int DLLCALL CountHumanPlayersAlive() const;
 	int DLLCALL CountNumHumanGameTurnActive();
