@@ -28,11 +28,38 @@ CvDllGame::CvDllGame(CvGame* pGame)
 	// CRITICAL: Capture BIN_HOOKS value IMMEDIATELY before mod deactivation can occur
 	m_bBinHooksEnabledAtConstruction = MOD_BIN_HOOKS;
 		
-	// Debug: Create marker file to track when DLL constructor is called
+	// ADVANCED DEBUG: Create comprehensive constructor tracking
 	FILE* markerFile = NULL;
 	if (fopen_s(&markerFile, "CVDLLGAME_CONSTRUCTOR_CALLED.txt", "a") == 0 && markerFile != NULL) {
 		fprintf(markerFile, "=== CvDllGame constructor called ===\n");
 		fprintf(markerFile, "Instance address: %p\n", this);
+		fprintf(markerFile, "Timestamp: %lu\n", GetTickCount());
+		fprintf(markerFile, "Thread ID: %lu\n", GetCurrentThreadId());
+		fprintf(markerFile, "Process ID: %lu\n", GetCurrentProcessId());
+		
+		// Check if this is part of the infinite constructor loop
+		static DWORD lastInstanceAddr = 0;
+		static int sameInstanceCount = 0;
+		static DWORD firstCallTime = 0;
+		
+		if (firstCallTime == 0) {
+			firstCallTime = GetTickCount();
+		}
+		
+		DWORD currentInstanceAddr = (DWORD)this;
+		if (currentInstanceAddr == lastInstanceAddr) {
+			sameInstanceCount++;
+			fprintf(markerFile, "INFINITE LOOP DETECTED: Same instance %p called %d times\n", this, sameInstanceCount);
+		} else {
+			sameInstanceCount = 1;
+			lastInstanceAddr = currentInstanceAddr;
+		}
+		
+		fprintf(markerFile, "Time since first call: %lu ms\n", GetTickCount() - firstCallTime);
+		fprintf(markerFile, "Same instance count: %d\n", sameInstanceCount);
+		
+		fflush(markerFile);
+		fclose(markerFile);
 	}
 	
 	// CRITICAL: Add stack trace debugging to see what's calling the constructor
@@ -1371,21 +1398,108 @@ void CvDllGame::InstallBinaryHooksEarly()
 		fclose(installTimingFile);
 	}
 	
-	// CRITICAL DISCOVERY: Hook execution itself triggers infinite constructor loop
-	// Even with delayed installation, blocking deactivation causes game state inconsistency
-	// TEMPORARY SOLUTION: Completely disable hooks to get game working first
+	// ADVANCED DEBUGGING: Add comprehensive monitoring to understand the crash
+	// Based on reverse-engineered code analysis from Civ5XP.c, we know:
+	// - Function: Modding::System::DeactivateMods at 08C6F95A executes "BEGIN; UPDATE Mods Set Activated = 0; END;"
+	// - This is called during "BeforeDeactivateMods - Unload DLL" phase  
+	// - Parent function: CvModdingFrameworkAppSide::SetActiveDLCandMods at 0898B5A8
+	// - DX11 equivalent: sub_7C1BB0 at 0x007C1BB0 (our hook target)
 	
+	// Add database state monitoring and detailed crash analysis
+	bool ENABLE_ADVANCED_DEBUGGING = true;
+	if (ENABLE_ADVANCED_DEBUGGING) {
+		// Create comprehensive debugging infrastructure
+		FILE* advancedDebugFile = NULL;
+		if (fopen_s(&advancedDebugFile, "ADVANCED_DEBUG_ANALYSIS.txt", "a") == 0 && advancedDebugFile != NULL) {
+			fprintf(advancedDebugFile, "\n=== ADVANCED DEBUG SESSION START ===\n");
+			fprintf(advancedDebugFile, "[%lu] InstallBinaryHooksEarly called - Instance %p\n", GetTickCount(), this);
+			fprintf(advancedDebugFile, "Based on reverse-engineered code analysis:\n");
+			fprintf(advancedDebugFile, "- Target function: Modding::System::DeactivateMods at 08C6F95A\n");
+			fprintf(advancedDebugFile, "- DX11 equivalent: sub_7C1BB0 at 0x007C1BB0 (our hook target)\n");
+			fprintf(advancedDebugFile, "- SQL executed: BEGIN; UPDATE Mods Set Activated = 0; END;\n");
+			fprintf(advancedDebugFile, "- Called during: BeforeDeactivateMods - Unload DLL phase\n");
+			fprintf(advancedDebugFile, "- Parent function: CvModdingFrameworkAppSide::SetActiveDLCandMods at 0898B5A8\n");
+			
+			// Add memory and stack information
+			fprintf(advancedDebugFile, "MEMORY STATE:\n");
+			fprintf(advancedDebugFile, "- Instance address: %p\n", this);
+			fprintf(advancedDebugFile, "- Stack pointer: %p\n", &advancedDebugFile);
+			fprintf(advancedDebugFile, "- Thread ID: %lu\n", GetCurrentThreadId());
+			fprintf(advancedDebugFile, "- Process ID: %lu\n", GetCurrentProcessId());
+			
+			// Check current database state
+			Database::Connection* db = gCustomMods.getDatabase();
+			if (db != NULL) {
+				fprintf(advancedDebugFile, "DATABASE STATE BEFORE HOOK INSTALLATION:\n");
+				
+				// Query current mod activation state
+				Database::Results results;
+				if (db->Execute(&results, "SELECT COUNT(*) FROM Mods WHERE Activated = 1", -1)) {
+					if (results.Step()) {
+						int activeMods = results.GetInt(0);
+						fprintf(advancedDebugFile, "- Active mods count: %d\n", activeMods);
+					}
+					results.Reset();
+				}
+				
+				// Query total mods
+				if (db->Execute(&results, "SELECT COUNT(*) FROM Mods", -1)) {
+					if (results.Step()) {
+						int totalMods = results.GetInt(0);
+						fprintf(advancedDebugFile, "- Total mods count: %d\n", totalMods);
+					}
+					results.Reset();
+				}
+				
+				// Query mod details
+				if (db->Execute(&results, "SELECT ID, Name, Activated FROM Mods LIMIT 10", -1)) {
+					fprintf(advancedDebugFile, "- First 10 mods:\n");
+					while (results.Step()) {
+						const char* id = results.GetText(0);
+						const char* name = results.GetText(1);
+						int activated = results.GetInt(2);
+						fprintf(advancedDebugFile, "  %s: %s (Activated: %d)\n", id ? id : "NULL", name ? name : "NULL", activated);
+					}
+					results.Reset();
+				}
+			} else {
+				fprintf(advancedDebugFile, "WARNING: Database connection is NULL!\n");
+			}
+			
+			// Add game state information
+			fprintf(advancedDebugFile, "GAME STATE:\n");
+			CvGame* pGame = GC.getGamePointer();
+			if (pGame != NULL) {
+				fprintf(advancedDebugFile, "- Game exists: YES\n");
+				fprintf(advancedDebugFile, "- Is multiplayer: %s\n", pGame->isNetworkMultiPlayer() ? "YES" : "NO");
+				fprintf(advancedDebugFile, "- Game state: %d\n", pGame->getGameState());
+			} else {
+				fprintf(advancedDebugFile, "- Game exists: NO\n");
+			}
+			
+			// Add CustomMods state
+			fprintf(advancedDebugFile, "CUSTOMMODS STATE:\n");
+			fprintf(advancedDebugFile, "- MOD_BIN_HOOKS macro: %s\n", MOD_BIN_HOOKS ? "true" : "false");
+			fprintf(advancedDebugFile, "- gCustomMods.isBIN_HOOKS(): %s\n", gCustomMods.isBIN_HOOKS() ? "true" : "false");
+			fprintf(advancedDebugFile, "- gCustomMods address: %p\n", &gCustomMods);
+			
+			fflush(advancedDebugFile);
+			fclose(advancedDebugFile);
+		}
+	}
+	
+	// For now, keep hooks disabled but add monitoring
 	bool COMPLETELY_DISABLE_HOOKS = true;
 	if (COMPLETELY_DISABLE_HOOKS) {
 		if (debugFile) {
 			fprintf(debugFile, "CRITICAL TEST: Hooks COMPLETELY DISABLED - testing if game works without any hook interference\n");
-			fprintf(debugFile, "This will allow mod deactivation to proceed normally during multiplayer setup\n");
+			fprintf(debugFile, "Advanced debugging enabled to monitor database state and crash patterns\n");
 			fprintf(debugFile, "If game works, we know the issue is with our hook approach, not the installation timing\n");
 			fflush(debugFile);
 			fclose(debugFile);
 		}
 		if (logFile) {
-			fprintf(logFile, "[MOD_HOOK] CRITICAL TEST: Hooks COMPLETELY DISABLED\n");
+			fprintf(logFile, "[MOD_HOOK] CRITICAL TEST: Hooks COMPLETELY DISABLED (with advanced debugging)\n");
 			fflush(logFile);
 			fclose(logFile);
 		}
