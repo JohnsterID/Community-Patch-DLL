@@ -28,8 +28,8 @@ Based on reverse-engineered code analysis from **Civ5XP.c** (Linux binary with m
 
 **Key Functions Discovered:**
 - **Linux:** `Modding::System::DeactivateMods` at `08C6F95A`
-- **DX11:** `sub_7C1BB0` at `0x007C1BB0` (our hook target)
-- **DX9:** `sub_7B91F0` at `0x007B91F0`
+- **DX9:** `sub_7B91F0` at `0x007B91F0`  (our hook target)
+- **DX11:** `sub_7C1BB0` at `0x007C1BB0`
 - **Tablet:** `sub_7C2C60` at `0x007C2C60`
 
 **Research Method:** Check **Civ5XP.c** first (most detailed), then map to Windows binaries
@@ -45,18 +45,16 @@ Based on reverse-engineered code analysis from **Civ5XP.c** (Linux binary with m
    - Shows complete call sequences and SQL statements
    - **Primary research source**
 
-2. **`/workspace/CivilizationV_DX11.exe.c`** (Windows DX11)
+2. **`/workspace/CivilizationV.exe.c`** (Windows DX9)
    - Our primary target platform
+   - Legacy DirectX 9 version
    - Functions have generic names (sub_XXXXXX)
-   - Used to map Linux functions to Windows addresses
 
-3. **`/workspace/CivilizationV_Tablet.exe.c`** (Windows Tablet)
+3. **`/workspace/CivilizationV_DX11.exe.c`** (Windows DX11)
+
+4. **`/workspace/CivilizationV_Tablet.exe.c`** (Windows Tablet)
    - Alternative Windows platform
    - Similar structure to DX11 version
-
-4. **`/workspace/CivilizationV.exe.c`** (Windows DX9)
-   - Legacy DirectX 9 version
-   - Older but still relevant for some users
 
 ### **Key Function Mappings Discovered:**
 | Platform | Function | Address | SQL Executed |
@@ -68,7 +66,7 @@ Based on reverse-engineered code analysis from **Civ5XP.c** (Linux binary with m
 
 ### **Parent Function Chain:**
 - **Linux:** `CvModdingFrameworkAppSide::SetActiveDLCandMods` → `Modding::System::DeactivateMods`
-- **DX11:** `sub_6B8E50` → `sub_7C1BB0` (our hook target)
+- **DX11:** `sub_6B8E50` → `sub_7C1BB0`
 
 ---
 
@@ -260,7 +258,7 @@ DWORD targetAddress = baseAddress + offset;         // ASLR-safe
 ### **4. Research Available Binaries:**
 - **Primary:** `/workspace/Civ5XP.c` (Linux - most detailed information with names preserved)
 - **Secondary:** `/workspace/CivilizationV.exe.c` (DX9)
-- **Tertiary:** `/workspace/CivilizationV_Tablet.exe.c`, ``/workspace/CivilizationV_DX11.exe.c` (DX11)
+- **Tertiary:** `/workspace/CivilizationV_Tablet.exe.c`, `/workspace/CivilizationV_DX11.exe.c` (DX11)
 
 ---
 
