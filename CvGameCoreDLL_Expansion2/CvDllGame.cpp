@@ -1092,21 +1092,77 @@ int __cdecl HookedSqlite3Exec(void* db, const char* sql, int (*callback)(void*,i
 		}
 
 		if (isMultiplayer) {
-			if (logFile) {
-				fprintf(logFile, "[SQLITE_HOOK] BLOCKING mod-related SQL in multiplayer: %s\n", sql);
-				fflush(logFile);
-			}
-			if (debugFile) {
-				fprintf(debugFile, "BLOCKED: %s\n", sql);
-				fflush(debugFile);
-			}
+			// Check if this is the deactivation SQL
+			if (strstr(sql, "UPDATE Mods Set Activated = 0") || strstr(sql, "UPDATE mods SET activated = 0")) {
+				if (logFile) {
+					fprintf(logFile, "[SQLITE_HOOK] POST-DEACTIVATION RESTORATION: Detected mod deactivation SQL in multiplayer\n");
+					fprintf(logFile, "[SQLITE_HOOK] STRATEGY: Let deactivation run, then restore mods immediately after\n");
+					fflush(logFile);
+				}
+				if (debugFile) {
+					fprintf(debugFile, "POST-RESTORATION: Allowing deactivation SQL: %s\n", sql);
+					fflush(debugFile);
+				}
 
-			// Close files
-			if (logFile) fclose(logFile);
-			if (debugFile) fclose(debugFile);
+				// Let the original deactivation SQL execute first
+				int result = 0; // SQLITE_OK
+				if (g_original_sqlite3_exec) {
+					result = g_original_sqlite3_exec(db, sql, callback, arg, errmsg);
+				}
 
-			// Return success without executing the SQL
-			return 0; // SQLITE_OK
+				if (logFile) {
+					fprintf(logFile, "[SQLITE_HOOK] Deactivation SQL executed with result: %d\n", result);
+					fflush(logFile);
+				}
+
+				// Now immediately restore the mods
+				if (result == 0) { // SQLITE_OK
+					const char* restoreSQL = "UPDATE Mods SET Activated = 1 WHERE Type IN ('MOD_COMMUNITY_PATCH', 'MOD_COMMUNITY_BALANCE_OVERHAUL', 'MOD_EVENTS_AND_DECISIONS', 'MOD_MORE_LUXURIES', 'MOD_CQUI_COMMUNITY_EDITION')";
+					
+					if (logFile) {
+						fprintf(logFile, "[SQLITE_HOOK] POST-RESTORATION: Executing restoration SQL: %s\n", restoreSQL);
+						fflush(logFile);
+					}
+					if (debugFile) {
+						fprintf(debugFile, "RESTORING MODS: %s\n", restoreSQL);
+						fflush(debugFile);
+					}
+
+					// Execute restoration SQL
+					int restoreResult = 0;
+					if (g_original_sqlite3_exec) {
+						restoreResult = g_original_sqlite3_exec(db, restoreSQL, NULL, NULL, NULL);
+					}
+
+					if (logFile) {
+						fprintf(logFile, "[SQLITE_HOOK] POST-RESTORATION: Restoration SQL executed with result: %d\n", restoreResult);
+						fprintf(logFile, "[SQLITE_HOOK] POST-RESTORATION: Mods should now be active in staging room\n");
+						fflush(logFile);
+					}
+					if (debugFile) {
+						fprintf(debugFile, "RESTORATION RESULT: %d - Mods restored!\n", restoreResult);
+						fflush(debugFile);
+					}
+				}
+
+				// Close files
+				if (logFile) fclose(logFile);
+				if (debugFile) fclose(debugFile);
+
+				// Return the original deactivation result
+				return result;
+			}
+			else {
+				// For other mod-related SQL, just log and allow
+				if (logFile) {
+					fprintf(logFile, "[SQLITE_HOOK] ALLOWING other mod-related SQL in multiplayer: %s\n", sql);
+					fflush(logFile);
+				}
+				if (debugFile) {
+					fprintf(debugFile, "ALLOWED: %s\n", sql);
+					fflush(debugFile);
+				}
+			}
 		}
 	}
 
@@ -2050,65 +2106,19 @@ void CvDllGame::InstallBinaryHooksEarly()
 					fflush(debugFile);
 				}
 				
-				// STRATEGIC: Install SetActiveDLCandMods hook during first call
+				// STRATEGIC: SQLite-based post-deactivation restoration approach
 				if (debugFile) {
-					fprintf(debugFile, "=== STRATEGIC SETACTIVEDLCANDMODS HOOK INSTALLATION ===\n");
-					fprintf(debugFile, "Installing SetActiveDLCandMods hook during first call to protect mods\n");
+					fprintf(debugFile, "=== STRATEGIC SQLITE POST-DEACTIVATION RESTORATION ===\n");
+					fprintf(debugFile, "STRATEGY: SQLite hooks will detect deactivation SQL and restore mods immediately after\n");
+					fprintf(debugFile, "ADVANTAGE: Maintains game state consistency while preserving mods\n");
+					fprintf(debugFile, "SQLite hooks already installed above - no additional hooks needed\n");
 					fflush(debugFile);
 				}
-				
-				// Get binary type for address selection
-				int binType = BIN_DX9;  // Default
-				#ifdef _WIN64
-					binType = BIN_DX11;
-				#endif
-				
-				// Calculate SetActiveDLCandMods address
-				DWORD setActiveDLCandModsAddr = 0;
-				if (binType == BIN_DX11)
-					setActiveDLCandModsAddr = 0x006B8E50;  // sub_6B8E50 - SetActiveDLCandMods parent function
-				else if (binType == BIN_DX9)
-					setActiveDLCandModsAddr = 0x006B8E00;  // sub_6B8E00 - SetActiveDLCandMods parent function  
-				else if (binType == BIN_TABLET)
-					setActiveDLCandModsAddr = 0x006B8E50;  // Assume same as DX11 for now
-				
-				// Apply ASLR offset
-				DWORD totalOffset = baseAddress - 0x00400000;
-				setActiveDLCandModsAddr = setActiveDLCandModsAddr + totalOffset;
 				
 				if (logFile) {
-					fprintf(logFile, "[SETACTIVE_HOOK] Strategic installation: setActiveDLCandModsAddr = 0x%08lX, totalOffset = 0x%08lX\n", 
-						setActiveDLCandModsAddr, totalOffset);
+					fprintf(logFile, "[SQLITE_RESTORATION] Strategic approach: Using SQLite hooks for post-deactivation restoration\n");
+					fprintf(logFile, "[SQLITE_RESTORATION] SQLite hooks will intercept 'UPDATE Mods Set Activated = 0' and restore mods after execution\n");
 					fflush(logFile);
-				}
-				if (debugFile) {
-					fprintf(debugFile, "SetActiveDLCandMods address: 0x%08lX (binType=%d, totalOffset=0x%08lX)\n", 
-						setActiveDLCandModsAddr, binType, totalOffset);
-					fflush(debugFile);
-				}
-				
-				if (setActiveDLCandModsAddr != 0)
-				{
-					if (logFile) {
-						fprintf(logFile, "[SETACTIVE_HOOK] Strategic installation: Calling HookSetActiveDLCandMods\n");
-						fflush(logFile);
-					}
-					if (debugFile) {
-						fprintf(debugFile, "Installing SetActiveDLCandMods hook at 0x%08lX\n", setActiveDLCandModsAddr);
-						fflush(debugFile);
-					}
-					HookSetActiveDLCandMods(setActiveDLCandModsAddr);
-				}
-				else
-				{
-					if (logFile) {
-						fprintf(logFile, "[SETACTIVE_HOOK] Strategic installation: No SetActiveDLCandMods address found for binType %d\n", binType);
-						fflush(logFile);
-					}
-					if (debugFile) {
-						fprintf(debugFile, "ERROR: No SetActiveDLCandMods address found for binType %d\n", binType);
-						fflush(debugFile);
-					}
 				}
 			} else {
 				if (logFile) {
