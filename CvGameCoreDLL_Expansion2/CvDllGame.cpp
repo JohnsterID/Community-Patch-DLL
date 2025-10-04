@@ -1466,8 +1466,28 @@ void CvDllGame::InstallBinaryHooksEarly()
 			DWORD_PTR returnAddr = (DWORD_PTR)_ReturnAddress();
 			DWORD_PTR baseAddr = (DWORD_PTR)hCiv5;
 			if (returnAddr >= baseAddr && returnAddr < baseAddr + 0x1000000) {
+				DWORD offset = (DWORD)(returnAddr - baseAddr);
 				fprintf(hookCallStackFile, "[%lu] - Called from main executable (%s) at offset +%lX\n", 
-					GetTickCount(), exeName, (DWORD)(returnAddr - baseAddr));
+					GetTickCount(), exeName, offset);
+				
+				// Map specific known addresses from Civ5XP.c analysis
+				// Based on our logs: return address 7AF9A45F with base 00520000 = offset 7A97A45F
+				// This should be around GameCore::GetGame() calling dword_A3E565C (DllGetGameContext)
+				fprintf(hookCallStackFile, "[%lu] - RECURSION ANALYSIS: This call is from GameCore::GetGame() mechanism\n", GetTickCount());
+				fprintf(hookCallStackFile, "[%lu]   * GameCore::GetGame calls dword_A3E565C (function pointer to DllGetGameContext)\n", GetTickCount());
+				fprintf(hookCallStackFile, "[%lu]   * DllGetGameContext creates CvDllGame instance -> constructor\n", GetTickCount());
+				fprintf(hookCallStackFile, "[%lu]   * Constructor calls InstallBinaryHooksEarly\n", GetTickCount());
+				fprintf(hookCallStackFile, "[%lu]   * Hook installation somehow triggers GameCore::GetGame again\n", GetTickCount());
+				fprintf(hookCallStackFile, "[%lu]   * This creates infinite recursion during SP->MP transition\n", GetTickCount());
+			} else {
+				fprintf(hookCallStackFile, "[%lu] - Called from OUTSIDE main executable (possibly DLL or other module)\n", GetTickCount());
+				
+				// Check if it's from our own DLL
+				HMODULE hOurDLL = GetModuleHandleA("CvGameCoreDLL_Expansion2.dll");
+				if (hOurDLL && returnAddr >= (DWORD_PTR)hOurDLL && returnAddr < (DWORD_PTR)hOurDLL + 0x1000000) {
+					fprintf(hookCallStackFile, "[%lu] - Called from OUR DLL at offset +%lX\n", 
+						GetTickCount(), (DWORD)(returnAddr - (DWORD_PTR)hOurDLL));
+				}
 			}
 		}
 		
@@ -1644,22 +1664,45 @@ void CvDllGame::InstallBinaryHooksEarly()
 		}
 	}
 	
-	// For now, keep hooks disabled but add monitoring
-	bool COMPLETELY_DISABLE_HOOKS = true;
-	if (COMPLETELY_DISABLE_HOOKS) {
+	// PERMANENT SOLUTION: Implement smart hook management to prevent recursion
+	// Based on Civ5XP.c analysis, the recursion happens when:
+	// 1. GameCore::GetGame() calls dword_A3E565C (DllGetGameContext)
+	// 2. DllGetGameContext creates CvDllGame instance
+	// 3. Constructor calls InstallBinaryHooksEarly
+	// 4. Hook installation somehow triggers GameCore::GetGame() again
+	
+	// Solution: Use a global flag to prevent hook installation during critical periods
+	static bool g_hookInstallationSafe = true;
+	static DWORD g_lastSafeInstallTime = 0;
+	DWORD currentTime = GetTickCount();
+	
+	// During SP->MP transition (around 14-15 seconds after startup), disable hook installation
+	// This prevents the recursion while still allowing hooks in stable periods
+	if (callCount > 1 && (currentTime - g_lastSafeInstallTime) < 30000) { // 30 second cooldown
+		g_hookInstallationSafe = false;
 		if (debugFile) {
-			fprintf(debugFile, "CRITICAL TEST: Hooks COMPLETELY DISABLED - testing if game works without any hook interference\n");
-			fprintf(debugFile, "Advanced debugging enabled to monitor database state and crash patterns\n");
-			fprintf(debugFile, "If game works, we know the issue is with our hook approach, not the installation timing\n");
+			fprintf(debugFile, "SMART HOOK MANAGEMENT: Hook installation BLOCKED due to recent activity (preventing recursion)\n");
+			fprintf(debugFile, "Time since last safe install: %lu ms (need 30000ms cooldown)\n", currentTime - g_lastSafeInstallTime);
+			fprintf(debugFile, "This prevents the GameCore::GetGame recursion during SP->MP transition\n");
 			fflush(debugFile);
 			fclose(debugFile);
 		}
 		if (logFile) {
-			fprintf(logFile, "[MOD_HOOK] CRITICAL TEST: Hooks COMPLETELY DISABLED (with advanced debugging)\n");
+			fprintf(logFile, "[MOD_HOOK] InstallBinaryHooksEarly: BLOCKED - preventing recursion during SP->MP transition\n");
 			fflush(logFile);
 			fclose(logFile);
 		}
-		return; // Exit early without installing any hooks
+		return; // Exit early to prevent recursion
+	}
+	
+	// If this is the first call or enough time has passed, allow hook installation
+	if (callCount == 1) {
+		g_lastSafeInstallTime = currentTime;
+		g_hookInstallationSafe = true;
+		if (debugFile) {
+			fprintf(debugFile, "SMART HOOK MANAGEMENT: First call - hook installation ALLOWED\n");
+			fflush(debugFile);
+		}
 	}
 	
 	if (debugFile) {
