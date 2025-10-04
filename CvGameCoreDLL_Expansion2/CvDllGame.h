@@ -37,6 +37,9 @@ public:
 	
 	// Capture BIN_HOOKS value early before mod deactivation
 	bool m_bBinHooksEnabledAtConstruction;
+	
+	// Flag to skip hook installation for recursive constructor calls
+	bool m_bSkipHookInstallation;
 #ifdef WIN32
 	void HookDeactivateModsFunction(DWORD functionAddr);
 	void HookSqliteFunction(const char* functionName, DWORD functionAddr, void* hookFunction, void** originalFunction);

@@ -35,7 +35,42 @@ CvDllGame::CvDllGame(CvGame* pGame)
 	if (!protectionFilesCleanedUp) {
 		DeleteFileA("HOOK_PROTECTION_ACTIVE.flag");
 		DeleteFileA("FIRST_HOOK_CALL.timestamp");
+		DeleteFileA("CONSTRUCTOR_PROTECTION_ACTIVE.flag");
+		DeleteFileA("CONSTRUCTOR_COUNT.txt");
 		protectionFilesCleanedUp = true;
+	}
+	
+	// CONSTRUCTOR-LEVEL PROTECTION: Track constructor calls to prevent infinite recursion
+	// The recursion happens at constructor level, not just InstallBinaryHooksEarly level
+	const char* constructorCountFile = "CONSTRUCTOR_COUNT.txt";
+	int constructorCount = 0;
+	
+	// Read current constructor count
+	FILE* countFile = NULL;
+	if (fopen_s(&countFile, constructorCountFile, "r") == 0 && countFile != NULL) {
+		fscanf_s(countFile, "%d", &constructorCount);
+		fclose(countFile);
+	}
+	
+	// Increment and write back
+	constructorCount++;
+	if (fopen_s(&countFile, constructorCountFile, "w") == 0 && countFile != NULL) {
+		fprintf(countFile, "%d", constructorCount);
+		fclose(countFile);
+	}
+	
+	// If we have too many constructor calls in rapid succession, skip hook installation
+	if (constructorCount > 3) {
+		FILE* recursionLog = NULL;
+		if (fopen_s(&recursionLog, "CONSTRUCTOR_RECURSION_DETECTED.txt", "a") == 0 && recursionLog != NULL) {
+			fprintf(recursionLog, "[%lu] CONSTRUCTOR #%d - instance %p (RECURSION LIKELY)\n", GetTickCount(), constructorCount, this);
+			fprintf(recursionLog, "[%lu] Will skip InstallBinaryHooksEarly to prevent infinite loop\n", GetTickCount());
+			fclose(recursionLog);
+		}
+		// Set a flag to skip hook installation for this instance
+		m_bSkipHookInstallation = true;
+	} else {
+		m_bSkipHookInstallation = false;
 	}
 		
 	// ADVANCED DEBUG: Create comprehensive constructor tracking
@@ -1436,6 +1471,16 @@ void CvDllGame::StartModStatusMonitoring()
 void CvDllGame::InstallBinaryHooksEarly()
 {
 #ifdef WIN32
+	// Check if this instance should skip hook installation due to recursion
+	if (m_bSkipHookInstallation) {
+		FILE* skipLog = NULL;
+		if (fopen_s(&skipLog, "HOOK_INSTALLATION_SKIPPED.txt", "a") == 0 && skipLog != NULL) {
+			fprintf(skipLog, "[%lu] Hook installation SKIPPED for instance %p (recursion prevention)\n", GetTickCount(), this);
+			fclose(skipLog);
+		}
+		return; // Exit early to prevent recursion
+	}
+	
 	// Prevent multiple hook installations
 	static bool hooksInstalled = false;
 	static int callCount = 0;
