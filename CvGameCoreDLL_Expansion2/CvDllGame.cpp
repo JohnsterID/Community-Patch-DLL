@@ -1371,20 +1371,54 @@ void CvDllGame::InstallBinaryHooksEarly()
 		fclose(installTimingFile);
 	}
 	
-	// TEMPORARY TEST: Disable hook installation to see if it's causing the infinite loop
-	bool DISABLE_HOOKS_FOR_TESTING = true;
-	if (DISABLE_HOOKS_FOR_TESTING) {
+	// BREAKTHROUGH: Hook installation causes crash, but infinite constructor loop is normal game behavior
+	// Solution: Use delayed hook installation to avoid interfering with the constructor loop
+	
+	// Use a simple delay mechanism - only install hooks after sufficient time has passed
+	static DWORD firstCallTime = 0;
+	static bool delayedInstallCompleted = false;
+	
+	if (firstCallTime == 0) {
+		firstCallTime = GetTickCount();
+	}
+	
+	DWORD currentTime = GetTickCount();
+	DWORD timeSinceFirst = currentTime - firstCallTime;
+	
+	// Wait at least 1000ms (1 second) after first call to let constructor loop settle
+	if (timeSinceFirst < 1000 && !delayedInstallCompleted) {
 		if (debugFile) {
-			fprintf(debugFile, "TESTING: Hook installation DISABLED to test if it causes infinite constructor loop\n");
+			fprintf(debugFile, "DELAYED INSTALL: Waiting %lu ms (need 1000ms) - instance %p\n", timeSinceFirst, this);
 			fflush(debugFile);
 			fclose(debugFile);
 		}
 		if (logFile) {
-			fprintf(logFile, "[MOD_HOOK] TESTING: Hook installation DISABLED\n");
+			fprintf(logFile, "[MOD_HOOK] DELAYED INSTALL: Waiting %lu ms\n", timeSinceFirst);
 			fflush(logFile);
 			fclose(logFile);
 		}
-		return; // Exit early without installing hooks
+		return; // Exit early - wait for constructor loop to settle
+	}
+	
+	// Only install once after delay
+	if (delayedInstallCompleted) {
+		if (debugFile) {
+			fprintf(debugFile, "ALREADY INSTALLED: Hooks already installed, skipping\n");
+			fflush(debugFile);
+			fclose(debugFile);
+		}
+		if (logFile) {
+			fprintf(logFile, "[MOD_HOOK] ALREADY INSTALLED: Hooks already installed\n");
+			fflush(logFile);
+			fclose(logFile);
+		}
+		return;
+	}
+	
+	delayedInstallCompleted = true;
+	if (debugFile) {
+		fprintf(debugFile, "DELAYED INSTALL: Installing hooks after %lu ms delay - instance %p\n", timeSinceFirst, this);
+		fflush(debugFile);
 	}
 	
 	if (debugFile) {
