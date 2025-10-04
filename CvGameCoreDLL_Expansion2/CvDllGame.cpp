@@ -2049,6 +2049,67 @@ void CvDllGame::InstallBinaryHooksEarly()
 					fprintf(debugFile, "SQLite hook installation completed\n");
 					fflush(debugFile);
 				}
+				
+				// STRATEGIC: Install SetActiveDLCandMods hook during first call
+				if (debugFile) {
+					fprintf(debugFile, "=== STRATEGIC SETACTIVEDLCANDMODS HOOK INSTALLATION ===\n");
+					fprintf(debugFile, "Installing SetActiveDLCandMods hook during first call to protect mods\n");
+					fflush(debugFile);
+				}
+				
+				// Get binary type for address selection
+				int binType = BIN_DX9;  // Default
+				#ifdef _WIN64
+					binType = BIN_DX11;
+				#endif
+				
+				// Calculate SetActiveDLCandMods address
+				DWORD setActiveDLCandModsAddr = 0;
+				if (binType == BIN_DX11)
+					setActiveDLCandModsAddr = 0x006B8E50;  // sub_6B8E50 - SetActiveDLCandMods parent function
+				else if (binType == BIN_DX9)
+					setActiveDLCandModsAddr = 0x006B8E00;  // sub_6B8E00 - SetActiveDLCandMods parent function  
+				else if (binType == BIN_TABLET)
+					setActiveDLCandModsAddr = 0x006B8E50;  // Assume same as DX11 for now
+				
+				// Apply ASLR offset
+				DWORD totalOffset = baseAddress - 0x00400000;
+				setActiveDLCandModsAddr = setActiveDLCandModsAddr + totalOffset;
+				
+				if (logFile) {
+					fprintf(logFile, "[SETACTIVE_HOOK] Strategic installation: setActiveDLCandModsAddr = 0x%08lX, totalOffset = 0x%08lX\n", 
+						setActiveDLCandModsAddr, totalOffset);
+					fflush(logFile);
+				}
+				if (debugFile) {
+					fprintf(debugFile, "SetActiveDLCandMods address: 0x%08lX (binType=%d, totalOffset=0x%08lX)\n", 
+						setActiveDLCandModsAddr, binType, totalOffset);
+					fflush(debugFile);
+				}
+				
+				if (setActiveDLCandModsAddr != 0)
+				{
+					if (logFile) {
+						fprintf(logFile, "[SETACTIVE_HOOK] Strategic installation: Calling HookSetActiveDLCandMods\n");
+						fflush(logFile);
+					}
+					if (debugFile) {
+						fprintf(debugFile, "Installing SetActiveDLCandMods hook at 0x%08lX\n", setActiveDLCandModsAddr);
+						fflush(debugFile);
+					}
+					HookSetActiveDLCandMods(setActiveDLCandModsAddr);
+				}
+				else
+				{
+					if (logFile) {
+						fprintf(logFile, "[SETACTIVE_HOOK] Strategic installation: No SetActiveDLCandMods address found for binType %d\n", binType);
+						fflush(logFile);
+					}
+					if (debugFile) {
+						fprintf(debugFile, "ERROR: No SetActiveDLCandMods address found for binType %d\n", binType);
+						fflush(debugFile);
+					}
+				}
 			} else {
 				if (logFile) {
 					fprintf(logFile, "[SQLITE_HOOK] Could not find SQLite module\n");
