@@ -1954,6 +1954,9 @@ void CvDllGame::InstallBinaryHooksEarly()
 	if (debugFile) {
 		fclose(debugFile);
 	}
+	
+	// Reset recursion flag at end of function
+	inHookInstallation = false;
 #endif
 }
 
@@ -2073,9 +2076,6 @@ void CvDllGame::InitExeStuff()
 		if (logFile) {
 			fclose(logFile);
 		}
-		
-		// Reset recursion flag
-		inHookInstallation = false;
 	}
 #endif
 
