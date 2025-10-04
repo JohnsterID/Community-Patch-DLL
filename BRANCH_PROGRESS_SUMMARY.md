@@ -1,30 +1,74 @@
 # Branch Progress Summary: lua-xml-runtime-hooks
 
-## 🚨 **CURRENT CRITICAL STATUS - INFINITE RECURSION FIXED**
-**Status: FIXED** - Infinite recursion bug fixed in commit dbf144ff8
+## 🚨 **CURRENT CRITICAL STATUS - HOOK EXECUTION TRIGGERS INFINITE CONSTRUCTOR LOOP**
+**Status: CRITICAL DISCOVERY** - Hook execution itself causes infinite constructor loop in commit 2b862aa6f
 
-**Root Cause Discovered:** Hook installation creates infinite recursion loop
-- `g_originalBulkDeactivate` points to the hooked address (functionAddr)
-- Hook installation overwrites original function with JMP to our hook
-- Calling `g_originalBulkDeactivate(this_ptr)` triggers our hook again → infinite loop
-- Result: 36,582 hook executions leading to crash
+**Major Breakthrough:** Hook approach is fundamentally flawed
+- **Delayed installation worked** (38,593ms delay) - hooks installed successfully
+- **Hook executed successfully** - blocked deactivation SQL as intended
+- **BUT: Infinite destructor loop started IMMEDIATELY after hook execution**
+- **Root cause:** Blocking deactivation causes game state inconsistency
+- **Game expects deactivation to succeed** - when blocked, enters infinite loop trying to fix state
 
-**Fix Applied:** Don't call `g_originalBulkDeactivate` at all - return success without executing deactivation SQL.
+**Current Test:** Hooks COMPLETELY DISABLED to establish baseline behavior
+**Next Step:** Need completely different approach that doesn't cause state inconsistency
 
 ---
 
 ## 🔍 **ACTUAL MOD DEACTIVATION TIMING (From Analysis)**
 
-Based on `/workspace/civ5-mods-mp-analysis/civ5_mod_disabling_analysis.md`:
+Based on reverse-engineered code analysis from **Civ5XP.c** (Linux binary with most detailed information):
 
 **The Real Timeline:**
 1. **0s**: `HostLANGame()` completes, mods still active
 2. **~12s**: Network establishes, `GameLaunched` callback fires  
 3. **~12s**: `NetInitGame::Execute()` triggers game initialization
-4. **~12s**: `CvInitMgr::LaunchGame()` calls `SetActiveDLCandMods()`
-5. **~12s**: `DeactivateMods()` executes `UPDATE Mods Set Activated = 0`
+4. **~12s**: `CvModdingFrameworkAppSide::SetActiveDLCandMods()` called
+5. **~12s**: `Modding::System::DeactivateMods()` executes `BEGIN; UPDATE Mods Set Activated = 0; END;`
 
-**Key Insight:** Mod deactivation happens during **game initialization** (`NetInitGame::Execute()`), NOT in staging room!
+**Key Functions Discovered:**
+- **Linux:** `Modding::System::DeactivateMods` at `08C6F95A`
+- **DX11:** `sub_7C1BB0` at `0x007C1BB0` (our hook target)
+- **DX9:** `sub_7B91F0` at `0x007B91F0`
+- **Tablet:** `sub_7C2C60` at `0x007C2C60`
+
+**Research Method:** Check **Civ5XP.c** first (most detailed), then map to Windows binaries
+
+---
+
+## 🔬 **REVERSE-ENGINEERED CODE ANALYSIS**
+
+### **Available Binaries for Research:**
+1. **`/workspace/Civ5XP.c`** (Linux binary - 2.3M lines)
+   - **Most detailed information available**
+   - Contains exact function names and signatures
+   - Shows complete call sequences and SQL statements
+   - **Primary research source**
+
+2. **`/workspace/CivilizationV_DX11.exe.c`** (Windows DX11)
+   - Our primary target platform
+   - Functions have generic names (sub_XXXXXX)
+   - Used to map Linux functions to Windows addresses
+
+3. **`/workspace/CivilizationV_Tablet.exe.c`** (Windows Tablet)
+   - Alternative Windows platform
+   - Similar structure to DX11 version
+
+4. **`/workspace/CivilizationV.exe.c`** (Windows DX9)
+   - Legacy DirectX 9 version
+   - Older but still relevant for some users
+
+### **Key Function Mappings Discovered:**
+| Platform | Function | Address | SQL Executed |
+|----------|----------|---------|--------------|
+| Linux | `Modding::System::DeactivateMods` | `08C6F95A` | `BEGIN; UPDATE Mods Set Activated = 0; END;` |
+| DX11 | `sub_7C1BB0` | `0x007C1BB0` | Same SQL |
+| DX9 | `sub_7B91F0` | `0x007B91F0` | Same SQL |
+| Tablet | `sub_7C2C60` | `0x007C2C60` | Same SQL |
+
+### **Parent Function Chain:**
+- **Linux:** `CvModdingFrameworkAppSide::SetActiveDLCandMods` → `Modding::System::DeactivateMods`
+- **DX11:** `sub_6B8E50` → `sub_7C1BB0` (our hook target)
 
 ---
 
@@ -32,15 +76,18 @@ Based on `/workspace/civ5-mods-mp-analysis/civ5_mod_disabling_analysis.md`:
 
 ### **Tests Completed:**
 1. **at-modmenu**: ✅ FIXED - Database override bug fixed, no more crashes
-2. **at-stagingroom**: ❌ STILL CRASHES - Game crashes trying to load staging room
-   - **MAJOR DISCOVERY:** Infinite recursion caused 36,582 hook executions
-   - **ROOT CAUSE:** Calling `g_originalBulkDeactivate(this_ptr)` triggers our hook again
-   - **STATUS:** Infinite recursion fixed in commit dbf144ff8
+2. **at-stagingroom**: ❌ CRITICAL DISCOVERY - Hook execution triggers infinite constructor loop
+   - **Infinite recursion fixed** in commit dbf144ff8 (36,582 → 1 execution)
+   - **Delayed installation worked** (38,593ms delay) - hooks installed successfully  
+   - **Hook executed successfully** - blocked deactivation SQL as intended
+   - **BUT: Game crashed immediately after** - infinite destructor loop started
+   - **Root cause:** Blocking deactivation causes game state inconsistency
+3. **hooks-completely-disabled**: ⏳ TESTING - Commit 2b862aa6f with comprehensive debugging
 
 ### **Tests NOT Done Yet:**
-1. **at-stagingroom (post-recursion-fix)**: ⏳ NEEDS RETEST - Test latest build dbf144ff8
+1. **baseline-behavior**: ⏳ TESTING - Does game work without any hook interference?
 2. **multiplayer-setup**: ⏳ NOT TESTED - Need to test actual MP game launch  
-3. **hook-effectiveness**: ⏳ NOT TESTED - Need to verify hooks actually block mod deactivation
+3. **alternative-approaches**: ⏳ NOT TESTED - Database-level hooks, post-deactivation restoration
 
 ---
 
@@ -82,6 +129,19 @@ Based on `/workspace/civ5-mods-mp-analysis/civ5_mod_disabling_analysis.md`:
 - **Solution:** Don't call original function at all - return success without SQL execution
 - **Status:** ✅ FIXED - Commit dbf144ff8
 - **Evidence:** 36,582 hook executions reduced to single execution
+
+### ❌ **7. Hook Execution Triggers Infinite Constructor Loop (CRITICAL)**
+- **Problem:** Hook execution itself causes infinite constructor/destructor loop
+- **Root Cause:** Blocking deactivation SQL causes game state inconsistency
+- **Discovery:** Game expects deactivation to succeed as part of larger process
+- **Status:** ❌ CRITICAL - Hook approach fundamentally flawed
+- **Evidence:** Infinite destructor loop starts immediately after successful hook execution
+
+### 🔬 **8. Comprehensive Debugging System (IMPLEMENTED)**
+- **Problem:** Need to understand exact crash sequence and timing
+- **Solution:** Advanced debugging with database state, memory tracking, constructor monitoring
+- **Status:** ✅ IMPLEMENTED - Commit 2b862aa6f
+- **Features:** ADVANCED_DEBUG_ANALYSIS.txt, infinite loop detection, timing analysis
 
 ---
 
@@ -134,9 +194,10 @@ DWORD targetAddress = baseAddress + offset;         // ASLR-safe
 
 ## 🎮 **TESTING RESULTS**
 
-### **Latest Test (Commit dbf144ff8):**
+### **Latest Test (Commit 2b862aa6f):**
 - **at-modmenu**: ✅ WORKING - Database override bug fixed, no crashes
-- **at-stagingroom**: ⏳ NEEDS RETEST - Infinite recursion bug fixed, should work now
+- **at-stagingroom**: ❌ CRITICAL DISCOVERY - Hook execution triggers infinite constructor loop
+- **hooks-completely-disabled**: ⏳ TESTING - Comprehensive debugging system deployed
 - **during-game-initialization**: ⏳ NOT TESTED - Need to test during NetInitGame::Execute()
 
 ### **Previous Test Results:**
@@ -171,24 +232,35 @@ DWORD targetAddress = baseAddress + offset;         // ASLR-safe
 - Hook installation overwrites original function with JMP to our hook
 - Solution: Don't call original function at all, return success directly
 
+### **Phase 6: Hook Execution Triggers Constructor Loop**
+- Infinite recursion fixed, but hook execution itself causes crash
+- Blocking deactivation SQL causes game state inconsistency
+- Game expects deactivation to succeed as part of larger process
+- Current approach: Hooks completely disabled to establish baseline
+
 ---
 
 ## 🎯 **NEXT IMMEDIATE ACTIONS**
 
-### **1. Test the Infinite Recursion Fix:**
-- Test at-stagingroom with latest build (commit dbf144ff8)
-- Should have single hook execution instead of 36,582 executions
-- Verify no more infinite recursion crash
+### **1. Test Baseline Behavior (CRITICAL):**
+- Test at-stagingroom with hooks COMPLETELY DISABLED (commit 2b862aa6f)
+- Analyze comprehensive debugging output from ADVANCED_DEBUG_ANALYSIS.txt
+- Determine if game works without any hook interference
 
-### **2. Analyze Any Remaining Crash:**
-- If game still crashes, it's NOT the deactivation SQL causing it
-- Check CRASH_ANALYSIS_DEBUG.txt for clues about real crash cause
-- Must be something else in multiplayer initialization process
+### **2. Analyze Debugging Output:**
+- Check database state before/during multiplayer setup
+- Monitor infinite constructor loop patterns (normal vs abnormal)
+- Identify exact timing when crashes occur
 
-### **3. Test Full Multiplayer Flow:**
-- Host LAN game → Network setup → Game initialization
-- Verify mods stay active throughout the process
-- Confirm hooks actually block mod deactivation effectively
+### **3. Design Alternative Approach:**
+- If baseline works: Hook approach is fundamentally flawed
+- Consider: Database-level hooks, post-deactivation restoration, configuration-based approach
+- Use reverse-engineered code to find better intervention points
+
+### **4. Research Available Binaries:**
+- **Primary:** `/workspace/Civ5XP.c` (Linux - most detailed information)
+- **Secondary:** `/workspace/CivilizationV_DX11.exe.c` (Windows DX11)
+- **Tertiary:** `/workspace/CivilizationV_Tablet.exe.c`, `/workspace/CivilizationV.exe.c` (DX9)
 
 ---
 
@@ -203,6 +275,9 @@ DWORD targetAddress = baseAddress + offset;         // ASLR-safe
 7. **CRITICAL: Never Call Hooked Function from Hook:** Creates infinite recursion
 8. **Hook Installation Overwrites Original:** `g_originalBulkDeactivate` points to hooked address
 9. **Return Success Without Calling Original:** Prevents SQL execution and infinite loops
+10. **CRITICAL: Hook Execution Triggers Constructor Loop:** Blocking deactivation causes game state inconsistency
+11. **Game Expects Deactivation to Succeed:** Part of larger process including DLL reload
+12. **Research Method:** Check Civ5XP.c first (most detailed), then map to Windows binaries
 
 ---
 
@@ -217,8 +292,11 @@ DWORD targetAddress = baseAddress + offset;         // ASLR-safe
 - `0d66fd480`: Fixed infinite recursion with re-entry guard (but still called original)
 - `5a958d1ac`: Attempted to allow deactivation then restore (still had recursion)
 - `a51615476`: Fixed compilation errors (CvModdingFrameworkAppSide)
-- `dbf144ff8`: **CURRENT** - CRITICAL FIX: Eliminated infinite recursion completely
+- `dbf144ff8`: CRITICAL FIX: Eliminated infinite recursion completely
+- `fb5d9a961`: Implemented delayed hook installation (1000ms delay)
+- `76b346cd0`: CRITICAL TEST: Completely disabled hooks to isolate problem
+- `2b862aa6f`: **CURRENT** - ADVANCED DEBUGGING: Comprehensive monitoring system
 
 **Current Branch:** `lua-xml-runtime-hooks`
-**Current Commit:** `dbf144ff8`
-**Status:** CRITICAL - Infinite recursion bug eliminated, ready for fresh testing
+**Current Commit:** `2b862aa6f`
+**Status:** CRITICAL DISCOVERY - Hook execution triggers infinite constructor loop, comprehensive debugging deployed
