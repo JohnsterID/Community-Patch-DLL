@@ -1664,43 +1664,53 @@ void CvDllGame::InstallBinaryHooksEarly()
 		}
 	}
 	
-	// PERMANENT SOLUTION: Implement smart hook management to prevent recursion
-	// Based on Civ5XP.c analysis, the recursion happens when:
+	// PERMANENT SOLUTION: Implement robust global hook management to prevent recursion
+	// Based on Civ5XP.c analysis and log analysis, the recursion happens when:
 	// 1. GameCore::GetGame() calls dword_A3E565C (DllGetGameContext)
 	// 2. DllGetGameContext creates CvDllGame instance
 	// 3. Constructor calls InstallBinaryHooksEarly
 	// 4. Hook installation somehow triggers GameCore::GetGame() again
 	
-	// Solution: Use a global flag to prevent hook installation during critical periods
-	static bool g_hookInstallationSafe = true;
-	static DWORD g_lastSafeInstallTime = 0;
+	// GLOBAL solution: Use truly global flags that persist across ALL constructor instances
+	static bool g_globalHookInstallationAllowed = true;
+	static DWORD g_firstConstructorTime = 0;
+	static int g_totalConstructorCalls = 0;
 	DWORD currentTime = GetTickCount();
 	
-	// During SP->MP transition (around 14-15 seconds after startup), disable hook installation
-	// This prevents the recursion while still allowing hooks in stable periods
-	if (callCount > 1 && (currentTime - g_lastSafeInstallTime) < 30000) { // 30 second cooldown
-		g_hookInstallationSafe = false;
+	// Track the very first constructor call across all instances
+	if (g_firstConstructorTime == 0) {
+		g_firstConstructorTime = currentTime;
+	}
+	
+	// Count total constructor calls across all instances
+	g_totalConstructorCalls++;
+	
+	// CRITICAL: After the first constructor, implement a "hook installation forbidden period"
+	// This prevents ANY hook installation during the problematic SP->MP transition period
+	DWORD timeSinceFirstConstructor = currentTime - g_firstConstructorTime;
+	if (g_totalConstructorCalls > 1 && timeSinceFirstConstructor < 60000) { // 60 second forbidden period
+		g_globalHookInstallationAllowed = false;
 		if (debugFile) {
-			fprintf(debugFile, "SMART HOOK MANAGEMENT: Hook installation BLOCKED due to recent activity (preventing recursion)\n");
-			fprintf(debugFile, "Time since last safe install: %lu ms (need 30000ms cooldown)\n", currentTime - g_lastSafeInstallTime);
-			fprintf(debugFile, "This prevents the GameCore::GetGame recursion during SP->MP transition\n");
+			fprintf(debugFile, "GLOBAL HOOK PROTECTION: Hook installation FORBIDDEN (constructor #%d)\n", g_totalConstructorCalls);
+			fprintf(debugFile, "Time since first constructor: %lu ms (forbidden period: 60000ms)\n", timeSinceFirstConstructor);
+			fprintf(debugFile, "This prevents GameCore::GetGame recursion from ANY constructor instance\n");
+			fprintf(debugFile, "Previous logs showed call #2 was blocked but call #3 from new instance caused recursion\n");
 			fflush(debugFile);
 			fclose(debugFile);
 		}
 		if (logFile) {
-			fprintf(logFile, "[MOD_HOOK] InstallBinaryHooksEarly: BLOCKED - preventing recursion during SP->MP transition\n");
+			fprintf(logFile, "[MOD_HOOK] GLOBAL PROTECTION: Hook installation FORBIDDEN (preventing recursion from constructor #%d)\n", g_totalConstructorCalls);
 			fflush(logFile);
 			fclose(logFile);
 		}
-		return; // Exit early to prevent recursion
+		return; // Exit early to prevent recursion from ANY instance
 	}
 	
-	// If this is the first call or enough time has passed, allow hook installation
-	if (callCount == 1) {
-		g_lastSafeInstallTime = currentTime;
-		g_hookInstallationSafe = true;
+	// Allow hook installation only for the very first constructor call
+	if (g_totalConstructorCalls == 1) {
+		g_globalHookInstallationAllowed = true;
 		if (debugFile) {
-			fprintf(debugFile, "SMART HOOK MANAGEMENT: First call - hook installation ALLOWED\n");
+			fprintf(debugFile, "GLOBAL HOOK PROTECTION: First constructor - hook installation ALLOWED\n");
 			fflush(debugFile);
 		}
 	}
