@@ -2054,7 +2054,6 @@ void CvDllGame::InstallBinaryHooksEarly()
 					}
 				}
 			}
-			}
 			
 			// 3. SQLite function hooks - catch ANY database operations
 			if (debugFile) {
