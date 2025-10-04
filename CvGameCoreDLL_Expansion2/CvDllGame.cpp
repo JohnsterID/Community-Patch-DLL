@@ -37,7 +37,7 @@ CvDllGame::CvDllGame(CvGame* pGame)
 		fprintf(markerFile, "Captured value: %s\n", m_bBinHooksEnabledAtConstruction ? "true" : "false");
 		fprintf(markerFile, "Member variable address: %p\n", &m_bBinHooksEnabledAtConstruction);
 		fprintf(markerFile, "gCustomMods.isBIN_HOOKS() = %s\n", gCustomMods.isBIN_HOOKS() ? "true" : "false");
-		fprintf(markerFile, "Time: %d\n", GetTickCount());
+		fprintf(markerFile, "Time: %lu\n", GetTickCount());
 		fprintf(markerFile, "\n");
 		fflush(markerFile);
 		fclose(markerFile);
@@ -55,7 +55,7 @@ CvDllGame::~CvDllGame()
 		fprintf(markerFile, "=== CvDllGame destructor called ===\n");
 		fprintf(markerFile, "Instance address: %p\n", this);
 		fprintf(markerFile, "Captured value was: %s\n", m_bBinHooksEnabledAtConstruction ? "true" : "false");
-		fprintf(markerFile, "Time: %d\n", GetTickCount());
+		fprintf(markerFile, "Time: %lu\n", GetTickCount());
 		fprintf(markerFile, "\n");
 		fflush(markerFile);
 		fclose(markerFile);
@@ -733,7 +733,6 @@ int __cdecl HookedDeactivateMods()
 	// In single player, we also just return success for now
 	// The original mod deactivation logic may not be necessary for single player
 	// since mods are typically managed through the UI
-	inHook = false;
 	return 1; // Return success
 }
 
@@ -743,8 +742,17 @@ bool __thiscall HookedBulkDeactivate(void* this_ptr)
 {
 	// Prevent infinite recursion - critical fix!
 	static bool inHook = false;
+	static int callCount = 0;
+	callCount++;
+	
 	if (inHook) {
 		// We're already in the hook, don't recurse
+		FILE* recursionLog = NULL;
+		if (fopen_s(&recursionLog, "RECURSION_PREVENTED.txt", "a") == 0 && recursionLog != NULL) {
+			fprintf(recursionLog, "RECURSION PREVENTED! Call #%d blocked\n", callCount);
+			fflush(recursionLog);
+			fclose(recursionLog);
+		}
 		return true;
 	}
 	inHook = true;
@@ -754,7 +762,7 @@ bool __thiscall HookedBulkDeactivate(void* this_ptr)
 	FILE* debugFile = NULL;
 	
 	if (fopen_s(&logFile, "Logs/MOD_HOOK_DEBUG.log", "a") == 0 && logFile != NULL) {
-		fprintf(logFile, "[MOD_HOOK] HookedBulkDeactivate called - BULK mod deactivation intercepted!\n");
+		fprintf(logFile, "[MOD_HOOK] HookedBulkDeactivate called - Call #%d - BULK mod deactivation intercepted!\n", callCount);
 		fflush(logFile);
 	}
 	
@@ -1256,7 +1264,7 @@ void CvDllGame::InstallBinaryHooksEarly()
 		fprintf(debugFile, "Member variable address: %p\n", &m_bBinHooksEnabledAtConstruction);
 		fprintf(debugFile, "Member variable value: %s\n", m_bBinHooksEnabledAtConstruction ? "true" : "false");
 		fprintf(debugFile, "hooksInstalled = %s\n", hooksInstalled ? "true" : "false");
-		fprintf(debugFile, "Time: %d\n", GetTickCount());
+		fprintf(debugFile, "Time: %lu\n", GetTickCount());
 		fflush(debugFile);
 	}
 	

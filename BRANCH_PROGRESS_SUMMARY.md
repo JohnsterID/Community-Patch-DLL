@@ -189,8 +189,10 @@ DWORD targetAddress = baseAddress + offset;         // ASLR-safe
 - `1332e3f0c`: Fixed ASLR with runtime address calculation  
 - `cc7bfc9c6`: Fixed compilation errors
 - `552d08b2d`: Had database override bug (hooks installed when disabled)
-- `97f2dc8a2`: **CURRENT** - Fixed database override bug
+- `97f2dc8a2`: Fixed database override bug
+- `a396465c9`: Attempted to allow deactivation (caused infinite recursion)
+- `6ac86f8e3`: **CURRENT** - CRITICAL FIX: Prevented infinite recursion with re-entry guard
 
 **Current Branch:** `lua-xml-runtime-hooks`
-**Current Commit:** `97f2dc8a2`
-**Status:** Database override bug fixed, ready for proper testing
+**Current Commit:** `6ac86f8e3`
+**Status:** CRITICAL - Infinite recursion bug fixed, ready for fresh testing
