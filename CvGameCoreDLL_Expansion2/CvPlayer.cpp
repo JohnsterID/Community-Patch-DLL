@@ -9781,6 +9781,17 @@ const char* CvPlayer::getCivilizationShortDescription() const
 	if(isMinorCiv())
 	{
 		MinorCivTypes eMinorCivType = GetMinorCivAI()->GetMinorCivType();
+		if(eMinorCivType == NO_MINORCIV)
+		{
+			// Debug logging to identify which player is causing the crash
+			CvString crashMsg = CvString::format("DEBUG: CRASH - Player %d (minor civ) has NO_MINORCIV type during getCivilizationShortDescription()\n", GetID());
+			OutputDebugString(crashMsg.c_str());
+			
+			// Check what CvPreGame thinks this player's minor civ type is
+			MinorCivTypes ePreGameType = CvPreGame::minorCivType(GetID());
+			CvString preGameMsg = CvString::format("DEBUG: CvPreGame::minorCivType(%d) = %d\n", GetID(), (int)ePreGameType);
+			OutputDebugString(preGameMsg.c_str());
+		}
 		ASSERT(eMinorCivType != NO_MINORCIV, "Minor civ type not initialized! This usually means SetupPlayers() was not called before city initialization.");
 		if(eMinorCivType == NO_MINORCIV)
 		{
