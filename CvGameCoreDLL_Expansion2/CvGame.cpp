@@ -391,6 +391,13 @@ void CvGame::init(HandicapTypes eHandicap)
 //	--------------------------------------------------------------------------------
 bool CvGame::init2()
 {
+	// For World Builder maps, set up players before initializing them
+	// This ensures minor civ types are set before InitPlayers() tries to access them
+	if(CvPreGame::isWBMapScript() && !CvPreGame::mapNoPlayers())
+	{
+		CvWorldBuilderMapLoader::SetupPlayers();
+	}
+	
 	InitPlayers();
 
 	updateGlobalMedians();
@@ -501,8 +508,6 @@ bool CvGame::InitMap(CvGameInitialItemsOverrides& kGameInitialItemsOverrides)
 
 			CvBarbarians::MapInit(kMap.numPlots());
 
-			// Set up players (including minor civ types) before initializing the map
-			CvWorldBuilderMapLoader::SetupPlayers();
 			CvWorldBuilderMapLoader::InitMap();
 			CvWorldBuilderMapLoader::ValidateTerrain();
 
