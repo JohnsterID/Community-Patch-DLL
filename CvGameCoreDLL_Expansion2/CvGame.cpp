@@ -501,6 +501,8 @@ bool CvGame::InitMap(CvGameInitialItemsOverrides& kGameInitialItemsOverrides)
 
 			CvBarbarians::MapInit(kMap.numPlots());
 
+			// Set up players (including minor civ types) before initializing the map
+			CvWorldBuilderMapLoader::SetupPlayers();
 			CvWorldBuilderMapLoader::InitMap();
 			CvWorldBuilderMapLoader::ValidateTerrain();
 

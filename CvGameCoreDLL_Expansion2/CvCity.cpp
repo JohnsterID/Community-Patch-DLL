@@ -578,6 +578,13 @@ void CvCity::init(int iID, PlayerTypes eOwner, int iX, int iY, bool bBumpUnits, 
 	reset(iID, eOwner, pPlot->getX(), pPlot->getY());
 
 	CvPlayerAI& owningPlayer = GET_PLAYER(getOwner());
+	
+	// Assert that minor civ players have their type properly initialized
+	if(owningPlayer.isMinorCiv())
+	{
+		ASSERT(owningPlayer.GetMinorCivAI()->GetMinorCivType() != NO_MINORCIV, 
+			"Minor civ type not initialized during city creation! SetupPlayers() must be called before InitMap().");
+	}
 
 	//--------------------------------
 	// Init non-saved data

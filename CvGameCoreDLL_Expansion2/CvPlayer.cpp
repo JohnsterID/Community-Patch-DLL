@@ -9780,7 +9780,13 @@ const char* CvPlayer::getCivilizationShortDescription() const
 {
 	if(isMinorCiv())
 	{
-		return GC.getMinorCivInfo(GetMinorCivAI()->GetMinorCivType())->getShortDescription();
+		MinorCivTypes eMinorCivType = GetMinorCivAI()->GetMinorCivType();
+		ASSERT(eMinorCivType != NO_MINORCIV, "Minor civ type not initialized! This usually means SetupPlayers() was not called before city initialization.");
+		if(eMinorCivType == NO_MINORCIV)
+		{
+			return "UNINITIALIZED_MINOR_CIV";
+		}
+		return GC.getMinorCivInfo(eMinorCivType)->getShortDescription();
 	}
 	else if(CvPreGame::civilizationShortDescription(GetID()).GetLength() == 0)
 	{
@@ -9796,7 +9802,13 @@ const char* CvPlayer::getCivilizationShortDescriptionKey() const
 {
 	if(isMinorCiv())
 	{
-		return GC.getMinorCivInfo(GetMinorCivAI()->GetMinorCivType())->getShortDescriptionKey();
+		MinorCivTypes eMinorCivType = GetMinorCivAI()->GetMinorCivType();
+		ASSERT(eMinorCivType != NO_MINORCIV, "Minor civ type not initialized! This usually means SetupPlayers() was not called before city initialization.");
+		if(eMinorCivType == NO_MINORCIV)
+		{
+			return "TXT_KEY_UNINITIALIZED_MINOR_CIV";
+		}
+		return GC.getMinorCivInfo(eMinorCivType)->getShortDescriptionKey();
 	}
 	else if(CvPreGame::civilizationShortDescriptionKey(GetID()).GetLength() == 0)
 	{
