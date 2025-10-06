@@ -388,6 +388,11 @@ void CvWorldBuilderMapLoader::SetupPlayers()
 		else
 		{
 			CvPreGame::setMinorCiv(ePlayer, false);
+			
+			// Debug logging for major civs
+			CvString msg = CvString::format("DEBUG: SetupPlayers() set player %d as MAJOR civ (civ type: %s)\n", 
+				(int)ePlayer, kPlayer.m_szCivType);
+			OutputDebugString(msg.c_str());
 		}
 
 		if(strlen(kPlayer.m_szLeaderName) > 0)
