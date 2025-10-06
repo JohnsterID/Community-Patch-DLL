@@ -721,9 +721,17 @@ void CvGame::InitPlayers()
 			MinorCivTypes minorCivType = CvPreGame::minorCivType(eLoopPlayer);
 			CvMinorCivInfo* pkCityState = GC.getMinorCivInfo(minorCivType);
 
+			// Debug logging
+			CvString debugMsg = CvString::format("DEBUG: InitPlayers() checking player %d: minorCivType=%d, pkCityState=%s\n", 
+				(int)eLoopPlayer, (int)minorCivType, pkCityState ? "VALID" : "NULL");
+			OutputDebugString(debugMsg.c_str());
+
 			// No valid City-State specified in pregame. Default to the first valid index and close the slot.
 			if (minorCivType == NO_MINORCIV || !pkCityState)
 			{
+				CvString closeMsg = CvString::format("DEBUG: InitPlayers() CLOSING slot %d (minorCivType=%d, pkCityState=%s)\n", 
+					(int)eLoopPlayer, (int)minorCivType, pkCityState ? "VALID" : "NULL");
+				OutputDebugString(closeMsg.c_str());
 				CvPreGame::setSlotStatus(eLoopPlayer, SS_CLOSED);
 				bool bFoundOne = false;
 				for (int i = 0; i < GC.getNumMinorCivInfos(); i++)
