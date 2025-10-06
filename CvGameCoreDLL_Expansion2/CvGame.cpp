@@ -621,7 +621,13 @@ void CvGame::InitPlayers()
 	int iNumMinors = CvPreGame::numMinorCivs();
 	
 	// For World Builder maps, count actual minor civs with valid types instead of using pregame setting
-	if(CvPreGame::isWBMapScript() && !CvPreGame::mapNoPlayers())
+	bool bIsWBMap = CvPreGame::isWBMapScript();
+	bool bMapNoPlayers = CvPreGame::mapNoPlayers();
+	CvString wbCheckMsg = CvString::format("DEBUG: WB Check - isWBMapScript=%s, mapNoPlayers=%s\n", 
+		bIsWBMap ? "TRUE" : "FALSE", bMapNoPlayers ? "TRUE" : "FALSE");
+	OutputDebugString(wbCheckMsg.c_str());
+	
+	if(bIsWBMap && !bMapNoPlayers)
 	{
 		int iActualMinors = 0;
 		for(int i = MAX_MAJOR_CIVS; i < MAX_CIV_PLAYERS; i++)
