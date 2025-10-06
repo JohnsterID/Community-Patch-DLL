@@ -300,6 +300,12 @@ void CvWorldBuilderMapLoader::SetupGameOptions()
 void CvWorldBuilderMapLoader::SetupPlayers()
 {
 	const uint uiPlayerCount = std::min(sg_kSave.GetPlayerCount(), (byte)MAX_CIV_PLAYERS);
+	
+	// Debug logging to see why Player 9 isn't being processed
+	CvString playerCountMsg = CvString::format("DEBUG: SetupPlayers() uiPlayerCount=%d, MAX_CIV_PLAYERS=%d\n", 
+		uiPlayerCount, MAX_CIV_PLAYERS);
+	OutputDebugString(playerCountMsg.c_str());
+	
 	for(uint i = 0; i < uiPlayerCount; ++i)
 	{
 		const PlayerTypes ePlayer = (PlayerTypes)i;
@@ -471,6 +477,30 @@ void CvWorldBuilderMapLoader::SetupPlayers()
 		CvPreGame::setSlotStatus(ePlayer, SS_COMPUTER);
 		CvPreGame::setTeamType(ePlayer, eTeam);
 		CvPreGame::setMinorCiv(ePlayer, true);
+	}
+	
+	// CRITICAL FIX: Handle minor civs that are identified by the game but not in the save file
+	// This fixes the Player 9 crash where the game identifies it as a minor civ but it has NO_MINORCIV type
+	for(int i = 0; i < MAX_CIV_PLAYERS; ++i)
+	{
+		const PlayerTypes ePlayer = (PlayerTypes)i;
+		
+		// Skip if this player was already processed in the loops above
+		if(i < (int)uiPlayerCount || (i >= MAX_MAJOR_CIVS && i < MAX_MAJOR_CIVS + (int)std::min(sg_kSave.GetCityStateCount(), (byte)MAX_MINOR_CIVS)))
+			continue;
+			
+		// Check if the game thinks this should be a minor civ but it doesn't have a type set
+		if(CvPreGame::isMinorCiv(ePlayer) && CvPreGame::minorCivType(ePlayer) == NO_MINORCIV)
+		{
+			// This is a minor civ that needs a type assigned
+			// For now, assign a default minor civ type (we can improve this logic later)
+			MinorCivTypes eDefaultType = (MinorCivTypes)0; // First available minor civ type
+			CvPreGame::setMinorCivType(ePlayer, eDefaultType);
+			
+			CvString fixMsg = CvString::format("DEBUG: FIXED uninitialized minor civ - player %d assigned default minor civ type %d\n", 
+				(int)ePlayer, (int)eDefaultType);
+			OutputDebugString(fixMsg.c_str());
+		}
 	}
 }
 
