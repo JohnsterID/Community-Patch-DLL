@@ -479,28 +479,19 @@ void CvWorldBuilderMapLoader::SetupPlayers()
 		CvPreGame::setMinorCiv(ePlayer, true);
 	}
 	
-	// CRITICAL FIX: Handle minor civs that are identified by the game but not in the save file
-	// This fixes the Player 9 crash where the game identifies it as a minor civ but it has NO_MINORCIV type
-	for(int i = 0; i < MAX_CIV_PLAYERS; ++i)
+	// CRITICAL FIX: Ensure all major civ slots are properly initialized
+	// This fixes the Player 9 crash where it's incorrectly identified as a minor civ
+	// because it wasn't processed by the regular players loop
+	for(int i = uiPlayerCount; i < MAX_MAJOR_CIVS; ++i)
 	{
 		const PlayerTypes ePlayer = (PlayerTypes)i;
 		
-		// Skip if this player was already processed in the loops above
-		if(i < (int)uiPlayerCount || (i >= MAX_MAJOR_CIVS && i < MAX_MAJOR_CIVS + (int)std::min(sg_kSave.GetCityStateCount(), (byte)MAX_MINOR_CIVS)))
-			continue;
-			
-		// Check if the game thinks this should be a minor civ but it doesn't have a type set
-		if(CvPreGame::isMinorCiv(ePlayer) && CvPreGame::minorCivType(ePlayer) == NO_MINORCIV)
-		{
-			// This is a minor civ that needs a type assigned
-			// For now, assign a default minor civ type (we can improve this logic later)
-			MinorCivTypes eDefaultType = (MinorCivTypes)0; // First available minor civ type
-			CvPreGame::setMinorCivType(ePlayer, eDefaultType);
-			
-			CvString fixMsg = CvString::format("DEBUG: FIXED uninitialized minor civ - player %d assigned default minor civ type %d\n", 
-				(int)ePlayer, (int)eDefaultType);
-			OutputDebugString(fixMsg.c_str());
-		}
+		// Ensure this player is properly set as a major civ (not minor civ)
+		CvPreGame::setMinorCiv(ePlayer, false);
+		
+		CvString fixMsg = CvString::format("DEBUG: FIXED unprocessed major civ slot - player %d set as major civ (not minor)\n", 
+			(int)ePlayer);
+		OutputDebugString(fixMsg.c_str());
 	}
 }
 
