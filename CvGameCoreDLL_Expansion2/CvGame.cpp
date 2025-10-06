@@ -738,6 +738,15 @@ void CvGame::InitPlayers()
 			// Make sure the AI has the proper handicap.
 			if (CvPreGame::slotStatus(eLoopPlayer) == SS_COMPUTER)
 				CvPreGame::setHandicap(eLoopPlayer, eAIHandicap);
+			
+			// CRITICAL FIX: Explicitly set major civs as non-minor civs
+			// This prevents residual minor civ flags from causing crashes
+			CvPreGame::setMinorCiv(eLoopPlayer, false);
+			
+			// Debug logging for major civ initialization
+			CvString majorCivMsg = CvString::format("DEBUG: InitPlayers() set player %d as MAJOR civ (cleared minor civ flag)\n", 
+				(int)eLoopPlayer);
+			OutputDebugString(majorCivMsg.c_str());
 		}
 		// Minor civs
 		else if (iI < MAX_CIV_PLAYERS)
