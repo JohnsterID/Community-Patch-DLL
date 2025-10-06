@@ -352,7 +352,37 @@ void CvWorldBuilderMapLoader::SetupPlayers()
 		}
 
 		CvPreGame::setTeamType(ePlayer, (TeamTypes)kPlayer.m_byTeam);
-		CvPreGame::setMinorCiv(ePlayer, false);
+		
+		// Check if this player should be a minor civ based on civilization type
+		bool bIsMinorCiv = false;
+		MinorCivTypes eMinorCivType = NO_MINORCIV;
+		
+		// Check if the civilization type matches a minor civ
+		for(int iMinorCiv = 0; iMinorCiv < GC.getNumMinorCivInfos(); ++iMinorCiv)
+		{
+			CvMinorCivInfo* pkMinorCiv = GC.getMinorCivInfo((MinorCivTypes)iMinorCiv);
+			if(pkMinorCiv != NULL && strcmp(kPlayer.m_szCivType, pkMinorCiv->GetType()) == 0)
+			{
+				bIsMinorCiv = true;
+				eMinorCivType = (MinorCivTypes)iMinorCiv;
+				break;
+			}
+		}
+		
+		if(bIsMinorCiv)
+		{
+			CvPreGame::setMinorCiv(ePlayer, true);
+			CvPreGame::setMinorCivType(ePlayer, eMinorCivType);
+			
+			// Debug logging
+			CvString msg = CvString::format("DEBUG: SetupPlayers() found minor civ in regular slots - player %d set to minor civ type %d (%s)\n", 
+				(int)ePlayer, (int)eMinorCivType, eMinorCivType != NO_MINORCIV ? "VALID" : "NO_MINORCIV");
+			OutputDebugString(msg.c_str());
+		}
+		else
+		{
+			CvPreGame::setMinorCiv(ePlayer, false);
+		}
 
 		if(strlen(kPlayer.m_szLeaderName) > 0)
 			CvPreGame::setLeaderName(ePlayer, kPlayer.m_szLeaderName);
