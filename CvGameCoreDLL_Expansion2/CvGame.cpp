@@ -619,6 +619,30 @@ void CvGame::InitPlayers()
 	CvCivilizationInfo* pBarbarianCivilizationInfo = GC.getCivilizationInfo(eBarbCiv);
 	PlayerColorTypes barbarianPlayerColor = (PlayerColorTypes)pBarbarianCivilizationInfo->getDefaultPlayerColor();
 	int iNumMinors = CvPreGame::numMinorCivs();
+	
+	// For World Builder maps, count actual minor civs with valid types instead of using pregame setting
+	if(CvPreGame::isWBMapScript() && !CvPreGame::mapNoPlayers())
+	{
+		int iActualMinors = 0;
+		for(int i = MAX_MAJOR_CIVS; i < MAX_CIV_PLAYERS; i++)
+		{
+			PlayerTypes ePlayer = (PlayerTypes)i;
+			MinorCivTypes eMinorCivType = CvPreGame::minorCivType(ePlayer);
+			if(eMinorCivType != NO_MINORCIV)
+			{
+				iActualMinors++;
+			}
+		}
+		iNumMinors = iActualMinors;
+		
+		CvString wbMsg = CvString::format("DEBUG: World Builder map detected - using actual minor civ count: %d\n", iNumMinors);
+		OutputDebugString(wbMsg.c_str());
+	}
+	
+	// Debug logging
+	CvString debugMsg = CvString::format("DEBUG: InitPlayers() iNumMinors=%d, MAX_MAJOR_CIVS=%d, cutoff=%d\n", 
+		iNumMinors, MAX_MAJOR_CIVS, MAX_MAJOR_CIVS + iNumMinors);
+	OutputDebugString(debugMsg.c_str());
 	CivilizationTypes eMinorCiv = (CivilizationTypes)GD_INT_GET(MINOR_CIVILIZATION);
 	LeaderHeadTypes eBarbLeader = (LeaderHeadTypes)GD_INT_GET(BARBARIAN_LEADER);
 	HandicapTypes eAIHandicap = (HandicapTypes)GD_INT_GET(AI_HANDICAP);
@@ -759,9 +783,16 @@ void CvGame::InitPlayers()
 			// If this slot is within the range specified by the players at game start, the City-State is alive.
 			// We will fill in the slot data anyway, however, as the "closed" City-States might be created as a free City-State later on.
 			if (iI < MAX_MAJOR_CIVS + iNumMinors)
+			{
 				CvPreGame::setSlotStatus(eLoopPlayer, SS_COMPUTER);
+			}
 			else
+			{
+				CvString closeMsg = CvString::format("DEBUG: InitPlayers() CLOSING slot %d due to iNumMinors limit (iI=%d >= %d+%d=%d)\n", 
+					(int)eLoopPlayer, iI, MAX_MAJOR_CIVS, iNumMinors, MAX_MAJOR_CIVS + iNumMinors);
+				OutputDebugString(closeMsg.c_str());
 				CvPreGame::setSlotStatus(eLoopPlayer, SS_CLOSED);
+			}
 
 			CvPreGame::setPlayerColor(eLoopPlayer, (PlayerColorTypes)pkCityState->getDefaultPlayerColor());
 		}
