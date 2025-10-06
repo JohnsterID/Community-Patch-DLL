@@ -395,7 +395,20 @@ bool CvGame::init2()
 	// This ensures minor civ types are set before InitPlayers() tries to access them
 	if(CvPreGame::isWBMapScript() && !CvPreGame::mapNoPlayers())
 	{
+		OutputDebugString("DEBUG: Calling SetupPlayers() before InitPlayers()\n");
 		CvWorldBuilderMapLoader::SetupPlayers();
+		
+		// Debug: Check if minor civ types were set correctly
+		for(int i = MAX_MAJOR_CIVS; i < MAX_CIV_PLAYERS; i++)
+		{
+			PlayerTypes ePlayer = (PlayerTypes)i;
+			MinorCivTypes eMinorCivType = CvPreGame::minorCivType(ePlayer);
+			if(eMinorCivType != NO_MINORCIV)
+			{
+				CvString msg = CvString::format("DEBUG: Player %d has minor civ type %d\n", i, (int)eMinorCivType);
+				OutputDebugString(msg.c_str());
+			}
+		}
 	}
 	
 	InitPlayers();

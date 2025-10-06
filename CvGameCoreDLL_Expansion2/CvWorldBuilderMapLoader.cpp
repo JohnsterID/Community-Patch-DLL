@@ -404,6 +404,11 @@ void CvWorldBuilderMapLoader::SetupPlayers()
 		}
 
 		CvPreGame::setMinorCivType(ePlayer, eCivType);
+		
+		// Debug logging
+		CvString msg = CvString::format("DEBUG: SetupPlayers() set player %d to minor civ type %d (%s)\n", 
+			(int)ePlayer, (int)eCivType, eCivType != NO_MINORCIV ? "VALID" : "NO_MINORCIV");
+		OutputDebugString(msg.c_str());
 
 		PlayerColorTypes eColorType = NO_PLAYERCOLOR;
 		for(int iColor = 0; iColor < GC.GetNumPlayerColorInfos(); ++iColor)
