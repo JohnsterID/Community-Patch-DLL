@@ -330,7 +330,7 @@ FAutoVariable<std::vector<ElementType>, ClassContainer>::operator[](size_t index
 template<typename ElementType, typename ClassContainer>
 void FAutoVariable<std::vector<ElementType>, ClassContainer>::setStackTraceRemark()
 {
-#ifndef FINAL_RELEASE
+#if !defined(FINAL_RELEASE) || defined(VPDEBUG)
 	m_callStackRemark = m_owner.stackTraceRemark(*this);
 #endif
 }

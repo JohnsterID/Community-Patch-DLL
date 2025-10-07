@@ -101,7 +101,7 @@ public:
 	virtual std::string toString() const = 0;
 
 protected:
-#ifndef FINAL_RELEASE
+#if !defined(FINAL_RELEASE) || defined(VPDEBUG)
 	friend class FAutoArchive;
 	FCallStack   m_lastCallStackToChangeThisVariable;
 	std::string  m_callStackRemark;

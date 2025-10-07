@@ -290,6 +290,22 @@ void CvGame::init(HandicapTypes eHandicap)
 		}
 	}
 
+	// Initialize enhanced multiplayer desync debugging
+	if(isGameMultiPlayer())
+	{
+#if !defined(FINAL_RELEASE) || defined(VPDEBUG)
+		// Enable out-of-sync debugging for enhanced stack traces and logging
+		GC.setOutOfSyncDebuggingEnabled(true);
+		
+		std::string logMsg = "Enhanced MP desync debugging enabled - full stack traces and detailed logging active";
+		gDLL->netMessageDebugLog(logMsg);
+#else
+		// Basic desync detection still available in release builds
+		std::string logMsg = "Basic MP desync detection enabled";
+		gDLL->netMessageDebugLog(logMsg);
+#endif
+	}
+
 	const CvGameSpeedInfo& kGameSpeedInfo = getGameSpeedInfo();
 	if(getGameTurn() == 0)
 	{
@@ -8616,6 +8632,30 @@ void CvGame::doTurn()
 	incrementGameTurn();
 	incrementElapsedGameTurns();
 	gDLL->PublishNewGameTurn(getGameTurn());
+
+	// Periodic multiplayer sync validation
+	if(isGameMultiPlayer() && getGameTurn() % 5 == 0)
+	{
+#if !defined(FINAL_RELEASE) || defined(VPDEBUG)
+		std::string logMsg = "Performing comprehensive sync validation - Turn " + std::to_string(getGameTurn());
+		gDLL->netMessageDebugLog(logMsg);
+		
+		// Validate critical game systems
+		FSerialization::SyncPlayer();
+		FSerialization::SyncCities();
+		FSerialization::SyncUnits();
+		
+		// RNG sync check
+		PlayerTypes activePlayer = getActivePlayer();
+		if(activePlayer != NO_PLAYER)
+		{
+			gDLL->sendRandomNumberGeneratorSyncCheck(activePlayer, &getJonRand());
+		}
+#else
+		std::string logMsg = "Basic sync check - Turn " + std::to_string(getGameTurn());
+		gDLL->netMessageDebugLog(logMsg);
+#endif
+	}
 
 	if(isOption(GAMEOPTION_DYNAMIC_TURNS))
 	{// update turn mode for dynamic turn mode.

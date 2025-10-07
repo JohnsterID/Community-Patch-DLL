@@ -277,9 +277,29 @@ public:
 		const bool result = other == currentValue();
 
 		if (!result) {
-			std::string desyncValues = std::string("Desync values, current ") + FSerialization::toString(currentValue()) + "; other " + FSerialization::toString(other) + std::string("\n");
-			gGlobals.getDLLIFace()->netMessageDebugLog(desyncValues);
-
+			// Enhanced desync logging with maximum available context
+			std::ostringstream logMsg;
+			logMsg << "[DESYNC_DETECTED] Variable=" << this->name()
+				   << " | Turn=" << GC.getGame().getGameTurn()
+				   << " | Player=" << GC.getGame().getActivePlayer()
+				   << " | Host=" << (gDLL->IsHost() ? "YES" : "NO")
+				   << " | Local=" << FSerialization::toString(currentValue())
+				   << " | Remote=" << FSerialization::toString(other);
+			
+			// Add container-specific context
+			std::string containerContext = getContainer().debugDump(*this);
+			if (!containerContext.empty()) {
+				logMsg << " | Context=" << containerContext;
+			}
+			
+#if !defined(FINAL_RELEASE) || defined(VPDEBUG)
+			// Add stack trace information if available
+			if (!m_callStackRemark.empty()) {
+				logMsg << " | StackTrace=" << m_callStackRemark;
+			}
+#endif
+			
+			gGlobals.getDLLIFace()->netMessageDebugLog(logMsg.str());
 			gGlobals.getGame().setDesynced(true);
 		}
 
@@ -300,7 +320,7 @@ public:
 	{
 		std::string result = FAutoVariableBase::debugDump(callStacks);
 		result += std::string("\n") + getContainer().debugDump(*this) + std::string("\n");
-#if !defined(FINAL_RELEASE)
+#if !defined(FINAL_RELEASE) || defined(VPDEBUG)
 		result += std::string("local value=") + FSerialization::toString(m_value) + "\n";
 		result += std::string("remote value=") + FSerialization::toString(m_remoteValue) + "\n";
 #endif

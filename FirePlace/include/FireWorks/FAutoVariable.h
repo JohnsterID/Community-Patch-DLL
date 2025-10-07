@@ -358,7 +358,7 @@ std::string FAutoVariable<ObjectType, ContainerType>::debugDump(const std::vecto
 {
 	std::string result = FAutoVariableBase::debugDump(callStacks);
 	result += std::string("\n") + m_owner.debugDump(*this) + std::string("\n");
-#if !defined(FINAL_RELEASE)
+#if !defined(FINAL_RELEASE) || defined(VPDEBUG)
 	result += std::string("local value=") + FSerialization::toString(m_value) + "\n";
 	result += std::string("remote value=") + FSerialization::toString(m_remoteValue) + "\n";
 #endif
@@ -370,7 +370,7 @@ std::string FAutoVariable<ObjectType, ContainerType>::debugDump(const std::vecto
 template<typename ObjectType, typename ContainerType>
 void FAutoVariable<ObjectType, ContainerType>::setStackTraceRemark()
 {
-#ifndef FINAL_RELEASE
+#if !defined(FINAL_RELEASE) || defined(VPDEBUG)
 	m_callStackRemark = m_owner.stackTraceRemark(*this);
 #endif
 }
