@@ -142,6 +142,9 @@
 #include <limits>
 #include <unordered_set>
 
+// Memory debugging support (VPDEBUG builds only)
+#include "CvMemoryDebug.h"
+
 #define DllExport   __declspec( dllexport )
 
 typedef unsigned char    byte;
