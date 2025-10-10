@@ -88,9 +88,9 @@ public:
 #define DEBUG_FREE(ptr) HeapTracker::Free((ptr), __FILE__, __LINE__)
 #define DEBUG_VALIDATE_HEAP() HeapTracker::ValidateHeap()
 
-// Compatibility with crtdbg.h expectations
-#define _CrtDumpMemoryLeaks() HeapTracker::DumpLeaks()
-#define _CrtCheckMemory() HeapTracker::ValidateHeap()
+// Our own memory debug function names (don't conflict with crtdbg.h)
+#define DEBUG_DUMP_LEAKS() HeapTracker::DumpLeaks()
+#define DEBUG_CHECK_HEAP() HeapTracker::ValidateHeap()
 
 // Optional: Global malloc/free override (use with caution)
 #ifdef CVMEMORY_DEBUG_OVERRIDE_GLOBAL
@@ -118,8 +118,8 @@ extern HeapTrackerCleanup g_heapTrackerCleanup;
 #define DEBUG_MALLOC_ALIGNED(sz, align) malloc(sz)
 #define DEBUG_FREE(ptr) free(ptr)
 #define DEBUG_VALIDATE_HEAP() (true)
-#define _CrtDumpMemoryLeaks() (0)
-#define _CrtCheckMemory() (true)
+#define DEBUG_DUMP_LEAKS() (0)
+#define DEBUG_CHECK_HEAP() (true)
 
 #endif // VPDEBUG
 
