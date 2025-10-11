@@ -1864,6 +1864,8 @@ void CvUnit::reset(int iID, UnitTypes eUnit, PlayerTypes eOwner, bool bConstruct
 void CvUnit::setupGraphical()
 {
 	VALIDATE_OBJECT();
+	ASSERT(m_pUnitInfo != NULL, "CvUnit::setupGraphical() - m_pUnitInfo is NULL. Unit type: %d, Owner: %d", m_eUnitType, m_eOwner);
+	
 	if(!GC.IsGraphicsInitialized())
 	{
 		return;
@@ -25626,6 +25628,7 @@ const UnitTypes CvUnit::getUnitType() const
 CvUnitEntry& CvUnit::getUnitInfo() const
 {
 	VALIDATE_OBJECT();
+	ASSERT(m_pUnitInfo != NULL, "CvUnit::getUnitInfo() - m_pUnitInfo is NULL. Unit type: %d, Owner: %d", m_eUnitType, m_eOwner);
 	return *m_pUnitInfo;
 }
 
