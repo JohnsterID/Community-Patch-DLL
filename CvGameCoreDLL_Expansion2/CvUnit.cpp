@@ -1884,7 +1884,26 @@ void CvUnit::setupGraphical()
 
 		pDLL->GameplayUnitShouldDimFlag(pDllUnit.get(), /*bDim*/ getMoves() <= 0);
 
-		pDLL->GameplayUnitFortify(pDllUnit.get(), IsFortified());
+		// Validate unit data before calling graphics system to prevent crash in TerrainIce::KDTree::BuildRecurse
+		// Corrupted units with invalid coordinates can cause NULL pointer dereference in terrain rendering
+		if (m_pUnitInfo != NULL && getX() >= 0 && getY() >= 0 && 
+		    getX() < GC.getMap().getGridWidth() && getY() < GC.getMap().getGridHeight())
+		{
+			pDLL->GameplayUnitFortify(pDllUnit.get(), IsFortified());
+		}
+		else
+		{
+			// Log corruption details for debugging
+			ASSERT(m_pUnitInfo != NULL, "CvUnit::setupGraphical: m_pUnitInfo is NULL - unit type corruption detected");
+			ASSERT(getX() >= 0, "CvUnit::setupGraphical: invalid X coordinate");
+			ASSERT(getY() >= 0, "CvUnit::setupGraphical: invalid Y coordinate");
+			if (GC.getMap().numPlots() > 0)
+			{
+				ASSERT(getX() < GC.getMap().getGridWidth(), "CvUnit::setupGraphical: X coordinate exceeds map width");
+				ASSERT(getY() < GC.getMap().getGridHeight(), "CvUnit::setupGraphical: Y coordinate exceeds map height");
+			}
+			// Skip graphics calls for corrupted units to prevent crash
+		}
 
 		int iNewValue = getDamage();
 		if(iNewValue > 0)
