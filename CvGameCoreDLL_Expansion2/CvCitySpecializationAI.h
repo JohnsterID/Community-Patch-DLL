@@ -129,6 +129,8 @@ public:
 
 	CvCitySpecializationXMLEntries* GetCitySpecializations();
 	void SetSpecializationsDirty(CitySpecializationUpdateType eUpdate);
+	void SetSpecializationsNeedUpdate();
+	void ProcessDeferredUpdates();
 	BuildingTypes GetNextWonderDesired() const
 	{
 		return m_eNextWonderDesired;
@@ -166,6 +168,7 @@ private:
 	CvPlayer* m_pPlayer;
 	CvCitySpecializationXMLEntries* m_pSpecializations;
 	bool m_bSpecializationsDirty;
+	bool m_bDeferredUpdate;
 	int m_iLastTurnEvaluated;
 
 	// Wonder builds

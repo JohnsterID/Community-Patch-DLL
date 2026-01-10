@@ -207,6 +207,7 @@ void CvCitySpecializationXMLEntries::DeleteArray()
 /// Constructor
 CvCitySpecializationAI::CvCitySpecializationAI():
 	m_bSpecializationsDirty(false),
+	m_bDeferredUpdate(false),
 	m_bInterruptWonders(false),
 	m_bInterruptBuildings(false),
 	m_bChooseNewWonder(false),
@@ -241,6 +242,7 @@ void CvCitySpecializationAI::Uninit()
 void CvCitySpecializationAI::Reset()
 {
 	m_bSpecializationsDirty = false;
+	m_bDeferredUpdate = false;
 	m_bInterruptWonders = false;
 	m_bInterruptBuildings = false;
 	m_bChooseNewWonder = false;
@@ -254,6 +256,7 @@ template<typename CitySpecializationAI, typename Visitor>
 void CvCitySpecializationAI::Serialize(CitySpecializationAI& citySpecializationAI, Visitor& visitor)
 {
 	visitor(citySpecializationAI.m_bSpecializationsDirty);
+	visitor(citySpecializationAI.m_bDeferredUpdate);
 	visitor(citySpecializationAI.m_bInterruptWonders);
 	visitor(citySpecializationAI.m_bInterruptBuildings);
 	visitor(citySpecializationAI.m_bChooseNewWonder);
@@ -1350,6 +1353,27 @@ void CvCitySpecializationAI::LogMsg(const CvString& msg)
 
 		strOutBuf = strBaseString + msg;
 		pLog->Msg( strOutBuf.c_str() );
+	}
+}
+
+/// Mark that we need a deferred specialization update (for MP deal processing)
+void CvCitySpecializationAI::SetSpecializationsNeedUpdate()
+{
+	// No city specializations for minor civs
+	if(m_pPlayer->isMinorCiv())
+		return;
+
+	m_bDeferredUpdate = true;
+}
+
+/// Process any deferred specialization updates
+void CvCitySpecializationAI::ProcessDeferredUpdates()
+{
+	if(m_bDeferredUpdate)
+	{
+		m_bDeferredUpdate = false;
+		// Trigger the normal dirty mechanism
+		SetSpecializationsDirty(SPECIALIZATION_UPDATE_ENEMY_CITY_CAPTURED);
 	}
 }
 

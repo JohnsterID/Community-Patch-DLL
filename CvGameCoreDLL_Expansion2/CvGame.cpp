@@ -127,6 +127,7 @@ CvGame::CvGame() :
 #endif
 	, m_bArchaeologyTriggered(false)
 	, m_bIsDesynced(false)
+	, m_bProcessingMPDeal(false)
 	, m_eObserverUIOverridePlayer(NO_PLAYER)
 	, m_lastTurnAICivsProcessed(-1)
 	, m_processPlayerAutoMoves(false)
@@ -1123,6 +1124,7 @@ void CvGame::uninit()
 	m_bCombatWarned = false;
 	m_bArchaeologyTriggered = false;
 	m_bIsDesynced = false;
+	m_bProcessingMPDeal = false;
 	m_eObserverUIOverridePlayer = NO_PLAYER;
 	m_eCurrentVisibilityPlayer = NO_PLAYER;
 
@@ -6011,6 +6013,24 @@ void CvGame::setDesynced(bool bNewValue)
 		return;
 
 	m_bIsDesynced = bNewValue;
+}
+
+//	--------------------------------------------------------------------------------
+bool CvGame::isProcessingMPDeal() const
+{
+	if (!isReallyNetworkMultiPlayer())
+		return false;
+
+	return m_bProcessingMPDeal;
+}
+
+//	--------------------------------------------------------------------------------
+void CvGame::setProcessingMPDeal(bool bNewValue)
+{
+	if (!isReallyNetworkMultiPlayer())
+		return;
+
+	m_bProcessingMPDeal = bNewValue;
 }
 
 //	--------------------------------------------------------------------------------

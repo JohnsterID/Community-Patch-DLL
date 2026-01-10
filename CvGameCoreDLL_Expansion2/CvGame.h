@@ -299,6 +299,9 @@ public:
 	bool isDesynced() const;
 	void setDesynced(bool bNewValue);
 
+	bool isProcessingMPDeal() const;
+	void setProcessingMPDeal(bool bNewValue);
+
 	bool isFinalInitialized() const;
 	void setFinalInitialized(bool bNewValue);
 
@@ -852,6 +855,7 @@ protected:
 	bool m_bTunerEverConnected;
 	bool m_bDynamicTurnsSimultMode;		//if playing dynamic turn mode, are we currently running simultaneous turns?
 	bool m_bIsDesynced; // whether the game was desynced or not as a result of the very last sync
+	bool m_bProcessingMPDeal; // whether we are currently processing a multiplayer deal (to defer city specialization updates)
 	PlayerTypes m_eObserverUIOverridePlayer;
 	PlayerTypes m_eWaitDiploPlayer;
 	TechTypes m_eTechAstronomy;

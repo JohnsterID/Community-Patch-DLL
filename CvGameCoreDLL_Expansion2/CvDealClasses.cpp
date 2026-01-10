@@ -4335,6 +4335,10 @@ bool CvGameDeals::FinalizeMPDealLatest(PlayerTypes eFromPlayer, PlayerTypes eToP
 /// Moves a deal from the proposed list to the active one (returns FALSE if deal not valid)
 bool CvGameDeals::FinalizeMPDeal(CvDeal kDeal, bool bAccepted)
 {
+	// Set flag to prevent city specialization updates during deal processing
+	// This avoids sync variable dirty-on-reset crashes in multiplayer
+	GC.getGame().setProcessingMPDeal(true);
+
 	PlayerTypes eFromPlayer = kDeal.m_eFromPlayer;
 	PlayerTypes eToPlayer = kDeal.m_eToPlayer;
 	bool bFoundIt = true;
@@ -4367,6 +4371,21 @@ bool CvGameDeals::FinalizeMPDeal(CvDeal kDeal, bool bAccepted)
 	{
 		GC.GetEngineUserInterface()->setDirty(GameData_DIRTY_BIT, true);
 	}
+
+	// Process any deferred city specialization updates now that deal is complete
+	// This is safe because all clients have finished processing the deal identically
+	PlayerTypes eLoopPlayer;
+	for(int iPlayerLoop = 0; iPlayerLoop < MAX_MAJOR_CIVS; iPlayerLoop++)
+	{
+		eLoopPlayer = (PlayerTypes)iPlayerLoop;
+		if(GET_PLAYER(eLoopPlayer).isAlive())
+		{
+			GET_PLAYER(eLoopPlayer).GetCitySpecializationAI()->ProcessDeferredUpdates();
+		}
+	}
+
+	// Clear the MP deal processing flag
+	GC.getGame().setProcessingMPDeal(false);
 
 	return bFoundIt && bValid;
 }

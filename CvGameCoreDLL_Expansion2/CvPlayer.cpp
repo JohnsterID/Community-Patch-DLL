@@ -4369,14 +4369,30 @@ CvCity* CvPlayer::acquireCity(CvCity* pCity, bool bConquest, bool bGift, bool bO
 			}
 		}
 		// If not dead, old owner should update city specializations
+		// MP FIX: Defer during MP deal processing to prevent sync variable dirty-on-reset crash
 		else
 		{
-			GET_PLAYER(eOldOwner).GetCitySpecializationAI()->SetSpecializationsDirty(SPECIALIZATION_UPDATE_MY_CITY_CAPTURED);
+			if(GC.getGame().isReallyNetworkMultiPlayer() && MOD_ACTIVE_DIPLOMACY && GC.getGame().isProcessingMPDeal())
+			{
+				GET_PLAYER(eOldOwner).GetCitySpecializationAI()->SetSpecializationsNeedUpdate();
+			}
+			else
+			{
+				GET_PLAYER(eOldOwner).GetCitySpecializationAI()->SetSpecializationsDirty(SPECIALIZATION_UPDATE_MY_CITY_CAPTURED);
+			}
 		}
 	}
 
 	// New owner should update city specializations
-	GetCitySpecializationAI()->SetSpecializationsDirty(SPECIALIZATION_UPDATE_ENEMY_CITY_CAPTURED);
+	// MP FIX: Defer during MP deal processing to prevent sync variable dirty-on-reset crash
+	if(GC.getGame().isReallyNetworkMultiPlayer() && MOD_ACTIVE_DIPLOMACY && GC.getGame().isProcessingMPDeal())
+	{
+		GetCitySpecializationAI()->SetSpecializationsNeedUpdate();
+	}
+	else
+	{
+		GetCitySpecializationAI()->SetSpecializationsDirty(SPECIALIZATION_UPDATE_ENEMY_CITY_CAPTURED);
+	}
 	pNewCity->GetCityCitizens()->DoReallocateCitizens(true);
 
 	// Display the notification for the spoils of plundering
