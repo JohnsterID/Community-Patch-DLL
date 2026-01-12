@@ -97,8 +97,14 @@ After reviewing the three build configurations, **we are NOT maximizing our debu
 - Enhanced debugging of optimized code
 - Shows optimized-away variables
 - Better stepping through optimized code
-- Supported by VS2013+
 - **ZERO RUNTIME COST** - only affects debug info
+- **Compatibility notes:**
+  - **clang-cl (Python scripts):** Supported ✓ - Keep `/Zo`
+  - **MSVC v90 (VoxPopuli.vcxproj):** NOT supported ✗ - Produces warning D9002
+  - Introduced in Visual Studio 2013 Update 3
+- **Recommendation:** 
+  - Use in Python build scripts (clang-cl supports it)
+  - Skip in VoxPopuli.vcxproj (v90 toolset doesn't support it)
 
 **6. Add `/Gy` (Function-Level Linking)**
 - Packages functions individually
