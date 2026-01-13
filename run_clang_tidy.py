@@ -1,7 +1,61 @@
 #!/usr/bin/env python3
 """
-Fixed Automated Clang-Tidy Script for VS2008/C++03 Compatibility
-Addresses overlapping replacements and C++11 to C++03 conversion issues
+Automated Clang-Tidy Script for VS2008/C++03 Compatibility with CRLF Workaround
+
+IMPORTANT: cppcoreguidelines-init-variables RULES
+==================================================
+
+This check tries to initialize ALL uninitialized variables, but VS2008/C++03 has special cases:
+
+1. va_list variables - CANNOT be initialized in VS2008!
+   ❌ va_list args = NULL;  // Compilation error C2552
+   ✅ va_list args;          // Correct - use va_start() to initialize
+   
+   Why: va_list is an aggregate type in VS2008 that requires va_start() for initialization.
+        Any attempt to initialize it directly causes C2552 error.
+
+2. Pointers get nullptr → NULL conversion
+   🔄 int* ptr = nullptr;  →  int* ptr = NULL;  // Auto-converted by this script
+
+3. Function parameters - Skip initialization
+   Already initialized by caller, don't add "= 0"
+
+4. Variables immediately assigned - May skip
+   int x;
+   x = getValue();  // Initialization would be redundant
+
+5. Loop counters - May skip 
+   for (int i = 0; ...)  // Already initialized in loop
+
+6. Static variables - Usually skip
+   Have default zero-initialization already
+
+7. const variables - Must initialize anyway
+   const int x = 5;  // Already required by C++
+
+8. Arrays - Special initialization syntax
+   int arr[10] = {0};  // OK in VS2008
+
+9. Structs/classes - May need {}
+   struct Point p = {0, 0};  // OK in C++03
+   NOT: Point p = {};        // C++11 only
+
+10. Member variables - Use initializer lists
+    Class() : member(0) {}   // Preferred in C++03
+    NOT: int member = 0;     // C++11 inline member initialization
+
+FILTERING APPLIED BY THIS SCRIPT:
+- Filters va_list initialization attempts (compilation error)
+- Converts nullptr to NULL (C++03 compatibility)
+- Filters NAN usage (not standard in VS2008)
+- Filters std::to_string (not available in VS2008)
+- Filters va_arg corruption patterns
+- Detects and filters corruption patterns
+
+CRLF WORKAROUND:
+- Converts CRLF → LF before running clang-tidy (offset compatibility)
+- Runs analysis with proper byte offsets
+- Converts LF → CRLF after applying fixes (restores original format)
 """
 
 import subprocess
@@ -416,15 +470,97 @@ def run_combined_analysis():
         print(f"Error running clang-tidy: {e}")
         return False
 
+def convert_files_to_lf():
+    """Convert all source files from CRLF to LF for clang-tidy compatibility"""
+    print("=" * 80)
+    print("STEP 1: Converting CRLF → LF (required for clang-tidy offset compatibility)")
+    print("=" * 80)
+    
+    source_dir = Path("CvGameCoreDLL_Expansion2")
+    crlf_files = []
+    
+    for cpp_file in source_dir.glob("*.cpp"):
+        try:
+            content = cpp_file.read_bytes()
+            if b'\r\n' in content:
+                crlf_files.append(str(cpp_file))
+                # Convert CRLF to LF
+                content_lf = content.decode('utf-8').replace('\r\n', '\n').encode('utf-8')
+                cpp_file.write_bytes(content_lf)
+        except Exception as e:
+            print(f"Warning: Could not process {cpp_file}: {e}")
+    
+    print(f"✓ Converted {len(crlf_files)} files from CRLF to LF")
+    print(f"  (CRLF causes byte offset mismatches in clang-tidy)\n")
+    
+    return crlf_files
+
+def convert_files_to_crlf(crlf_files):
+    """Convert source files back from LF to CRLF"""
+    print("\n" + "=" * 80)
+    print("FINAL STEP: Converting LF → CRLF (restoring original line endings)")
+    print("=" * 80)
+    
+    for file_path in crlf_files:
+        try:
+            cpp_file = Path(file_path)
+            if cpp_file.exists():
+                content = cpp_file.read_bytes()
+                # Convert LF to CRLF
+                content_crlf = content.decode('utf-8').replace('\n', '\r\n').encode('utf-8')
+                cpp_file.write_bytes(content_crlf)
+        except Exception as e:
+            print(f"Warning: Could not restore {file_path}: {e}")
+    
+    print(f"✓ Restored CRLF line endings in {len(crlf_files)} files\n")
+
 def main():
-    """Main function"""
+    """Main function with CRLF workaround"""
+    print("=" * 80)
+    print("CLANG-TIDY AUTOMATED ANALYSIS WITH CRLF WORKAROUND")
+    print("=" * 80)
+    print()
+    print("This script runs all 14 proven safe checks with:")
+    print("  • CRLF→LF conversion (fixes byte offset issues)")
+    print("  • C++11→C++03 conversion (nullptr → NULL)")
+    print("  • VS2008 compatibility filtering (va_list, NAN, etc.)")
+    print()
+    
     if not check_prerequisites():
         sys.exit(1)
     
-    if not run_combined_analysis():
-        sys.exit(1)
+    # Step 1: Convert to LF
+    crlf_files = convert_files_to_lf()
     
-    print("\n✅ Automated clang-tidy analysis completed successfully!")
+    try:
+        # Step 2: Run clang-tidy analysis
+        if not run_combined_analysis():
+            print("\n⚠️  Analysis failed, restoring original line endings...")
+            convert_files_to_crlf(crlf_files)
+            sys.exit(1)
+        
+        # Step 3: Convert back to CRLF
+        convert_files_to_crlf(crlf_files)
+        
+        print("\n" + "=" * 80)
+        print("✅ CLANG-TIDY ANALYSIS COMPLETED SUCCESSFULLY!")
+        print("=" * 80)
+        print()
+        print("Next steps:")
+        print("  1. Review changes: git diff")
+        print("  2. Build and test: python3 build_vp_clang_linux.py")
+        print("  3. Commit if satisfied: git commit -am 'Apply clang-tidy fixes'")
+        print()
+        
+    except KeyboardInterrupt:
+        print("\n\n⚠️  Interrupted by user, restoring original line endings...")
+        convert_files_to_crlf(crlf_files)
+        sys.exit(130)
+    except Exception as e:
+        print(f"\n❌ Error: {e}")
+        print("Restoring original line endings...")
+        convert_files_to_crlf(crlf_files)
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()
