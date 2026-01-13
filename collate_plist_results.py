@@ -284,20 +284,24 @@ def create_critical_warnings_report(debug_results, release_results):
 
 def main():
     """Main function to analyze plist results."""
-    debug_dir = "/workspace/Community-Patch-DLL/clang-build/Debug/CvGameCoreDLL_Expansion2"
-    release_dir = "/workspace/Community-Patch-DLL/clang-build/Release/CvGameCoreDLL_Expansion2"
+    # Use relative paths from script location
+    script_dir = Path(__file__).parent.resolve()
+    debug_dir = script_dir / "clang-build/Debug/CvGameCoreDLL_Expansion2"
+    release_dir = script_dir / "clang-build/Release/CvGameCoreDLL_Expansion2"
     
-    if not os.path.exists(debug_dir):
+    if not debug_dir.exists():
         print(f"Error: Debug directory not found: {debug_dir}")
+        print(f"Run static analysis first: python3 build_vp_clang_linux.py --config debug --analyze")
         return 1
     
-    if not os.path.exists(release_dir):
+    if not release_dir.exists():
         print(f"Error: Release directory not found: {release_dir}")
+        print(f"Run static analysis first: python3 build_vp_clang_linux.py --config release --analyze")
         return 1
     
     # Analyze both builds
-    debug_results = analyze_plist_directory(debug_dir, "Debug")
-    release_results = analyze_plist_directory(release_dir, "Release")
+    debug_results = analyze_plist_directory(str(debug_dir), "Debug")
+    release_results = analyze_plist_directory(str(release_dir), "Release")
     
     # Generate summary report
     generate_summary_report(debug_results, release_results)
@@ -306,8 +310,8 @@ def main():
     create_critical_warnings_report(debug_results, release_results)
     
     # Save detailed results
-    output_file = "/workspace/Community-Patch-DLL/static_analysis_results.json"
-    save_detailed_results(debug_results, release_results, output_file)
+    output_file = script_dir / "static_analysis_results.json"
+    save_detailed_results(debug_results, release_results, str(output_file))
     
     return 0
 

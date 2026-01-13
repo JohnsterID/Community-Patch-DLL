@@ -7,10 +7,17 @@ Addresses overlapping replacements and C++11 to C++03 conversion issues
 import subprocess
 import sys
 import time
-import yaml
 import re
 from pathlib import Path
 from collections import defaultdict
+
+try:
+    import yaml
+except ImportError:
+    print("Error: PyYAML is required but not installed")
+    print("Install it with: pip3 install pyyaml")
+    print("Or: pip3 install -r requirements.txt")
+    sys.exit(1)
 
 # LLVM tools paths
 CLANG_TIDY = "/tmp/LLVM-21.1.8-Linux-X64/bin/clang-tidy"

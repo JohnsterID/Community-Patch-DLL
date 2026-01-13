@@ -61,9 +61,12 @@ def main():
     print("LLVM 21.1.8 with --analyzer-output plist-multi-file")
     print("="*80)
     
+    # Use relative paths from script location
+    script_dir = Path(__file__).parent.resolve()
+    
     # Analyze build logs
-    debug_log = analyze_build_log("/workspace/Community-Patch-DLL/clang-output/Debug/build.log")
-    release_log = analyze_build_log("/workspace/Community-Patch-DLL/clang-output/Release/build.log")
+    debug_log = analyze_build_log(str(script_dir / "clang-output/Debug/build.log"))
+    release_log = analyze_build_log(str(script_dir / "clang-output/Release/build.log"))
     
     print(f"\nBUILD PERFORMANCE:")
     print(f"{'Metric':<30} {'Debug':<15} {'Release':<15}")
@@ -77,15 +80,18 @@ def main():
         print(f"{'Static Analysis Warnings':<30} {debug_log['static_analysis_warnings']:<15} {release_log['static_analysis_warnings']:<15}")
     
     # Plist file analysis
-    debug_plist_count = len(list(Path("/workspace/Community-Patch-DLL/clang-build/Debug/CvGameCoreDLL_Expansion2").glob("*.plist")))
-    release_plist_count = len(list(Path("/workspace/Community-Patch-DLL/clang-build/Release/CvGameCoreDLL_Expansion2").glob("*.plist")))
+    debug_plist_dir = script_dir / "clang-build/Debug/CvGameCoreDLL_Expansion2"
+    release_plist_dir = script_dir / "clang-build/Release/CvGameCoreDLL_Expansion2"
+    
+    debug_plist_count = len(list(debug_plist_dir.glob("*.plist"))) if debug_plist_dir.exists() else 0
+    release_plist_count = len(list(release_plist_dir.glob("*.plist"))) if release_plist_dir.exists() else 0
     
     print(f"\nPLIST FILE ANALYSIS:")
     print(f"{'Generated Plist Files':<30} {debug_plist_count:<15} {release_plist_count:<15}")
     
     # Calculate total size
-    debug_size = sum(f.stat().st_size for f in Path("/workspace/Community-Patch-DLL/clang-build/Debug/CvGameCoreDLL_Expansion2").glob("*.plist"))
-    release_size = sum(f.stat().st_size for f in Path("/workspace/Community-Patch-DLL/clang-build/Release/CvGameCoreDLL_Expansion2").glob("*.plist"))
+    debug_size = sum(f.stat().st_size for f in debug_plist_dir.glob("*.plist")) if debug_plist_dir.exists() else 0
+    release_size = sum(f.stat().st_size for f in release_plist_dir.glob("*.plist")) if release_plist_dir.exists() else 0
     
     print(f"{'Total Plist Size (KB)':<30} {debug_size/1024:<15.1f} {release_size/1024:<15.1f}")
     

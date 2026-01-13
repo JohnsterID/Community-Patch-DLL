@@ -3,9 +3,17 @@
 Filter problematic clang-tidy fixes for VS2008/C++03 compatibility
 """
 
-import yaml
+import sys
 import re
 from pathlib import Path
+
+try:
+    import yaml
+except ImportError:
+    print("Error: PyYAML is required but not installed")
+    print("Install it with: pip3 install pyyaml")
+    print("Or: pip3 install -r requirements.txt")
+    sys.exit(1)
 
 def filter_problematic_fixes(fixes_file):
     """Filter out problematic fixes that don't work with VS2008/C++03"""
