@@ -173,7 +173,7 @@ def generate_summary_report(debug_results, release_results):
     """Generate a comprehensive summary report."""
     print("\n" + "="*80)
     print("CLANG STATIC ANALYZER SUMMARY REPORT")
-    print("LLVM 20.1.8 with --analyzer-output plist-multi-file")
+    print("LLVM 21.1.8 with --analyzer-output plist-multi-file")
     print("="*80)
     
     print(f"\nBUILD COMPARISON:")
@@ -232,7 +232,7 @@ def save_detailed_results(debug_results, release_results, output_file):
     combined_results = {
         'analysis_info': {
             'analyzer': 'Clang Static Analyzer',
-            'version': 'LLVM 20.1.8',
+            'version': 'LLVM 21.1.8',
             'options': '--analyzer-output plist-multi-file',
             'timestamp': None  # Could add timestamp here
         },

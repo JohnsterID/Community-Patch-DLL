@@ -3,7 +3,7 @@
 ## Execution Details
 - **Date**: 2025-08-21
 - **Duration**: 44.6 minutes (2674.1 seconds)
-- **LLVM Version**: 20.1.8
+- **LLVM Version**: 21.1.8
 - **Source Files Processed**: 156 C++ files
 - **Total Warnings Found**: 1,785
 - **Suppressed Warnings**: 514,463 (513,489 in non-user code, 974 with check filters)

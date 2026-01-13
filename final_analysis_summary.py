@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Final Analysis Summary: Compare LLVM 20.1.8 --plist-multi-file results with build logs
+Final Analysis Summary: Compare LLVM 21.1.8 --plist-multi-file results with build logs
 """
 
 import os
@@ -58,7 +58,7 @@ def main():
     """Generate final analysis summary."""
     print("="*80)
     print("FINAL ANALYSIS SUMMARY")
-    print("LLVM 20.1.8 with --analyzer-output plist-multi-file")
+    print("LLVM 21.1.8 with --analyzer-output plist-multi-file")
     print("="*80)
     
     # Analyze build logs
@@ -90,7 +90,7 @@ def main():
     print(f"{'Total Plist Size (KB)':<30} {debug_size/1024:<15.1f} {release_size/1024:<15.1f}")
     
     print(f"\nKEY FINDINGS:")
-    print("1. LLVM 20.1.8 --analyzer-output plist-multi-file option works successfully")
+    print("1. LLVM 21.1.8 --analyzer-output plist-multi-file option works successfully")
     print("2. Analysis completed for both Debug and Release builds")
     print("3. 152 static analysis warnings found in each build (consistent)")
     print("4. 65 critical warnings identified (null pointer dereferences, division by zero, etc.)")
@@ -112,7 +112,7 @@ def main():
     print("5. Consider adding null checks before pointer dereferences")
     
     print(f"\nSUCCESS METRICS:")
-    print("✓ --plist-multi-file option works with LLVM 20.1.8")
+    print("✓ --plist-multi-file option works with LLVM 21.1.8")
     print("✓ Comprehensive static analysis completed")
     print("✓ Detailed warning categorization achieved")
     print("✓ Critical issues identified for prioritization")

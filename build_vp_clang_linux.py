@@ -652,7 +652,7 @@ def build_cpps(cl: str, cl_args: list[str], pch_path: Path, build_dir: Path, log
             
             if analyze:
                 # Run static analysis instead of compilation
-                # Use --analyzer-output plist-multi-file with LLVM 20.1.8
+                # Use --analyzer-output plist-multi-file with LLVM 21.1.8
                 out = build_dir.joinpath(cpp).with_suffix('.plist')
                 command = [cl, '--analyze', '--analyzer-output', 'plist-multi-file', str(cpp_src), '-o', str(out)] + cl_args
             else:
@@ -788,8 +788,8 @@ arg_parser.add_argument('--export-compile-commands', action='store_true', help='
 args = arg_parser.parse_args()
 config = Config.Release if args.config == 'release' else Config.Debug
 
-# Use LLVM 20.1.8 for better --plist-multi-file support
-llvm_path = os.environ.get('LLVM_PATH', '/tmp/LLVM-20.1.8-Linux-X64')
+# Use LLVM 21.1.8 for better --plist-multi-file support
+llvm_path = os.environ.get('LLVM_PATH', '/tmp/LLVM-21.1.8-Linux-X64')
 cl = os.path.join(llvm_path, 'bin', 'clang')
 link = 'lld-link'  # Remove .exe extension for Linux
 build_dir = PROJECT_DIR.joinpath(BUILD_DIR[config])
