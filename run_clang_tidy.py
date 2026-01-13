@@ -15,7 +15,7 @@ This check tries to initialize ALL uninitialized variables, but VS2008/C++03 has
         Any attempt to initialize it directly causes C2552 error.
 
 2. Pointers get nullptr → NULL conversion
-   🔄 int* ptr = nullptr;  →  int* ptr = NULL;  // Auto-converted by this script
+   int* ptr = nullptr;  →  int* ptr = NULL;  // Auto-converted by this script
 
 3. Function parameters - Skip initialization
    Already initialized by caller, don't add "= 0"
@@ -94,6 +94,48 @@ PROVEN_CHECKS = [
     "readability-redundant-string-cstr",
     "readability-redundant-string-init",
     "readability-static-accessed-through-instance"
+]
+
+# PLANNED: Performance & Portability checks
+# UNTESTED - Requires Windows SDK dependencies to validate
+# See TDD_PLAN.md for testing methodology
+PLANNED_PERFORMANCE_CHECKS = [
+    # Phase 1: Low-risk performance checks
+    # "performance-faster-string-find",  # UNTESTED
+    # "performance-inefficient-algorithm",  # UNTESTED
+    # "performance-unnecessary-copy-initialization",  # UNTESTED
+    # "performance-inefficient-string-concatenation",  # UNTESTED
+    # "performance-inefficient-vector-operation",  # UNTESTED
+    # "performance-type-promotion-in-math-fn",  # UNTESTED
+    
+    # Phase 2: Medium-risk performance checks (may suggest C++11)
+    # "performance-for-range-copy",  # UNTESTED - May suggest auto
+    # "performance-unnecessary-value-param",  # UNTESTED
+    # "performance-implicit-conversion-in-loop",  # UNTESTED
+]
+
+PLANNED_PORTABILITY_CHECKS = [
+    # Phase 4: Portability checks
+    # "portability-simd-intrinsics",  # UNTESTED - Likely no findings
+    # "portability-std-allocator-const",  # UNTESTED
+]
+
+PLANNED_MODERNIZE_CHECKS = [
+    # Phase 5: Requires nullptr → NULL conversion
+    # "modernize-use-nullptr",  # UNTESTED - Requires post-processing
+]
+
+# Checks to NEVER add (from clang-tidy-notes.txt)
+BLACKLISTED_CHECKS = [
+    # "modernize-deprecated-headers",  # Breaks compile
+    # "modernize-use-auto",  # Readability confusion
+    # "modernize-redundant-void-arg",  # Explicit void preferred
+    # "readability-implicit-bool-conversion",  # Too many false positives
+    # "readability-math-missing-parentheses",  # Dev preference
+    # "performance-move-const-arg",  # C++11 move semantics
+    # "performance-move-constructor-init",  # C++11 move semantics
+    # "performance-no-automatic-move",  # C++11 move semantics
+    # "performance-noexcept-move-constructor",  # C++11 noexcept
 ]
 
 def check_prerequisites():
