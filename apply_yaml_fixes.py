@@ -156,7 +156,8 @@ class YAMLFixApplicator:
             print(f"  Replacements: {len(sorted_replacements)}")
         
         # Apply each replacement
-        content = original_content
+        # NOTE: Do NOT reset content here - it's already been converted from CRLF to LF above!
+        # content = original_content  # ❌ BUG! This would undo the CRLF→LF conversion
         applied_count = 0
         
         for i, repl in enumerate(sorted_replacements):

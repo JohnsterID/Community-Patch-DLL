@@ -62,6 +62,7 @@ import subprocess
 import sys
 import time
 import re
+import shutil
 from pathlib import Path
 from collections import defaultdict
 
@@ -431,24 +432,34 @@ def run_combined_analysis():
             if processed_file:
                 print(f"Applying processed fixes from {processed_file}")
                 
-                # Apply fixes using clang-apply-replacements
-                apply_cmd = [CLANG_APPLY_REPLACEMENTS, "."]
-                
-                # Move processed file to expected location
-                processed_file.rename("clang-tidy-combined-fixes.yaml")
-                
-                apply_result = subprocess.run(apply_cmd, capture_output=True, text=True)
-                
-                if apply_result.returncode == 0:
-                    print("✓ All processed fixes applied successfully")
+                # Use custom YAML applicator instead of buggy clang-apply-replacements
+                try:
+                    from apply_yaml_fixes import YAMLFixApplicator
+                    
+                    applicator = YAMLFixApplicator(processed_file, dry_run=False, verbose=False)
+                    
+                    if not applicator.load_yaml():
+                        print("❌ Failed to load YAML")
+                        return False
+                    
+                    if not applicator.apply_all():
+                        print("❌ Failed to apply fixes")
+                        return False
+                    
+                    print("✓ Custom applicator successfully applied fixes")
                     
                     # Validate applied fixes for corruption
                     corruption_found = validate_applied_fixes()
                     if corruption_found:
                         print("❌ Corruption detected in applied fixes!")
                         return False
-                else:
-                    print(f"❌ Error applying fixes: {apply_result.stderr}")
+                    
+                except ImportError as e:
+                    print(f"❌ Could not import apply_yaml_fixes: {e}")
+                    print("Make sure apply_yaml_fixes.py is in the same directory")
+                    return False
+                except Exception as e:
+                    print(f"❌ Error applying fixes: {e}")
                     return False
             else:
                 print("❌ Failed to process fixes")
@@ -514,6 +525,72 @@ def convert_files_to_crlf(crlf_files):
     
     print(f"✓ Restored CRLF line endings in {len(crlf_files)} files\n")
 
+def backup_files(file_list):
+    """Create .bak copies before modifying"""
+    print("Creating backup files...")
+    backed_up = 0
+    for file_path in file_list:
+        try:
+            backup_path = Path(f"{file_path}.bak")
+            shutil.copy2(file_path, backup_path)
+            backed_up += 1
+        except Exception as e:
+            print(f"Warning: Could not backup {file_path}: {e}")
+    print(f"✓ Created {backed_up} backup files\n")
+
+def restore_from_backup(file_list):
+    """Restore from .bak files"""
+    print("\n" + "=" * 80)
+    print("RESTORING FILES FROM BACKUP")
+    print("=" * 80)
+    
+    restored = 0
+    for file_path in file_list:
+        try:
+            backup_path = Path(f"{file_path}.bak")
+            if backup_path.exists():
+                shutil.copy2(backup_path, file_path)
+                backup_path.unlink()
+                restored += 1
+        except Exception as e:
+            print(f"Warning: Could not restore {file_path}: {e}")
+    
+    print(f"✓ Restored {restored} files from backup\n")
+
+def cleanup_backups(file_list):
+    """Remove backup files after successful completion"""
+    for file_path in file_list:
+        backup_path = Path(f"{file_path}.bak")
+        if backup_path.exists():
+            try:
+                backup_path.unlink()
+            except:
+                pass
+
+def rollback_to_git(file_paths):
+    """Restore files to git HEAD state"""
+    print("\n" + "=" * 80)
+    print("ROLLING BACK CHANGES VIA GIT")
+    print("=" * 80)
+    
+    try:
+        # Restore all modified files in CvGameCoreDLL_Expansion2
+        result = subprocess.run(
+            ['git', 'checkout', '--', 'CvGameCoreDLL_Expansion2/'],
+            capture_output=True,
+            text=True
+        )
+        
+        if result.returncode == 0:
+            print(f"✓ Restored files from git HEAD")
+            return True
+        else:
+            print(f"❌ Git rollback failed: {result.stderr}")
+            return False
+    except Exception as e:
+        print(f"❌ Git rollback error: {e}")
+        return False
+
 def main():
     """Main function with CRLF workaround"""
     print("=" * 80)
@@ -532,15 +609,22 @@ def main():
     # Step 1: Convert to LF
     crlf_files = convert_files_to_lf()
     
+    # Step 2: Create backups
+    backup_files(crlf_files)
+    
     try:
-        # Step 2: Run clang-tidy analysis
+        # Step 3: Run clang-tidy analysis
         if not run_combined_analysis():
-            print("\n⚠️  Analysis failed, restoring original line endings...")
+            print("\n⚠️  Analysis failed, restoring from backup...")
+            restore_from_backup(crlf_files)
             convert_files_to_crlf(crlf_files)
             sys.exit(1)
         
-        # Step 3: Convert back to CRLF
+        # Step 4: Convert back to CRLF
         convert_files_to_crlf(crlf_files)
+        
+        # Step 5: Clean up backups
+        cleanup_backups(crlf_files)
         
         print("\n" + "=" * 80)
         print("✅ CLANG-TIDY ANALYSIS COMPLETED SUCCESSFULLY!")
@@ -553,7 +637,8 @@ def main():
         print()
         
     except KeyboardInterrupt:
-        print("\n\n⚠️  Interrupted by user, restoring original line endings...")
+        print("\n\n⚠️  Interrupted by user, restoring from backup...")
+        restore_from_backup(crlf_files)
         convert_files_to_crlf(crlf_files)
         sys.exit(130)
     except Exception as e:
