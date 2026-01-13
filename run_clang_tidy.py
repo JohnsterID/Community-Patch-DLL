@@ -8,8 +8,8 @@ IMPORTANT: cppcoreguidelines-init-variables RULES
 This check tries to initialize ALL uninitialized variables, but VS2008/C++03 has special cases:
 
 1. va_list variables - CANNOT be initialized in VS2008!
-   ❌ va_list args = NULL;  // Compilation error C2552
-   ✅ va_list args;          // Correct - use va_start() to initialize
+   FAILED: va_list args = NULL;  // Compilation error C2552
+   SUCCESS: va_list args;          // Correct - use va_start() to initialize
    
    Why: va_list is an aggregate type in VS2008 that requires va_start() for initialization.
         Any attempt to initialize it directly causes C2552 error.
@@ -102,20 +102,20 @@ def check_prerequisites():
     
     # Check clang-tidy
     if not Path(CLANG_TIDY).exists():
-        print(f"❌ clang-tidy not found at {CLANG_TIDY}")
+        print(f"FAILED: clang-tidy not found at {CLANG_TIDY}")
         return False
     
     # Check clang-apply-replacements
     if not Path(CLANG_APPLY_REPLACEMENTS).exists():
-        print(f"❌ clang-apply-replacements not found at {CLANG_APPLY_REPLACEMENTS}")
+        print(f"FAILED: clang-apply-replacements not found at {CLANG_APPLY_REPLACEMENTS}")
         return False
     
     # Check compile_commands.json
     if not Path("compile_commands.json").exists():
-        print("❌ compile_commands.json not found")
+        print("FAILED: compile_commands.json not found")
         return False
     
-    print("✓ All prerequisites satisfied")
+    print("SUCCESS: All prerequisites satisfied")
     return True
 
 def find_source_files():
@@ -380,7 +380,7 @@ def validate_applied_fixes():
             for pattern in corruption_patterns:
                 matches = re.findall(pattern, content)
                 if matches:
-                    print(f"❌ Corruption found in {file_path}: {matches}")
+                    print(f"FAILED: Corruption found in {file_path}: {matches}")
                     corruption_found = True
         except Exception as e:
             print(f"Warning: Could not validate {file_path}: {e}")
@@ -429,7 +429,7 @@ def run_combined_analysis():
         test_file = Path("CvGameCoreDLL_Expansion2/CvGame.cpp")
         if test_file.exists():
             size_after_tidy = len(test_file.read_bytes())
-            print(f"🔍 TDD: CvGame.cpp size after clang-tidy: {size_after_tidy} bytes")
+            print(f" TDD: CvGame.cpp size after clang-tidy: {size_after_tidy} bytes")
         
         if fixes_file.exists():
             # Process and filter fixes
@@ -442,7 +442,7 @@ def run_combined_analysis():
                 test_file = Path("CvGameCoreDLL_Expansion2/CvGame.cpp")
                 if test_file.exists():
                     size_before_apply = len(test_file.read_bytes())
-                    print(f"🔍 TDD: CvGame.cpp size before applicator: {size_before_apply} bytes")
+                    print(f" TDD: CvGame.cpp size before applicator: {size_before_apply} bytes")
                 
                 # Use custom YAML applicator instead of buggy clang-apply-replacements
                 try:
@@ -451,30 +451,30 @@ def run_combined_analysis():
                     applicator = YAMLFixApplicator(processed_file, dry_run=False, verbose=False)
                     
                     if not applicator.load_yaml():
-                        print("❌ Failed to load YAML")
+                        print("FAILED: Failed to load YAML")
                         return False
                     
                     if not applicator.apply_all():
-                        print("❌ Failed to apply fixes")
+                        print("FAILED: Failed to apply fixes")
                         return False
                     
-                    print("✓ Custom applicator successfully applied fixes")
+                    print("SUCCESS: Custom applicator successfully applied fixes")
                     
                     # Validate applied fixes for corruption
                     corruption_found = validate_applied_fixes()
                     if corruption_found:
-                        print("❌ Corruption detected in applied fixes!")
+                        print("FAILED: Corruption detected in applied fixes!")
                         return False
                     
                 except ImportError as e:
-                    print(f"❌ Could not import apply_yaml_fixes: {e}")
+                    print(f"FAILED: Could not import apply_yaml_fixes: {e}")
                     print("Make sure apply_yaml_fixes.py is in the same directory")
                     return False
                 except Exception as e:
-                    print(f"❌ Error applying fixes: {e}")
+                    print(f"FAILED: Error applying fixes: {e}")
                     return False
             else:
-                print("❌ Failed to process fixes")
+                print("FAILED: Failed to process fixes")
                 return False
         else:
             print("No fixes file generated")
@@ -513,7 +513,7 @@ def convert_files_to_lf():
         except Exception as e:
             print(f"Warning: Could not process {cpp_file}: {e}")
     
-    print(f"✓ Converted {len(crlf_files)} files from CRLF to LF")
+    print(f"SUCCESS: Converted {len(crlf_files)} files from CRLF to LF")
     print(f"  (CRLF causes byte offset mismatches in clang-tidy)\n")
     
     return crlf_files
@@ -535,7 +535,7 @@ def convert_files_to_crlf(crlf_files):
         except Exception as e:
             print(f"Warning: Could not restore {file_path}: {e}")
     
-    print(f"✓ Restored CRLF line endings in {len(crlf_files)} files\n")
+    print(f"SUCCESS: Restored CRLF line endings in {len(crlf_files)} files\n")
 
 def backup_files(file_list):
     """Create .bak copies before modifying"""
@@ -548,7 +548,7 @@ def backup_files(file_list):
             backed_up += 1
         except Exception as e:
             print(f"Warning: Could not backup {file_path}: {e}")
-    print(f"✓ Created {backed_up} backup files\n")
+    print(f"SUCCESS: Created {backed_up} backup files\n")
 
 def restore_from_backup(file_list):
     """Restore from .bak files"""
@@ -567,7 +567,7 @@ def restore_from_backup(file_list):
         except Exception as e:
             print(f"Warning: Could not restore {file_path}: {e}")
     
-    print(f"✓ Restored {restored} files from backup\n")
+    print(f"SUCCESS: Restored {restored} files from backup\n")
 
 def cleanup_backups(file_list):
     """Remove backup files after successful completion"""
@@ -594,13 +594,13 @@ def rollback_to_git(file_paths):
         )
         
         if result.returncode == 0:
-            print(f"✓ Restored files from git HEAD")
+            print(f"SUCCESS: Restored files from git HEAD")
             return True
         else:
-            print(f"❌ Git rollback failed: {result.stderr}")
+            print(f"FAILED: Git rollback failed: {result.stderr}")
             return False
     except Exception as e:
-        print(f"❌ Git rollback error: {e}")
+        print(f"FAILED: Git rollback error: {e}")
         return False
 
 def main():
@@ -625,7 +625,7 @@ def main():
     test_file = Path("CvGameCoreDLL_Expansion2/CvGame.cpp")
     if test_file.exists():
         size_after_conv = len(test_file.read_bytes())
-        print(f"🔍 TDD: CvGame.cpp size after conversion: {size_after_conv} bytes")
+        print(f" TDD: CvGame.cpp size after conversion: {size_after_conv} bytes")
     
     # Step 2: Create backups
     backup_files(crlf_files)
@@ -633,12 +633,12 @@ def main():
     # TDD: Verify file sizes after backup
     if test_file.exists():
         size_after_backup = len(test_file.read_bytes())
-        print(f"🔍 TDD: CvGame.cpp size after backup: {size_after_backup} bytes")
+        print(f" TDD: CvGame.cpp size after backup: {size_after_backup} bytes")
     
     try:
         # Step 3: Run clang-tidy analysis
         if not run_combined_analysis():
-            print("\n⚠️  Analysis failed, restoring from backup...")
+            print("\nWARNING:  Analysis failed, restoring from backup...")
             restore_from_backup(crlf_files)
             convert_files_to_crlf(crlf_files)
             sys.exit(1)
@@ -650,7 +650,7 @@ def main():
         cleanup_backups(crlf_files)
         
         print("\n" + "=" * 80)
-        print("✅ CLANG-TIDY ANALYSIS COMPLETED SUCCESSFULLY!")
+        print("SUCCESS: CLANG-TIDY ANALYSIS COMPLETED SUCCESSFULLY!")
         print("=" * 80)
         print()
         print("Next steps:")
@@ -660,12 +660,12 @@ def main():
         print()
         
     except KeyboardInterrupt:
-        print("\n\n⚠️  Interrupted by user, restoring from backup...")
+        print("\n\nWARNING:  Interrupted by user, restoring from backup...")
         restore_from_backup(crlf_files)
         convert_files_to_crlf(crlf_files)
         sys.exit(130)
     except Exception as e:
-        print(f"\n❌ Error: {e}")
+        print(f"\nFAILED: Error: {e}")
         print("Restoring original line endings...")
         convert_files_to_crlf(crlf_files)
         sys.exit(1)

@@ -26,9 +26,9 @@ def ensure_headers_fixed():
             # Import and run the fix script
             import fix_header_case_issues
             fix_header_case_issues.main()
-            print("\n✅ Setup complete! Continuing with build...\n")
+            print("\nSUCCESS: Setup complete! Continuing with build...\n")
         except Exception as e:
-            print(f"\n❌ ERROR: Failed to run fix_header_case_issues.py: {e}")
+            print(f"\nFAILED: ERROR: Failed to run fix_header_case_issues.py: {e}")
             print("\nTry running manually:")
             print("    python3 fix_header_case_issues.py\n")
             sys.exit(1)

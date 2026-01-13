@@ -89,13 +89,13 @@ int* ptr = NULL;
 **Problematic Pattern Filtering:**
 ```cpp
 // FILTERED: va_list can't be initialized in VS2008
-va_list vl = {};  // ❌ Filtered out
+va_list vl = {};  //  [NO] Filtered out
 
 // FILTERED: std::to_string not in VS2008
-std::to_string(x);  // ❌ Filtered out
+std::to_string(x);  //  [NO] Filtered out
 
 // FILTERED: Corruption detection
-va_arg(vl = NULL, char*);  // ❌ Filtered (clang-tidy bug)
+va_arg(vl = NULL, char*);  //  [NO] Filtered (clang-tidy bug)
 ```
 
 ### Example Output
@@ -448,26 +448,26 @@ python3 build_vp_clang_linux.py --config debug --analyze
 
 ### When to Run Clang-Tidy
 
-✅ **Do run:**
+ [YES] **Do run:**
 - Before major commits
 - After large refactoring
 - When fixing bugs (may reveal related issues)
 - Periodically (monthly/quarterly)
 
-❌ **Don't run:**
+ [NO] **Don't run:**
 - On every build (too slow)
 - Without VS2008 filtering (will break code)
 - Without testing afterwards (verify fixes work)
 
 ### When to Run Static Analysis
 
-✅ **Do run:**
+ [YES] **Do run:**
 - When investigating hard-to-find bugs
 - Before releases
 - After memory-related changes
 - When seeing crashes in production
 
-❌ **Don't run:**
+ [NO] **Don't run:**
 - On every build (slow)
 - Without reviewing results (generates lots of warnings)
 

@@ -66,7 +66,7 @@ class YAMLFixApplicator:
     def load_yaml(self) -> bool:
         """Load and parse YAML file"""
         if not self.yaml_file.exists():
-            print(f"❌ Error: YAML file not found: {self.yaml_file}")
+            print(f"FAILED: Error: YAML file not found: {self.yaml_file}")
             return False
         
         print(f"Loading YAML: {self.yaml_file}")
@@ -75,11 +75,11 @@ class YAMLFixApplicator:
             with open(self.yaml_file, 'r') as f:
                 data = yaml.safe_load(f)
         except Exception as e:
-            print(f"❌ Error parsing YAML: {e}")
+            print(f"FAILED: Error parsing YAML: {e}")
             return False
         
         if not data or 'Diagnostics' not in data:
-            print("❌ Error: No diagnostics found in YAML")
+            print("FAILED: Error: No diagnostics found in YAML")
             return False
         
         # Extract replacements
@@ -119,7 +119,7 @@ class YAMLFixApplicator:
         file_path_obj = Path(file_path)
         
         if not file_path_obj.exists():
-            print(f"  ❌ File not found: {file_path_obj}")
+            print(f"  FAILED: File not found: {file_path_obj}")
             self.stats['errors'] += 1
             return False
         
@@ -129,7 +129,7 @@ class YAMLFixApplicator:
                 original_bytes = f.read()
             original_content = original_bytes.decode('utf-8', errors='replace')
         except Exception as e:
-            print(f"  ❌ Error reading {file_path_obj.name}: {e}")
+            print(f"  FAILED: Error reading {file_path_obj.name}: {e}")
             self.stats['errors'] += 1
             return False
         
@@ -163,7 +163,7 @@ class YAMLFixApplicator:
         
         # Apply each replacement
         # NOTE: Do NOT reset content here - it's already been converted from CRLF to LF above!
-        # content = original_content  # ❌ BUG! This would undo the CRLF→LF conversion
+        # content = original_content  # FAILED: BUG! This would undo the CRLF→LF conversion
         applied_count = 0
         
         for i, repl in enumerate(sorted_replacements):
@@ -230,14 +230,14 @@ class YAMLFixApplicator:
                     print(f"  SUCCESS: Modified {file_path_obj.name} ({applied_count} replacements)")
                     self.stats['files_modified'] += 1
                 except Exception as e:
-                    print(f"  ❌ Error writing {file_path_obj.name}: {e}")
+                    print(f"  FAILED: Error writing {file_path_obj.name}: {e}")
                     self.stats['errors'] += 1
                     return False
             
             self.stats['replacements_applied'] += applied_count
             return True
         else:
-            print(f"  ❌ Validation failed for {file_path_obj.name} - NOT applying changes")
+            print(f"  FAILED: Validation failed for {file_path_obj.name} - NOT applying changes")
             self.stats['errors'] += 1
             return False
     
@@ -339,7 +339,7 @@ Why this tool exists:
     args = parser.parse_args()
     
     if not args.yaml_file.exists():
-        print(f"❌ Error: File not found: {args.yaml_file}")
+        print(f"FAILED: Error: File not found: {args.yaml_file}")
         return 1
     
     # Create applicator
@@ -355,7 +355,7 @@ Why this tool exists:
     
     # Apply fixes
     if not applicator.apply_all():
-        print("\n❌ Some errors occurred during application")
+        print("\nFAILED: Some errors occurred during application")
         return 1
     
     print("\nSUCCESS: All fixes applied successfully!")
