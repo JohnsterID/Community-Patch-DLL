@@ -108,7 +108,7 @@ class YAMLFixApplicator:
                 self.replacements_by_file[r.file_path].append(r)
         
         total_replacements = sum(len(repls) for repls in self.replacements_by_file.values())
-        print(f"✓ Loaded {total_replacements} replacements across {len(self.replacements_by_file)} files")
+        print(f"SUCCESS: Loaded {total_replacements} replacements across {len(self.replacements_by_file)} files")
         
         return True
     
@@ -139,13 +139,19 @@ class YAMLFixApplicator:
         
         if has_crlf:
             # Convert CRLF to LF so offsets match clang-tidy's expectations
-            content = original_content.replace('\r\n', '\n')
-            if self.verbose:
-                print(f"  ℹ️  File has CRLF line endings, converted to LF for offset matching")
-                print(f"     Original size: {len(original_content)} bytes")
-                print(f"     LF size: {len(content)} bytes")
+            content_str = original_content.replace('\r\n', '\n')
+            print(f"   [WARNING]: File {file_path_obj.name} still has CRLF! Converting to LF...")
+            print(f"     This should not happen if run_clang_tidy.py converted properly!")
+            print(f"     File size before: {len(original_content.encode('utf-8'))} bytes")
+            print(f"     File size after LF: {len(content_str.encode('utf-8'))} bytes")
         else:
-            content = original_content
+            content_str = original_content
+        
+        # CRITICAL BUG FIX: Work with BYTES, not characters!
+        # Clang-tidy generates BYTE offsets, but Python string indexing uses CHARACTER offsets.
+        # With multi-byte UTF-8 chars (like copyright symbol), character offset != byte offset!
+        content_bytes = content_str.encode('utf-8')
+        print(f"  File {file_path_obj.name} has LF (size: {len(content_bytes)} bytes, BOM: {has_bom})")
         
         # Sort replacements by offset (REVERSE - highest first!)
         # This is KEY to avoiding offset shifts
@@ -161,56 +167,67 @@ class YAMLFixApplicator:
         applied_count = 0
         
         for i, repl in enumerate(sorted_replacements):
-            # Extract context for validation
+            # Validate offset is within bounds (use BYTE length!)
+            if repl.offset < 0 or repl.offset > len(content_bytes):
+                print(f"  WARNING:  Skipping invalid offset: {repl.offset} (file length: {len(content_bytes)})")
+                self.stats['replacements_skipped'] += 1
+                continue
+            
+            # Validate length doesn't exceed file
+            if repl.offset + repl.length > len(content_bytes):
+                print(f"  WARNING:  Skipping invalid length: {repl.length} at offset {repl.offset}")
+                self.stats['replacements_skipped'] += 1
+                continue
+            
+            # Extract context for validation (decode bytes for display)
             context_start = max(0, repl.offset - 40)
-            context_end = min(len(content), repl.offset + repl.length + 40)
-            context_before = content[context_start:repl.offset]
-            old_text = content[repl.offset:repl.offset + repl.length]
-            context_after = content[repl.offset + repl.length:context_end]
+            context_end = min(len(content_bytes), repl.offset + repl.length + 40)
+            try:
+                context_before = content_bytes[context_start:repl.offset].decode('utf-8', errors='replace')
+                old_text = content_bytes[repl.offset:repl.offset + repl.length].decode('utf-8', errors='replace')
+                context_after = content_bytes[repl.offset + repl.length:context_end].decode('utf-8', errors='replace')
+            except:
+                context_before = ""
+                old_text = ""
+                context_after = ""
             
             if self.verbose:
                 print(f"    [{i+1}/{len(sorted_replacements)}] Offset {repl.offset}, Length {repl.length}")
                 print(f"        Before: ...{context_before[-20:]}[{old_text}]{context_after[:20]}...")
                 print(f"        After:  ...{context_before[-20:]}[{repl.text[:40]}]{context_after[:20]}...")
             
-            # Validate offset is within bounds
-            if repl.offset < 0 or repl.offset > len(content):
-                print(f"  ⚠️  Skipping invalid offset: {repl.offset} (file length: {len(content)})")
-                self.stats['replacements_skipped'] += 1
-                continue
-            
-            # Validate length doesn't exceed file
-            if repl.offset + repl.length > len(content):
-                print(f"  ⚠️  Skipping invalid length: {repl.length} at offset {repl.offset}")
-                self.stats['replacements_skipped'] += 1
-                continue
-            
-            # Apply replacement
-            # Key operation: Replace bytes [offset:offset+length] with new text
-            content = content[:repl.offset] + repl.text + content[repl.offset + repl.length:]
+            # Apply replacement using BYTE offsets (this is the critical fix!)
+            # Clang-tidy uses byte offsets, not character offsets
+            replacement_bytes = repl.text.encode('utf-8')
+            content_bytes = content_bytes[:repl.offset] + replacement_bytes + content_bytes[repl.offset + repl.length:]
             applied_count += 1
         
         if applied_count == 0:
             if self.verbose:
-                print(f"  ℹ️  No replacements applied to {file_path_obj.name}")
+                print(f"  INFO:  No replacements applied to {file_path_obj.name}")
             return True
         
+        # Decode bytes to string for validation
+        content_str = content_bytes.decode('utf-8')
+        
         # Validate result
-        if self.validate_result(content, file_path_obj.name):
+        if self.validate_result(content_str, file_path_obj.name):
             # Convert back to CRLF if original had CRLF
             if has_crlf:
-                content = content.replace('\n', '\r\n')
+                content_str = content_str.replace('\n', '\r\n')
+                content_bytes = content_str.encode('utf-8')
                 if self.verbose:
-                    print(f"  ℹ️  Converted LF → CRLF to match original")
+                    print(f"  INFO:  Converted LF → CRLF to match original")
             
             # Write modified file (or skip if dry-run)
             if self.dry_run:
                 print(f"  [DRY-RUN] Would modify {file_path_obj.name} ({applied_count} replacements)")
             else:
                 try:
-                    with open(file_path_obj, 'w', encoding='utf-8', newline='') as f:
-                        f.write(content)
-                    print(f"  ✓ Modified {file_path_obj.name} ({applied_count} replacements)")
+                    # Write bytes directly to preserve exact encoding
+                    with open(file_path_obj, 'wb') as f:
+                        f.write(content_bytes)
+                    print(f"  SUCCESS: Modified {file_path_obj.name} ({applied_count} replacements)")
                     self.stats['files_modified'] += 1
                 except Exception as e:
                     print(f"  ❌ Error writing {file_path_obj.name}: {e}")
@@ -236,11 +253,11 @@ class YAMLFixApplicator:
         
         # Allow small imbalance (could be in comments/strings)
         if abs(open_braces - close_braces) > 5:
-            print(f"  ⚠️  Warning: Brace imbalance: {{ {open_braces} vs }} {close_braces}")
+            print(f"  WARNING:  Warning: Brace imbalance: {{ {open_braces} vs }} {close_braces}")
             # Not failing validation - might be in strings/comments
         
         if abs(open_parens - close_parens) > 5:
-            print(f"  ⚠️  Warning: Paren imbalance: ( {open_parens} vs ) {close_parens}")
+            print(f"  WARNING:  Warning: Paren imbalance: ( {open_parens} vs ) {close_parens}")
             # Not failing validation - might be in strings/comments
         
         # Note: We removed the ");\" pattern checks because they flag too many
@@ -341,7 +358,7 @@ Why this tool exists:
         print("\n❌ Some errors occurred during application")
         return 1
     
-    print("\n✓ All fixes applied successfully!")
+    print("\nSUCCESS: All fixes applied successfully!")
     return 0
 
 if __name__ == "__main__":

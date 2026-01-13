@@ -425,12 +425,24 @@ def run_combined_analysis():
         duration = time.time() - start_time
         print(f"clang-tidy completed in {duration:.1f} seconds ({duration/60:.1f} minutes) (exit code: {result.returncode})")
         
+        # TDD: Check file size after clang-tidy runs
+        test_file = Path("CvGameCoreDLL_Expansion2/CvGame.cpp")
+        if test_file.exists():
+            size_after_tidy = len(test_file.read_bytes())
+            print(f"🔍 TDD: CvGame.cpp size after clang-tidy: {size_after_tidy} bytes")
+        
         if fixes_file.exists():
             # Process and filter fixes
             processed_file = process_and_filter_fixes(fixes_file)
             
             if processed_file:
                 print(f"Applying processed fixes from {processed_file}")
+                
+                # TDD: Check file size before applicator runs
+                test_file = Path("CvGameCoreDLL_Expansion2/CvGame.cpp")
+                if test_file.exists():
+                    size_before_apply = len(test_file.read_bytes())
+                    print(f"🔍 TDD: CvGame.cpp size before applicator: {size_before_apply} bytes")
                 
                 # Use custom YAML applicator instead of buggy clang-apply-replacements
                 try:
@@ -609,8 +621,19 @@ def main():
     # Step 1: Convert to LF
     crlf_files = convert_files_to_lf()
     
+    # TDD: Verify file sizes after conversion
+    test_file = Path("CvGameCoreDLL_Expansion2/CvGame.cpp")
+    if test_file.exists():
+        size_after_conv = len(test_file.read_bytes())
+        print(f"🔍 TDD: CvGame.cpp size after conversion: {size_after_conv} bytes")
+    
     # Step 2: Create backups
     backup_files(crlf_files)
+    
+    # TDD: Verify file sizes after backup
+    if test_file.exists():
+        size_after_backup = len(test_file.read_bytes())
+        print(f"🔍 TDD: CvGame.cpp size after backup: {size_after_backup} bytes")
     
     try:
         # Step 3: Run clang-tidy analysis
