@@ -8,6 +8,31 @@ from pathlib import Path
 import argparse
 from queue import Queue
 import json
+import sys
+
+def ensure_headers_fixed():
+    """Ensure fix_header_case_issues.py has been run (auto-run if needed)"""
+    # Check if case-insensitive symlinks exist (sentinel check)
+    sentinel = Path('Dependencies/v7.0a_include/windef.h')
+    
+    if not sentinel.exists():
+        print("=" * 70)
+        print("FIRST-TIME SETUP: Creating case-insensitive header symlinks...")
+        print("=" * 70)
+        print("\nLinux uses case-sensitive filesystems, but Windows headers use")
+        print("mixed case. Creating symlinks for case-insensitive includes...\n")
+        
+        try:
+            # Import and run the fix script
+            import fix_header_case_issues
+            fix_header_case_issues.main()
+            print("\n✅ Setup complete! Continuing with build...\n")
+        except Exception as e:
+            print(f"\n❌ ERROR: Failed to run fix_header_case_issues.py: {e}")
+            print("\nTry running manually:")
+            print("    python3 fix_header_case_issues.py\n")
+            sys.exit(1)
+    # If sentinel exists, headers are already fixed - continue silently
 
 class Config(Enum):
     Release = 0
@@ -780,6 +805,9 @@ def link_dll(link: str, link_args: list[str], build_dir: Path, out_dir: Path, lo
 
 set_environment(SDK_VERSION)
 print_environment()
+
+# Ensure header case-sensitivity is fixed (auto-run if needed)
+ensure_headers_fixed()
 
 arg_parser = argparse.ArgumentParser(description='Build VP.')
 arg_parser.add_argument('--config', type=str, default='debug', choices=['release', 'debug'])
