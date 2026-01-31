@@ -16918,20 +16918,9 @@ int CvPlayer::calculateResearchModifier(TechTypes eTech)
 	{
 		if (isMajorCiv() && MOD_BALANCE_VP)
 		{
-			//Research bonus for city-state alliances
-			int iMinorAllies = GetNumCSAllies();
-
-			if (iMinorAllies > 0)
-			{
-				// -2% tech costs per ally.
-				int iLeaguesAidScience = min(50, (iMinorAllies * /*2*/ GD_INT_GET(SCHOLAR_MINOR_ALLY_MULTIPLIER)));
-				SetScienceRateFromMinorAllies(iLeaguesAidScience);
-				iLeaguesMod += GetScienceRateFromMinorAllies();
-			}
-			else
-			{
-				SetScienceRateFromMinorAllies(0);
-			}
+			// Update research bonus from city-state alliances
+			UpdateScienceRateFromMinorAllies();
+			iLeaguesMod += GetScienceRateFromMinorAllies();
 		}
 
 		iModifier *= (100 + iLeaguesMod);
@@ -23677,6 +23666,26 @@ void CvPlayer::SetScienceRateFromMinorAllies(int iValue)
 {
 	if(GetScienceRateFromMinorAllies() != iValue)
 		m_iScienceRateFromLeague = iValue;
+}
+
+/// Update extra science from CS - recalculates based on current ally count
+void CvPlayer::UpdateScienceRateFromMinorAllies()
+{
+	if (isMajorCiv() && MOD_BALANCE_VP)
+	{
+		int iMinorAllies = GetNumCSAllies();
+		
+		if (iMinorAllies > 0)
+		{
+			// -2% tech costs per ally, capped at 50%
+			int iLeaguesAidScience = min(50, (iMinorAllies * /*2*/ GD_INT_GET(SCHOLAR_MINOR_ALLY_MULTIPLIER)));
+			SetScienceRateFromMinorAllies(iLeaguesAidScience);
+		}
+		else
+		{
+			SetScienceRateFromMinorAllies(0);
+		}
+	}
 }
 
 /// How much weaker do Units get when wounded?

@@ -845,6 +845,7 @@ public:
 	int GetScienceRateFromMinorAllies() const;
 	void ChangeScienceRateFromMinorAllies(int iChange);
 	void SetScienceRateFromMinorAllies(int iValue);
+	void UpdateScienceRateFromMinorAllies();
 
 	void ChangeExtraLeagueVotes(int iChange);
 

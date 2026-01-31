@@ -12365,11 +12365,13 @@ bool CvMinorCivAI::SetAllyInternal(PlayerTypes eNewAlly)
 	{
 		GET_PLAYER(eNewAlly).RefreshCSAlliesFriends();
 		GET_PLAYER(eNewAlly).UpdateHappinessFromMinorCivs();
+		GET_PLAYER(eNewAlly).UpdateScienceRateFromMinorAllies();
 	}
 	if (eOldAlly != NO_PLAYER)
 	{
 		GET_PLAYER(eOldAlly).RefreshCSAlliesFriends();
 		GET_PLAYER(eOldAlly).UpdateHappinessFromMinorCivs();
+		GET_PLAYER(eOldAlly).UpdateScienceRateFromMinorAllies();
 	}
 
 	// Declare war on Ally's enemies
