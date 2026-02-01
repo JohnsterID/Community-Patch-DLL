@@ -98,6 +98,31 @@ Files changed:
 
 ## Phase 2: Low-Risk Removal (18 headers, ~2 hours)
 
+### IMPORTANT: Run Dependency Analysis First!
+
+Before removing headers, run the dependency analysis script:
+
+```bash
+cd Community-Patch-DLL
+python3 analyze_pch_dependencies.py
+```
+
+This will:
+- ✅ Identify which headers can be safely removed
+- ✅ Identify which headers need explicit includes added first
+- ✅ Generate exact fix commands
+- ✅ Prevent compile-fix-compile iterations
+
+**Example output:**
+```
+✅ SAFE TO REMOVE (14 headers): No dependencies
+⚠️  NEEDS FIXES (2 headers):
+   - CvCityStrategyAI.h used by CvAdvisorRecommender.h
+   - Add: #include "CvCityStrategyAI.h" to CvAdvisorRecommender.h
+```
+
+Use this output to add explicit includes BEFORE removing from PCH!
+
 ### Target Headers (1-2 explicit includes each)
 
 These require adding explicit includes to 1-2 files each.
@@ -465,6 +490,21 @@ After implementation, update:
 ---
 
 ## Appendix: Helper Scripts
+
+### analyze_pch_dependencies.py (RECOMMENDED!)
+
+**The most important script - run this BEFORE removing headers!**
+
+```bash
+python3 analyze_pch_dependencies.py
+```
+
+This script analyzes header-to-header dependencies within the PCH and tells you:
+- Which headers are safe to remove (no dependencies)
+- Which headers need explicit includes added first
+- Exact fix commands for each affected header
+
+**Use this to avoid the compile-fix-compile iteration cycle!**
 
 ### find_header_usage.sh
 ```bash
