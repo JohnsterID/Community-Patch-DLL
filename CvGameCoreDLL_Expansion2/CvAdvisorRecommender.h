@@ -12,6 +12,8 @@
 #ifndef CIV5_ADVISOR_RECOMMENDER_H
 #define CIV5_ADVISOR_RECOMMENDER_H
 
+#include "CvCityStrategyAI.h"
+
 class CvAdvisorRecommender
 {
 public:
