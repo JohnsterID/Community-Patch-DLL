@@ -196,19 +196,18 @@ typedef wchar_t          wchar;
 #include "Lua/CvLuaSupport.h"
 
 // ============================================================================
-// PHASE 1: Removed truly unused game headers
-// Analysis showed these have no explicit #includes AND their types are not used
-// See PCH_DEPENDENCY_ANALYSIS.md and PCH_REMOVAL_PLAN.md for details
-// Removed: CvTreasury.h, CvPolicyClasses.h, CvProjectClasses.h,
-//          CvPromotionClasses.h, CvEmphasisClasses.h, CvBeliefClasses.h,
-//          CvNotificationClasses.h, CvCityStrategyAI.h, CvCityCitizens.h,
-//          CvCorporationClasses.h, CvContractClasses.h (11 headers)
-// Kept: CvTechClasses.h, CvBuildingClasses.h, CvReligionClasses.h,
-//       CvCultureClasses.h, CvTradeClasses.h (types used by .cpp files)
-// Impact: ~20% game header reduction
+// PHASE 1 ABORTED: Turns out ALL headers are used by .cpp files
+// Our analysis only checked explicit #includes, not actual type usage.
+// Reality: .cpp files use types from PCH without explicit includes.
+// 
+// Lesson: Can't safely remove headers without full semantic analysis.
+// The codebase relies heavily on PCH providing types implicitly.
+//
+// Better approach: Keep current PCH, focus on desync logging instead.
 // ============================================================================
 
 #include "CvPlayerAI.h"
+#include "CvTreasury.h"
 #include "CvMap.h"
 #include "CvSiteEvaluationClasses.h"
 #include "CvPlot.h"
@@ -228,19 +227,27 @@ typedef wchar_t          wchar;
 #include "CvCityAI.h"
 #include "CvFlavorManager.h"
 #include "CvTechClasses.h"
+#include "CvPolicyClasses.h"
 #include "CvBuildingClasses.h"
 #include "CvUnitClasses.h"
+#include "CvProjectClasses.h"
+#include "CvPromotionClasses.h"
 #include "CvImprovementClasses.h"
+#include "CvEmphasisClasses.h"
 #include "CvTraitClasses.h"
+#include "CvBeliefClasses.h"
 #include "CvReligionClasses.h"
 #include "CvEspionageClasses.h"
 #include "CvTradeClasses.h"
 #include "CvVotingClasses.h"
 #include "CvCultureClasses.h"
+#include "CvNotificationClasses.h"
 #include "CvBuildingProductionAI.h"
 #include "CvUnitProductionAI.h"
 #include "CvProjectProductionAI.h"
 #include "CvProcessProductionAI.h"
+#include "CvCityStrategyAI.h"
+#include "CvCityCitizens.h"
 #include "CvGame.h"
 #include "CvAStar.h"
 #include "CvBuilderTaskingAI.h"
@@ -250,6 +257,8 @@ typedef wchar_t          wchar;
 #include "CvAdvisorCounsel.h"
 #include "CvAdvisorRecommender.h"
 #include "CvAchievementInfo.h"
+#include "CvCorporationClasses.h"
+#include "CvContractClasses.h"
 
 using namespace fastdelegate;
 
