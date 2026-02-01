@@ -196,14 +196,16 @@ typedef wchar_t          wchar;
 #include "Lua/CvLuaSupport.h"
 
 // ============================================================================
-// PHASE 1: Removed 16 unused game headers (no .cpp files explicitly include these)
+// PHASE 1: Removed truly unused game headers
+// Analysis showed these have no explicit #includes AND their types are not used
 // See PCH_DEPENDENCY_ANALYSIS.md and PCH_REMOVAL_PLAN.md for details
-// Removed: CvTreasury.h, CvTechClasses.h, CvPolicyClasses.h, CvBuildingClasses.h,
-//          CvProjectClasses.h, CvPromotionClasses.h, CvEmphasisClasses.h,
-//          CvBeliefClasses.h, CvReligionClasses.h, CvTradeClasses.h,
-//          CvCultureClasses.h, CvNotificationClasses.h, CvCityStrategyAI.h,
-//          CvCityCitizens.h, CvCorporationClasses.h, CvContractClasses.h
-// Impact: -30% game header bloat, ~15-20% /Zm reduction expected
+// Removed: CvTreasury.h, CvPolicyClasses.h, CvProjectClasses.h,
+//          CvPromotionClasses.h, CvEmphasisClasses.h, CvBeliefClasses.h,
+//          CvNotificationClasses.h, CvCityStrategyAI.h, CvCityCitizens.h,
+//          CvCorporationClasses.h, CvContractClasses.h (11 headers)
+// Kept: CvTechClasses.h, CvBuildingClasses.h, CvReligionClasses.h,
+//       CvCultureClasses.h, CvTradeClasses.h (types used by .cpp files)
+// Impact: ~20% game header reduction
 // ============================================================================
 
 #include "CvPlayerAI.h"
@@ -225,11 +227,16 @@ typedef wchar_t          wchar;
 #include "CvDealClasses.h"
 #include "CvCityAI.h"
 #include "CvFlavorManager.h"
+#include "CvTechClasses.h"
+#include "CvBuildingClasses.h"
 #include "CvUnitClasses.h"
 #include "CvImprovementClasses.h"
 #include "CvTraitClasses.h"
+#include "CvReligionClasses.h"
 #include "CvEspionageClasses.h"
+#include "CvTradeClasses.h"
 #include "CvVotingClasses.h"
+#include "CvCultureClasses.h"
 #include "CvBuildingProductionAI.h"
 #include "CvUnitProductionAI.h"
 #include "CvProjectProductionAI.h"
