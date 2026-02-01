@@ -195,8 +195,18 @@ typedef wchar_t          wchar;
 #include "ICvDLLScriptSystem.h"
 #include "Lua/CvLuaSupport.h"
 
+// ============================================================================
+// PHASE 1: Removed 16 unused game headers (no .cpp files explicitly include these)
+// See PCH_DEPENDENCY_ANALYSIS.md and PCH_REMOVAL_PLAN.md for details
+// Removed: CvTreasury.h, CvTechClasses.h, CvPolicyClasses.h, CvBuildingClasses.h,
+//          CvProjectClasses.h, CvPromotionClasses.h, CvEmphasisClasses.h,
+//          CvBeliefClasses.h, CvReligionClasses.h, CvTradeClasses.h,
+//          CvCultureClasses.h, CvNotificationClasses.h, CvCityStrategyAI.h,
+//          CvCityCitizens.h, CvCorporationClasses.h, CvContractClasses.h
+// Impact: -30% game header bloat, ~15-20% /Zm reduction expected
+// ============================================================================
+
 #include "CvPlayerAI.h"
-#include "CvTreasury.h"
 #include "CvMap.h"
 #include "CvSiteEvaluationClasses.h"
 #include "CvPlot.h"
@@ -215,28 +225,15 @@ typedef wchar_t          wchar;
 #include "CvDealClasses.h"
 #include "CvCityAI.h"
 #include "CvFlavorManager.h"
-#include "CvTechClasses.h"
-#include "CvPolicyClasses.h"
-#include "CvBuildingClasses.h"
 #include "CvUnitClasses.h"
-#include "CvProjectClasses.h"
-#include "CvPromotionClasses.h"
 #include "CvImprovementClasses.h"
-#include "CvEmphasisClasses.h"
 #include "CvTraitClasses.h"
-#include "CvBeliefClasses.h"
-#include "CvReligionClasses.h"
 #include "CvEspionageClasses.h"
-#include "CvTradeClasses.h"
 #include "CvVotingClasses.h"
-#include "CvCultureClasses.h"
-#include "CvNotificationClasses.h"
 #include "CvBuildingProductionAI.h"
 #include "CvUnitProductionAI.h"
 #include "CvProjectProductionAI.h"
 #include "CvProcessProductionAI.h"
-#include "CvCityStrategyAI.h"
-#include "CvCityCitizens.h"
 #include "CvGame.h"
 #include "CvAStar.h"
 #include "CvBuilderTaskingAI.h"
@@ -246,8 +243,6 @@ typedef wchar_t          wchar;
 #include "CvAdvisorCounsel.h"
 #include "CvAdvisorRecommender.h"
 #include "CvAchievementInfo.h"
-#include "CvCorporationClasses.h"
-#include "CvContractClasses.h"
 
 using namespace fastdelegate;
 
