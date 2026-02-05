@@ -1,1 +1,3 @@
 # UBSan ignorelist
+# https://clang.llvm.org/docs/SanitizerSpecialCaseList.html
+# Note: Enum sanitizer disabled via -fno-sanitize=enum (all Civ5 enums are open/database-driven)

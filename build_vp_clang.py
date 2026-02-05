@@ -330,6 +330,7 @@ def build_cl_config_args(config: Config) -> list[str]:
     # UBSan for Debug builds (using custom VS2008-compatible handlers in ubsan_handlers.cpp)
     if get_sanitizer(config) == Sanitizer.UBSAN:
         args.append('-fsanitize=undefined')
+        args.append('-fno-sanitize=enum')  # All Civ5 enums are "open" (database-driven values)
         args.append(f'-fsanitize-ignorelist={os.path.join(PROJECT_DIR, "ubsan.ignore")}')
     return args
 
