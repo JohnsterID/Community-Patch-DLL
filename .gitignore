@@ -37,6 +37,7 @@
 !*.natvis
 !*.py
 !*.rc
+!ubsan.ignore
 !*.rtf
 !*.sh
 !*.sln
