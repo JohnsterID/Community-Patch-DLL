@@ -5472,7 +5472,8 @@ FILogFile* CvTacticalAI::GetLogFile()
 /// Log current status of the operation
 void CvTacticalAI::LogTacticalMessage(const CvString& strMsg)
 {
-	if(GC.getLogging() && GC.getAILogging())
+	// Skip logging if memory is low to prevent engine crash in FStringA::Reallocate
+	if(GC.getLogging() && GC.getAILogging() && SafeToLog())
 	{
 		CvString strOutBuf;
 		CvString strBaseString;
