@@ -9095,9 +9095,7 @@ CvUnit* CvPlayer::initUnit(UnitTypes eUnit, int iX, int iY, UnitAITypes eUnitAI,
 
 	const CvUnitEntry* pkUnitInfo = GC.getUnitInfo(eUnit);
 	if (isMajorCiv() && pkUnitInfo->IsMilitarySupport() && GetNumUnitsOutOfSupply() > 4 && eReason != REASON_UPGRADE && eReason != REASON_GIFT)
-	{
 		CUSTOMLOG("Player %d creating unit over supply limit, type is %d, reason is %d", m_eID, eUnit, eReason);
-	}
 
 	CvUnit* pUnit = addUnit();
 	ASSERT(pUnit, "Unit is not assigned a valid value");

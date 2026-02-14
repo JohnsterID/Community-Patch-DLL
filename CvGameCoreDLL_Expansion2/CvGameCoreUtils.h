@@ -501,3 +501,9 @@ public:
 //------------------------------------------------------------------------------
 CvString FormatYieldTimes100(int iYieldTimes100);
 void PrintMemoryInfo(const char* hint);
+
+//------------------------------------------------------------------------------
+// Memory pressure check for logging safety
+// Returns true if there's enough virtual memory to safely continue logging
+// Checks periodically to minimize overhead (every ~1000 calls)
+bool SafeToLog();

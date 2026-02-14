@@ -1092,37 +1092,42 @@ enum BattleTypeTypes
 #define BATTLE_FINISHED()                         if (MOD_EVENTS_BATTLES) { GAMEEVENTINVOKE_HOOK(GAMEEVENT_BattleFinished); }
 
 // Custom mod logger
+// CUSTOMLOG macro with memory pressure check to prevent engine crash
+// SafeToLog() checks available virtual memory and skips logging when low
+// Declaration here to avoid circular includes; implementation in CvGameCoreUtils.cpp
+bool SafeToLog();
+
 #if defined(CUSTOMLOGDEBUG)
 #if defined(CUSTOMLOGFILEINFO) && defined(CUSTOMLOGFUNCINFO)
-#define CUSTOMLOG(sFmt, ...) {																					\
+#define CUSTOMLOG(sFmt, ...) { if (SafeToLog()) {																\
 	CvString sMsg; CvString::format(sMsg, sFmt, __VA_ARGS__);													\
 	CvString sLine; CvString::format(sLine, "%s[%i]: %s - %s", __FILE__, __LINE__, __FUNCTION__, sMsg.c_str());	\
 	LOGFILEMGR.GetLog(CUSTOMLOGDEBUG, FILogFile::kDontTimeStamp)->Msg(sLine.c_str());							\
-	sLine += '\n'; OutputDebugString(sLine.c_str());																			\
-}
+	sLine += '\n'; OutputDebugString(sLine.c_str());															\
+}}
 #endif
 #if defined(CUSTOMLOGFILEINFO) && !defined(CUSTOMLOGFUNCINFO)
-#define CUSTOMLOG(sFmt, ...) {																					\
+#define CUSTOMLOG(sFmt, ...) { if (SafeToLog()) {																\
 	CvString sMsg; CvString::format(sMsg, sFmt, __VA_ARGS__);													\
 	CvString sLine; CvString::format(sLine, "%s[%i] - %s", __FILE__, __LINE__, sMsg.c_str());					\
 	LOGFILEMGR.GetLog(CUSTOMLOGDEBUG, FILogFile::kDontTimeStamp)->Msg(sLine.c_str());							\
-	sLine += '\n'; OutputDebugString(sLine.c_str());																			\
-}
+	sLine += '\n'; OutputDebugString(sLine.c_str());															\
+}}
 #endif
 #if !defined(CUSTOMLOGFILEINFO) && defined(CUSTOMLOGFUNCINFO)
-#define CUSTOMLOG(sFmt, ...) {																					\
+#define CUSTOMLOG(sFmt, ...) { if (SafeToLog()) {																\
 	CvString sMsg; CvString::format(sMsg, sFmt, __VA_ARGS__);													\
 	CvString sLine; CvString::format(sLine, "%s - %s", __FUNCTION__, sMsg.c_str());								\
 	LOGFILEMGR.GetLog(CUSTOMLOGDEBUG, FILogFile::kDontTimeStamp)->Msg(sLine.c_str());							\
-	sLine += '\n'; OutputDebugString(sLine.c_str());																			\
-}
+	sLine += '\n'; OutputDebugString(sLine.c_str());															\
+}}
 #endif
 #if !defined(CUSTOMLOGFILEINFO) && !defined(CUSTOMLOGFUNCINFO)
-#define CUSTOMLOG(sFmt, ...) {																					\
+#define CUSTOMLOG(sFmt, ...) { if (SafeToLog()) {																\
 	CvString sMsg; CvString::format(sMsg, sFmt, __VA_ARGS__);													\
 	LOGFILEMGR.GetLog(CUSTOMLOGDEBUG, FILogFile::kDontTimeStamp)->Msg(sMsg.c_str());							\
-	sMsg += '\n'; OutputDebugString(sMsg.c_str());																			\
-}
+	sMsg += '\n'; OutputDebugString(sMsg.c_str());																\
+}}
 #endif
 #else
 #define CUSTOMLOG(sFmt, ...) __noop

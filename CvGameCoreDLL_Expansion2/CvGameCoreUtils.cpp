@@ -1980,3 +1980,58 @@ void PrintMemoryInfo(const char* hint)
 
 	CloseHandle(hProcess);
 }
+
+//------------------------------------------------------------------------------
+// Memory pressure check to prevent crashes from excessive logging
+// The game engine's FStringA::Reallocate crashes when malloc returns NULL
+// This function periodically checks available virtual memory and returns false
+// when memory is low, allowing callers to skip non-essential logging
+//------------------------------------------------------------------------------
+bool SafeToLog()
+{
+	// Static state for periodic checking (minimizes syscall overhead)
+	static int s_checkCounter = 0;
+	static int s_totalLogCalls = 0;
+	static bool s_isSafeToLog = true;
+	static bool s_hasWarnedOnce = false;
+	
+	s_totalLogCalls++;
+	
+	// Check every 1000 calls to balance overhead vs responsiveness
+	// With 413,000+ log calls per session, this means ~413 checks
+	if (++s_checkCounter < 1000)
+		return s_isSafeToLog;
+	
+	s_checkCounter = 0;
+	
+	// Check available virtual memory
+	// 32-bit process has ~2GB limit (or ~4GB with LAA)
+	MEMORYSTATUSEX memStatus;
+	memStatus.dwLength = sizeof(memStatus);
+	
+	if (!GlobalMemoryStatusEx(&memStatus))
+		return true; // If check fails, assume safe
+	
+	// Reserve 100MB for critical operations
+	// ullAvailVirtual is the amount of unreserved/uncommitted memory in the user-mode virtual address space
+	const DWORDLONG MIN_SAFE_VIRTUAL_MB = 100;
+	const DWORDLONG MIN_SAFE_VIRTUAL_BYTES = MIN_SAFE_VIRTUAL_MB * 1024 * 1024;
+	
+	s_isSafeToLog = (memStatus.ullAvailVirtual > MIN_SAFE_VIRTUAL_BYTES);
+	
+	// Log warning once when we start skipping logs
+	if (!s_isSafeToLog && !s_hasWarnedOnce)
+	{
+		s_hasWarnedOnce = true;
+		// Use OutputDebugString directly to avoid recursion and LOGFILEMGR
+		char szWarning[256];
+		sprintf_s(szWarning,
+			"WARNING: Low virtual memory (%llu MB < %llu MB) - disabling LOGFILEMGR after %d calls\n",
+			memStatus.ullAvailVirtual / (1024 * 1024),
+			MIN_SAFE_VIRTUAL_MB,
+			s_totalLogCalls);
+		OutputDebugString(szWarning);
+	}
+	
+	return s_isSafeToLog;
+}
