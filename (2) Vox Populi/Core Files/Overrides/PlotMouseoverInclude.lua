@@ -268,7 +268,7 @@ function GetResourceString(plot, bLongForm)
 
 	if pPlayer ~= nil then
 		iLeader = pPlayer:GetLeaderType();
-		for pLeaderTraits in DB.Query( "SELECT TraitType FROM Leader_Traits INNER JOIN Leaders on Leaders.Type = LeaderType WHERE Leaders.ID = " .. iLeader ) do
+		for pLeaderTraits in DB.Query( "SELECT TraitType FROM Leader_Traits INNER JOIN Leaders on Leaders.Type = LeaderType WHERE Leaders.ID = ?", iLeader ) do
 			eTrait = pLeaderTraits.TraitType;
 			break;
 		end

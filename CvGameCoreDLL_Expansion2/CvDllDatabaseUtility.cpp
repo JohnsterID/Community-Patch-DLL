@@ -175,6 +175,11 @@ bool CvDllDatabaseUtility::CacheGameDatabaseData()
 	//Clear out database cache and tune for runtime use.
 	DB.ClearCountCache();
 
+	// Refresh query planner statistics for indexes added by the mod.
+	// The engine runs ANALYZE before mods are loaded, so post-mod
+	// indexes (60+ from AddTableIndexes.sql) lack statistics.
+	DB.Analyze();
+
 	//Log Database Memory statistics
 	LogMsg(DB.CalculateMemoryStats());
 
