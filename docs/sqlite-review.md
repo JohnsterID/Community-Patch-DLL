@@ -2,20 +2,36 @@
 
 ## Engine SQLite Version
 
-**SQLite 3.7.17** (2013-05-20) — confirmed via `sqlite3_libversion()` and `sqlite3_sourceid()` strings in the Linux binary (`Civ5XP.c`). Shipped with the BNW (Brave New World) expansion.
+**SQLite 3.7.17** (2013-05-20) — confirmed both from the Linux binary (`Civ5XP.c`) and directly from the Windows DLL (`CvGameDatabaseWin32Final Release.dll` at RVA 0x79C70). Source ID: `2013-05-20 00:56:22 118a3b35693b134d56ebd780123b7fd6f1497668`.
 
 ### Can We Upgrade?
 
-**No.** SQLite is statically compiled into `CvGameDatabaseWin32Final Release.dll` (note the space in the DLL name — confirmed via DUMPBIN analysis of the import library). All SQL goes through the `Database::Connection` C++ wrapper which calls the embedded SQLite internally. Both the game EXE and the CvGameDatabase DLL embed their own copy.
+**No.** SQLite is statically compiled into `CvGameDatabaseWin32Final Release.dll` (note the space in the DLL name). All SQL goes through the `Database::Connection` C++ wrapper which calls the embedded SQLite internally. The DLL exports 135 functions; the game EXEs contain no SQLite code of their own.
 
 We link against `CvGameDatabaseWin32.lib` (import library only — 52 KB of import thunks, no code). The original DLL source code is unavailable — the Civilization V Recovery Project archive also contains only headers and the import library, with the build script noting `CvGameDatabase is an import library — no source files to compile`.
 
-**Could we build a replacement DLL?** In theory, a replacement DLL exporting the same 136 MSVC-mangled C++ symbols with identical class layouts and calling conventions could work. In practice this is not feasible:
+**Could we build a replacement DLL?** In theory, a replacement DLL exporting the same 135 MSVC-mangled C++ symbols with identical class layouts and calling conventions could work. In practice this is not feasible:
 - The `Database::Connection` class has private members (`sqlite3*`, `std::tr1::unordered_map` caches, `std::auto_ptr<IDatabaseLogger>`) whose exact layout must match
 - The DLL uses Firaxis's custom memory allocator (`operator new`/`operator delete` overrides)
-- The DLL was built with VC9 (Visual Studio 2008) — timestamp `5368E996` = May 6, 2014
+- The DLL was linked with VS2008 SP1 (linker v9.0, MSVCR90.dll), with SQLite objects compiled using VS2012
+- PE timestamp `546CBFB1` = 2014-11-19 16:05:05 UTC
 - `GetSQLite3()` is declared in the header but **not exported** in the import library, so even the raw handle is inaccessible
 - Any mismatch in vtable layout, member offsets, or STL internals would cause crashes
+
+### DLL Build Verification
+
+All Firaxis DLLs were built on 2014-11-19 using VS2008 SP1 (build 30729) with the v9.0 linker:
+
+| DLL | Time (UTC) | Size | SQLite? |
+|---|---|---|---|
+| CvGameDatabaseWin32Final Release.dll | 16:05:05 | 566 KB | **Yes — 3.7.17** |
+| CvLocalizationWin32Final Release.dll | 16:06:06 | 804 KB | No — imports CvGameDatabase |
+| CvGameCore_Expansion1.dll | 16:33:39 | 3.3 MB | No — imports CvGameDatabase |
+| CvGameCoreDLLFinal Release.dll | 16:34:53 | 2.9 MB | No — imports CvGameDatabase |
+| CvGameCore_Expansion2.dll | 16:36:28 | 3.9 MB | No — imports CvGameDatabase |
+| lua51_Win32.dll | 2013-03-19 | 148 KB | N/A — Lua 5.1.4 |
+
+Rich header analysis of the CvGameDatabase DLL shows 3 object files compiled with VS2012 (build 50727) — almost certainly the SQLite 3.7.17 amalgamation — linked into the VS2008 DLL. All game DLLs link against MSVCR90.dll (VS2008 CRT).
 
 ## Engine Architecture
 
@@ -87,21 +103,21 @@ The engine calls `ANALYZE` at two points:
 
 Problem: `CREATE INDEX` does not increment `TotalChanges()`, so the engine's post-mod `ANALYZE` may not fire after VP's 60+ index additions. Our `DB.Analyze()` call in `CvDllDatabaseUtility::CacheGameDatabaseData()` addresses this gap.
 
-### Compile Options (Inferred)
+### Compile Options (Confirmed from DLL)
 
-The binary reports 7 compile options (`sqlite3_compileoption_get` iterates 0–6). Confirmed from function presence/absence analysis:
+Extracted directly from `CvGameDatabaseWin32Final Release.dll` `.rdata` section (RVA 0x79BE8–0x79C6C):
 
-| Option | Confidence | Evidence |
-|---|---|---|
-| `THREADSAFE=1` | Confirmed | `sqlite3_threadsafe()` returns 1 |
-| `OMIT_AUTHORIZATION` | Confirmed | `sqlite3_set_authorizer` absent from binary |
-| `OMIT_PROGRESS_CALLBACK` | Confirmed | `sqlite3_progress_handler` absent from binary |
-| `OMIT_DEPRECATED` | Confirmed | All deprecated functions absent (`sqlite3_expired`, `sqlite3_global_recover`, etc.) |
-| `OMIT_AUTOINIT` | Likely | Engine explicitly calls `sqlite3_initialize()` in Connection constructor |
-| `TEMP_STORE=2` | Likely | All databases are `:memory:`, temp storage in memory is consistent |
-| `HAVE_ISNAN` | Likely | Standard on Linux/GCC platforms where the binary was compiled |
+| Option | Status |
+|---|---|
+| `THREADSAFE=1` | ✅ Confirmed |
+| `TEMP_STORE=2` | ✅ Confirmed |
+| `OMIT_TCL_VARIABLE` | ✅ Confirmed |
+| `OMIT_PROGRESS_CALLBACK` | ✅ Confirmed |
+| `OMIT_DEPRECATED` | ✅ Confirmed |
+| `OMIT_AUTOINIT` | ✅ Confirmed |
+| `OMIT_AUTHORIZATION` | ✅ Confirmed |
 
-The actual strings are stored as data pointers in the binary and could not be extracted as text from the decompiled output. Use `PRAGMA compile_options` in-game to confirm.
+All 7 compile options confirmed from the actual shipped DLL binary. The earlier inference from the Linux binary's function absence analysis was correct for all entries except `HAVE_ISNAN` (Linux/GCC only — the Windows DLL uses `OMIT_TCL_VARIABLE` instead).
 
 ### Functions Present vs Absent
 
@@ -194,13 +210,24 @@ Converted `sprintf_s` SQL string construction to use `?` parameter binding in th
 | `CvInfos.cpp` | `GameSpeed_Turns` count | `'%s'` → `?` bind for `GameSpeedType` |
 | `CvInfos.cpp` | `GameSpeed_Turns` select | `'%s'` → `?` bind for `GameSpeedType` |
 | `CvInfos.cpp` | `Resource_QuantityTypes` | `'%s'` → `?` bind for `ResourceType` |
+| `CvInfos.cpp` | `BuildFeatures` select | `'%s'` → `?` bind for `BuildType` |
 | `CvProjectClasses.cpp` | `Project_VictoryThresholds` | `'%s'` → `?` bind for `ProjectType` |
 | `CvPromotionClasses.cpp` | `UnitPromotions_UnitName` | `%i` → `?` bind for `p.ID` and `u.ID` |
 | `CvDllDatabaseUtility.cpp` | `PostDefines` ROWID lookup | `'%s'` → `?` bind for `Type` (table name stays concatenated — SQLite doesn't support parameterized identifiers) |
 | `CvDllDatabaseUtility.cpp` | `DatabaseRemapper` UPDATE | Changed from per-row `Execute(szSQL)` to prepare-once with `Bind`/`Execute`/`Reset` per row — eliminates repeated `sqlite3_prepare_v2` calls |
 | `CustomMods.cpp` | `CustomModPostDefines` ROWID lookup | `'%s'` → `?` bind for `Type` |
 
-**Engine internals note:** `Database::SingleResult` auto-steps in `SetCommand()` (binary confirmed: offset +16 is `m_bSingleQuery`, checked before calling `Results::Step()` internally). This means parameterized queries requiring `Bind()` before `Step()` must use `Database::Results` instead of `Database::SingleResult`.
+**Engine internals note:** `Database::SingleResult` auto-steps in `SetCommand()`. Verified directly in `CvGameDatabaseWin32Final Release.dll` (RVA 0x7BD0):
+
+```
+Connection::Execute(Results&, sql, len) @ 0x39B0
+  └─ call SetCommand @ 0x7BD0
+       ├─ cmp byte [esi+10h], 0   ; m_bSingleQuery
+       ├─ je skip                  ; false → return 1
+       └─ call Results::Step       ; true → auto-step before return
+```
+
+This means parameterized queries requiring `Bind()` before `Step()` must use `Database::Results` instead of `Database::SingleResult`.
 
 ## Performance Awareness
 

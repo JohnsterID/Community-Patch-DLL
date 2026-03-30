@@ -5371,13 +5371,10 @@ bool CvBuildInfo::CacheResults(Database::Results& kResults, CvDatabaseUtility& k
 		kUtility.InitializeArray(m_paiFeatureObsoleteTech, "Features");
 		kUtility.InitializeArray(m_pabFeatureRemoveOnly, "Features");
 
-		char szQuery[512];
-		const char* szFeatureQuery = "select * from BuildFeatures where BuildType = '%s'";
-		sprintf_s(szQuery, 512, szFeatureQuery, GetType());
-
 		Database::Results kArrayResults;
-		if(DB.Execute(kArrayResults, szQuery))
+		if(DB.Execute(kArrayResults, "select * from BuildFeatures where BuildType = ?"))
 		{
+			kArrayResults.Bind(1, GetType());
 			while(kArrayResults.Step())
 			{
 				const char* szFeatureType			= kArrayResults.GetText("FeatureType");
