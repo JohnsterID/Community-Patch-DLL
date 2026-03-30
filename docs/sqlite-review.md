@@ -6,7 +6,16 @@
 
 ### Can We Upgrade?
 
-**No.** SQLite is statically compiled into the engine's `CvGameDatabase` DLL (precompiled, no source). All SQL goes through the `Database::Connection` abstraction which wraps the embedded SQLite. Both the game EXE and the CvGameDatabase DLL embed their own copy. We link against `CvGameDatabaseWin32.lib` (import library only) and cannot rebuild the DLL.
+**No.** SQLite is statically compiled into `CvGameDatabaseWin32Final Release.dll` (note the space in the DLL name — confirmed via DUMPBIN analysis of the import library). All SQL goes through the `Database::Connection` C++ wrapper which calls the embedded SQLite internally. Both the game EXE and the CvGameDatabase DLL embed their own copy.
+
+We link against `CvGameDatabaseWin32.lib` (import library only — 52 KB of import thunks, no code). The original DLL source code is unavailable — the Civilization V Recovery Project archive also contains only headers and the import library, with the build script noting `CvGameDatabase is an import library — no source files to compile`.
+
+**Could we build a replacement DLL?** In theory, a replacement DLL exporting the same 136 MSVC-mangled C++ symbols with identical class layouts and calling conventions could work. In practice this is not feasible:
+- The `Database::Connection` class has private members (`sqlite3*`, `std::tr1::unordered_map` caches, `std::auto_ptr<IDatabaseLogger>`) whose exact layout must match
+- The DLL uses Firaxis's custom memory allocator (`operator new`/`operator delete` overrides)
+- The DLL was built with VC9 (Visual Studio 2008) — timestamp `5368E996` = May 6, 2014
+- `GetSQLite3()` is declared in the header but **not exported** in the import library, so even the raw handle is inaccessible
+- Any mismatch in vtable layout, member offsets, or STL internals would cause crashes
 
 ## Engine Architecture
 
@@ -171,9 +180,27 @@ Added `DB.Analyze()` call in `CvDllDatabaseUtility::CacheGameDatabaseData()` aft
 
 Without this, the engine's own ANALYZE (which runs before mod loading, or conditionally after mod SQL if `TotalChanges()` changed) would leave the new indexes without statistics, potentially causing the query planner to ignore them.
 
-### 2. Parameterized Queries
+### 2. Parameterized Lua Queries
 
 Converted 5 concatenated `DB.Query` calls to use `?` parameter binding. While the original code concatenated trusted integer IDs from game API calls (no injection risk), parameterized queries avoid per-call SQL reparsing and follow best practices.
+
+### 3. Parameterized C++ Queries
+
+Converted `sprintf_s` SQL string construction to use `?` parameter binding in the DLL:
+
+| File | Query | Change |
+|---|---|---|
+| `CvInfos.cpp` | `HandicapInfo_Goodies` JOIN `GoodyHuts` | `'%s'` → `?` bind for `HandicapType` |
+| `CvInfos.cpp` | `GameSpeed_Turns` count | `'%s'` → `?` bind for `GameSpeedType` |
+| `CvInfos.cpp` | `GameSpeed_Turns` select | `'%s'` → `?` bind for `GameSpeedType` |
+| `CvInfos.cpp` | `Resource_QuantityTypes` | `'%s'` → `?` bind for `ResourceType` |
+| `CvProjectClasses.cpp` | `Project_VictoryThresholds` | `'%s'` → `?` bind for `ProjectType` |
+| `CvPromotionClasses.cpp` | `UnitPromotions_UnitName` | `%i` → `?` bind for `p.ID` and `u.ID` |
+| `CvDllDatabaseUtility.cpp` | `PostDefines` ROWID lookup | `'%s'` → `?` bind for `Type` (table name stays concatenated — SQLite doesn't support parameterized identifiers) |
+| `CvDllDatabaseUtility.cpp` | `DatabaseRemapper` UPDATE | Changed from per-row `Execute(szSQL)` to prepare-once with `Bind`/`Execute`/`Reset` per row — eliminates repeated `sqlite3_prepare_v2` calls |
+| `CustomMods.cpp` | `CustomModPostDefines` ROWID lookup | `'%s'` → `?` bind for `Type` |
+
+**Engine internals note:** `Database::SingleResult` auto-steps in `SetCommand()` (binary confirmed: offset +16 is `m_bSingleQuery`, checked before calling `Results::Step()` internally). This means parameterized queries requiring `Bind()` before `Step()` must use `Database::Results` instead of `Database::SingleResult`.
 
 ## Performance Awareness
 
@@ -207,4 +234,6 @@ None are showstoppers. The project's SQL is straightforward — mostly single-ta
 
 ## Summary
 
-The project's SQL is clean, conservative, and fully compatible with the engine's SQLite 3.7.17. The SQLite version cannot be upgraded because it is statically compiled into the precompiled engine DLL. All parameterizable concatenated queries have been converted. An `ANALYZE` call has been added to ensure post-mod indexes are visible to the query planner.
+The project's SQL is clean, conservative, and fully compatible with the engine's SQLite 3.7.17. The SQLite version cannot be upgraded because it is statically compiled into the precompiled engine DLL (`CvGameDatabaseWin32Final Release.dll`), for which no source code exists — confirmed by both binary analysis and the Civilization V Recovery Project archive. A replacement DLL is not feasible due to complex ABI dependencies.
+
+All parameterizable queries have been converted — both in Lua (5 `DB.Query` calls) and C++ (9 `sprintf_s` sites). The `DatabaseRemapper` UPDATE loop now uses a prepare-once pattern instead of per-row SQL compilation. An `ANALYZE` call has been added to ensure post-mod indexes are visible to the query planner.
