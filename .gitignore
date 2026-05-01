@@ -18,7 +18,6 @@
 !*.def
 !*.dge
 !*.dll
-!*.pdb
 !*.filters
 !*.fsmxml
 !*.ftsxml
@@ -58,9 +57,10 @@ Build/
 Packages/
 Output/
 
-#ignore clang build intermediates
+#ignore clang build intermediates and outputs
 clang-build/
 clang-output/
+.clang-tidy-outputs/
 
 #ignore output from any other IDEs/tools
 .idea/
@@ -68,3 +68,6 @@ clang-output/
 #do not ignore lua-language-server configuration (LuaCATS)
 !.luacheckrc
 !.luarc.json
+
+#ignore third party dependencies
+Dependencies
