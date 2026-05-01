@@ -373,6 +373,12 @@ jobs:
           name: VP_Clang_Release_${{ needs.get-version.outputs.version }}
           path: 'clang-output\Release'
 
+      - name: Create release symbols artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: VP_Clang_Release_Symbols_${{ needs.get-version.outputs.version }}
+          path: 'clang-output\Release\*.pdb'
+
   build-msvc:
     needs: [get-version, detect-changes, setup]
     if: |
@@ -692,5 +698,11 @@ jobs:
         with:
           name: VP_MSVC_Release_${{ needs.get-version.outputs.version }}
           path: 'BuildOutput/Release'
+
+      - name: Create msvc release symbols artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: VP_MSVC_Release_Symbols_${{ needs.get-version.outputs.version }}
+          path: 'BuildOutput/Release/*.pdb'
 
 

@@ -456,6 +456,8 @@ def copy_dll_and_pdb(config: str, destination: Path):
     dll_path = output_dir / "CvGameCore_Expansion2.dll"
     pdb_path = output_dir / "CvGameCore_Expansion2.pdb"
 
+    destination.mkdir(parents=True, exist_ok=True)
+
     if dll_path.exists():
         shutil.copy2(dll_path, destination / "CvGameCore_Expansion2.dll")
         print(f"  Copied DLL to: {destination}")
@@ -470,20 +472,27 @@ def copy_dll_and_pdb(config: str, destination: Path):
 
 
 def copy_release_dll_to_mod(is_43_civ: bool = False):
-    """Copy the release DLL to the appropriate mod folder."""
+    """Copy the release DLL and PDB to the appropriate mod folder."""
     output_dir = PROJECT_DIR / "clang-output" / "Release"
     dll_path = output_dir / "CvGameCore_Expansion2.dll"
+    pdb_path = output_dir / "CvGameCore_Expansion2.pdb"
 
     if is_43_civ:
-        destination = PROJECT_DIR / "(3b) 43 Civs Community Patch" / "CvGameCore_Expansion2.dll"
+        dest_dir = PROJECT_DIR / "(3b) 43 Civs Community Patch"
     else:
-        destination = PROJECT_DIR / "(1) Community Patch" / "CvGameCore_Expansion2.dll"
+        dest_dir = PROJECT_DIR / "(1) Community Patch"
 
     if dll_path.exists():
-        shutil.copy2(dll_path, destination)
-        print(f"  Copied release DLL to: {destination}")
+        shutil.copy2(dll_path, dest_dir / "CvGameCore_Expansion2.dll")
+        print(f"  Copied release DLL to: {dest_dir}")
     else:
         print(f"  WARNING: Release DLL not found at {dll_path}")
+
+    if pdb_path.exists():
+        shutil.copy2(pdb_path, dest_dir / "CvGameCore_Expansion2.pdb")
+        print(f"  Copied release PDB to: {dest_dir}")
+    else:
+        print(f"  WARNING: Release PDB not found at {pdb_path}")
 
 
 def cleanup_build_folders():
@@ -847,6 +856,7 @@ def main():
         if not build_dll('release'):
             raise RuntimeError("Release build failed")
         copy_release_dll_to_mod(is_43_civ=False)
+        copy_dll_and_pdb('release', standard_folder / "Release")
 
         print("\n  Building Debug configuration...")
         if not build_dll('debug'):
@@ -866,6 +876,7 @@ def main():
         if not build_dll('release'):
             raise RuntimeError("43 Civ Release build failed")
         copy_release_dll_to_mod(is_43_civ=True)
+        copy_dll_and_pdb('release', civ43_folder / "Release")
 
         print("\n  Building Debug configuration (43 Civ)...")
         if not build_dll('debug'):

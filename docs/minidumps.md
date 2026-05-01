@@ -8,6 +8,7 @@ A minidump (crash dump) is a diagnostic file that captures the state of the game
 - [Locating Minidump Files](#locating-minidump-files)
 - [Filename Format](#filename-format)
 - [Version String Format](#version-string-format)
+- [Obtaining Symbol Files (PDB)](#obtaining-symbol-files-pdb)
 - [Analyzing Minidumps](#analyzing-minidumps)
   - [Using Visual Studio](#using-visual-studio)
   - [Using WinDbg](#using-windbg)
@@ -121,11 +122,26 @@ This allows developers to immediately know:
 3. **Game log** - Printed at startup: `"Gamecore was built from git version Release-5.1-3-gabc123d Clean"`
 4. **WinDbg output** - Visible when analyzing the dump with `!analyze -v`
 
+## Obtaining Symbol Files (PDB)
+
+Symbol files (`.pdb`) are essential for meaningful minidump analysis. Without matching PDB files, you'll only see raw memory addresses instead of function names, source files, and line numbers.
+
+**Where to find PDB files:**
+
+| Source | Contains | How to Get |
+|--------|----------|------------|
+| **Installer** | Release PDB for standard build | After installing, find `CvGameCore_Expansion2.pdb` alongside the DLL in your MODS folder: `Documents\My Games\Sid Meier's Civilization 5\MODS\(1) Community Patch\` |
+| **Debug.zip** (GitHub Release) | Debug DLL+PDB (Standard & 43 Civ), Release DLL+PDB (in `Release/` subfolder) | Download from the [Releases page](https://github.com/LoneGazebo/Community-Patch-DLL/releases) |
+| **CI Artifacts** | Release and Debug PDB for both Clang and MSVC builds | Download from the GitHub Actions build for the specific commit (look for `VP_Clang_Release_Symbols_*` or `VP_MSVC_Release_Symbols_*` artifacts) |
+| **Local Build** | PDB for your build | `BuildOutput\Release\` (MSVC) or `clang-output\Release\` (Clang) after building |
+
+**Important:** The PDB file must match the exact build of the DLL. A PDB from a different commit or build configuration will not work correctly. Check the version string in the minidump filename to identify which release you need symbols for.
+
 ## Analyzing Minidumps
 
 ### Using Visual Studio
 
-Visual Studio can open and analyze minidump files, but may have limitations with Release builds or when debug symbols (PDB files) are not available.
+Visual Studio can open and analyze minidump files.
 
 **Steps:**
 1. Open Visual Studio (2008, 2013, 2019, or 2022)
@@ -135,10 +151,10 @@ Visual Studio can open and analyze minidump files, but may have limitations with
 5. Examine the **Call Stack** window to see where the crash occurred
 6. Use the **Autos** or **Locals** windows to inspect variable values
 
-**Limitations:**
-- May require matching PDB files (symbol files) from the exact build
-- Some Release builds may have limited information due to optimizations
-- Visual Studio may refuse to load some dumps
+**If symbols aren't loading automatically**, set the symbol path:
+- Debug → Options → Debugging → Symbols
+- Add the folder containing the matching `CvGameCore_Expansion2.pdb`
+- Or use the installed PDB from your MODS folder (see [Obtaining Symbol Files](#obtaining-symbol-files-pdb) above)
 
 ### Using WinDbg
 
