@@ -20,8 +20,8 @@ git config user.email "69278611+JohnsterID@users.noreply.github.com"
   - Extract so that `v90-dependencies/Dependencies/` lands at `./Dependencies/`
   - Contains: `v7.0a_include/`, `v7.0a_lib/`, `vc9_include/`, `vc9_lib/`
 - **System packages:** `clang lld` (via `sudo apt-get install -y clang lld`)
-- **LLVM 21.1.8:** https://github.com/llvm/llvm-project/releases/download/llvmorg-21.1.8/LLVM-21.1.8-Linux-X64.tar.xz
-  - Extract to `/tmp/LLVM-21.1.8-Linux-X64`
+- **LLVM 22.1.4:** https://github.com/llvm/llvm-project/releases/download/llvmorg-22.1.4/LLVM-22.1.4-Linux-X64.tar.xz
+  - Extract to `/tmp/LLVM-22.1.4-Linux-X64`
   - The build script defaults to this path via `LLVM_PATH` env var
 
 ### Build Steps
@@ -39,7 +39,7 @@ shutil.copytree('/tmp/v90-dep-extract/v90-dependencies/Dependencies',
 python3 fix_header_case_issues.py
 
 # 3. Build (run sequentially to avoid OOM -- parallel builds crash the session)
-export LLVM_PATH=/tmp/LLVM-21.1.8-Linux-X64
+export LLVM_PATH=/tmp/LLVM-22.1.4-Linux-X64
 python3 build_vp_clang_linux.py --config debug
 python3 build_vp_clang_linux.py --config release
 ```
@@ -54,25 +54,38 @@ python3 build_vp_clang_linux.py --config release
 
 ---
 
-## Known Build Warnings (clang-linux, as of 2026-05-01)
+## Known Build Warnings (clang-linux, LLVM 22.1.4, as of 2026-05-02)
 
-Warnings are **identical** between Debug and Release (1,104 total). All are pre-existing.
+Warnings are **identical** between Debug and Release (1,276 total). All are pre-existing.
 
 ### Compiler Warnings
 | Count | Warning | Location | Notes |
 |-------|---------|----------|-------|
 | 1,042 | `-Woverloaded-virtual` | All files (via PCH) | 7 virtual functions hide overloaded base versions in `ICvNetMessageHandler2`, `ICvGame2`, `CvPlayerTechs`, `CvPlayerPolicies`, `CvCityStrategyAI`, `CvWonderProductionAI` |
-| 4 | `-Wmisleading-indentation` | `CvMinorCivAI.cpp:18558,18564,18570`; `CvUnit.cpp:28626` | **Actionable** -- potential logic bugs |
-| 15 | `-Wunused-parameter` | Various files | Low priority |
+| 3 | `-Wdangling-else` | `CvTacticalAI.cpp:11748,11754,11760` | **New in 22.1.4** -- ambiguous if/else nesting (code smell, not a logic bug) |
+| 1 | `-Wmisleading-indentation` | `CvUnit.cpp:28921` | Mixed tab/space indent |
+| 1 | `-Wmissing-field-initializers` | `CvInfos.cpp:416` | `bIsLocalizedText` field |
+| 23 | `-Wunused-parameter` | Various Dll interface files | Low priority |
 | 2 | `-Wsign-compare` | `CvWorldBuilderMapLoader.cpp:975-976` | `uint` vs `int` |
-| 1 | `-Wmissing-field-initializers` | Unknown | `bIsLocalizedText` field |
 
 ### Linker Warnings
 | Warning | Cause | Impact |
 |---------|-------|--------|
-| `LNK4099` (28x) | No PDB for precompiled libs (`FireWorksWin32.obj`, `CvGameCoreDLLUtilWin32.lib`, `CvWorldBuilderMapWin32.obj`, `FLuaWin32.lib`) | None -- expected for third-party precompiled objects |
+| `LNK4099` (28x) | No PDB for precompiled libs | None -- expected |
 | `duplicate symbol: CvAssertDlg` | `clang.obj` overlap | Tolerated by `/FORCE:MULTIPLE` |
-| `undefined symbol: operator delete(void*, unsigned int)` and `operator delete[](void*, unsigned int)` | Sized deallocation (C++14) not in VC9 CRT; from `CvLuaCity.obj` | Tolerated by `/FORCE:UNRESOLVED` |
+| `duplicate symbol: std::swap<SUnitIDValueContainer>` (171x) | Template instantiation in multiple TUs | **New in 22.1.4** -- tolerated by `/FORCE:MULTIPLE` |
+| `undefined symbol: operator delete(void*, unsigned int)` (2x) | Sized deallocation (C++14) not in VC9 CRT | Tolerated by `/FORCE:UNRESOLVED` |
+
+### Clang Static Analyzer Results (LLVM 22.1.4)
+Run via `python3 build_vp_clang_linux.py --config debug --analyze`:
+| Count | Check | Notes |
+|-------|-------|-------|
+| 56 | `core.CallAndMessage` (null deref) | ~14 real, rest ASSERT-protected or contract-enforced |
+| 5 | `core.DivideZero` | 1 real (fraction), rest ASSERT-guarded |
+| 4 | `core.uninitialized.UndefReturn` | Via header inlines -- marginal |
+| 1 | `core.NullDereference` | CvBitfield.h -- marginal |
+| 1 | `cplusplus.NewDelete` | LinkedList.h -- needs context investigation |
+| ~60 | `deadcode.DeadStores` | Code quality, not crash risk |
 
 ### False Positives in `grep "error:"`
 Lines containing `error:` in the logs are **not actual errors** -- they are `>>>` reference lines inside `lld-link: warning:` messages, showing which destructor sites reference the undefined sized `operator delete`. Both builds link successfully.

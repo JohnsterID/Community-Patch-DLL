@@ -75,8 +75,8 @@ except ImportError:
     sys.exit(1)
 
 # LLVM tools paths
-CLANG_TIDY = "/tmp/LLVM-21.1.8-Linux-X64/bin/clang-tidy"
-CLANG_APPLY_REPLACEMENTS = "/tmp/LLVM-21.1.8-Linux-X64/bin/clang-apply-replacements"
+CLANG_TIDY = "/tmp/LLVM-22.1.4-Linux-X64/bin/clang-tidy"
+CLANG_APPLY_REPLACEMENTS = "/tmp/LLVM-22.1.4-Linux-X64/bin/clang-apply-replacements"
 
 # Proven checks from clang-tidy_notes.txt
 PROVEN_CHECKS = [
