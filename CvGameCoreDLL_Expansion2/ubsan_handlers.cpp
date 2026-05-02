@@ -180,13 +180,15 @@ static void formatValue(char* buffer, size_t bufSize, const TypeDescriptor* type
             if (bits <= 32) {
                 sprintf_s(buffer, bufSize, "%d", (int)(intptr_t)value);
             } else {
-                sprintf_s(buffer, bufSize, "%lld", (long long)(intptr_t)value);
+                // On 32-bit builds sizeof(ValueHandle)==4, so 64-bit values are passed by pointer
+                sprintf_s(buffer, bufSize, "%lld", *(long long*)value);
             }
         } else {
             if (bits <= 32) {
                 sprintf_s(buffer, bufSize, "%u", (unsigned int)value);
             } else {
-                sprintf_s(buffer, bufSize, "%llu", (unsigned long long)value);
+                // On 32-bit builds sizeof(ValueHandle)==4, so 64-bit values are passed by pointer
+                sprintf_s(buffer, bufSize, "%llu", *(unsigned long long*)value);
             }
         }
     } else if (type->isFloat()) {
