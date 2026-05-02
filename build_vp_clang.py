@@ -330,6 +330,8 @@ def build_cl_config_args(config: Config) -> list[str]:
     # UBSan for Debug builds (using custom VS2008-compatible handlers in ubsan_handlers.cpp)
     if get_sanitizer(config) == Sanitizer.UBSAN:
         args.append('-fsanitize=undefined')
+        args.append('-fsanitize=unsigned-integer-overflow')     # Not UB but catches unintentional unsigned wrapping
+        args.append('-fsanitize=implicit-signed-integer-truncation')  # Catches lossy signed narrowing conversions
         args.append('-fno-sanitize=enum')  # All Civ5 enums are "open" (database-driven values)
         args.append(f'-fsanitize-ignorelist={os.path.join(PROJECT_DIR, "ubsan.ignore")}')
     return args
@@ -428,7 +430,7 @@ def build_cpps(cl: str, cl_args: str, pch_path: Path, build_dir: Path, log: typi
     finally:
        del logs
 
-def link_dll(link: str, link_args: list[str], build_dir: Path, out_dir: Path, log: typing.IO, config: Config):
+def link_dll(link: str, link_args: list[str], build_dir: Path, out_dir: Path, log: typing.IO):
     print('linking dll...')
     start_time = time.time()
     link_response_file_name = build_dir.joinpath('link')
@@ -486,6 +488,6 @@ try:
     build_clang_cpp(cl, cl_args, build_dir, log)
     build_pch(cl, cl_args, pch_path, build_dir, log)
     build_cpps(cl, cl_args, pch_path, build_dir, log)
-    link_dll(link, link_args, build_dir, out_dir, log, config)
+    link_dll(link, link_args, build_dir, out_dir, log)
 finally:
     log.close()

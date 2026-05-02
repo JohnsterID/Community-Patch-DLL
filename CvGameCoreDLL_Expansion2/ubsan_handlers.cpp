@@ -3,10 +3,18 @@
 // without requiring the UCRT-dependent clang runtime library.
 //
 // Based on LLVM compiler-rt/lib/ubsan/ but simplified for VS2008 compatibility.
+//
+// CRITICAL: This entire file must not be instrumented by any sanitizer.
+// The handler functions ARE the sanitizer runtime — instrumenting them causes
+// infinite recursion (e.g. hashLocation's FNV-1a unsigned multiply triggers
+// unsigned-integer-overflow handler which calls hashLocation again).
 
 #include "CvGameCoreDLLPCH.h"
 
 #ifdef VPDEBUG
+
+// Disable all sanitizer instrumentation for every function in this file
+#pragma clang attribute push(__attribute__((no_sanitize("undefined", "unsigned-integer-overflow", "implicit-conversion"))), apply_to = function)
 
 // ============================================================================
 // Type Descriptors (from LLVM ubsan_value.h)
@@ -110,6 +118,13 @@ struct AlignmentAssumptionData {
     SourceLocation loc;
     SourceLocation assumptionLoc;
     const TypeDescriptor* type;
+};
+
+struct ImplicitConversionData {
+    SourceLocation loc;
+    const TypeDescriptor* fromType;
+    const TypeDescriptor* toType;
+    unsigned char kind; // 0=integer truncation, 1=unsigned integer truncation, 2=sign change, 3=signed truncation/sign change
 };
 
 // ============================================================================
@@ -626,6 +641,49 @@ __declspec(dllexport) void __ubsan_handle_alignment_assumption_abort(AlignmentAs
     __ubsan_handle_alignment_assumption(data, ptr, align, offset);
 }
 
+// Implicit conversion (integer truncation, sign change)
+static const char* getImplicitConversionKindName(unsigned char kind)
+{
+    static const char* names[] = {
+        "integer truncation",
+        "unsigned integer truncation",
+        "sign change",
+        "signed truncation or sign change"
+    };
+    return kind < sizeof(names)/sizeof(names[0]) ? names[kind] : "implicit conversion";
+}
+
+__declspec(dllexport) void __ubsan_handle_implicit_conversion(ImplicitConversionData* data, ValueHandle src, ValueHandle dst)
+{
+    if (isDuplicate(data->loc)) return;
+
+    char srcStr[64], dstStr[64];
+    formatValue(srcStr, sizeof(srcStr), data->fromType, src);
+    formatValue(dstStr, sizeof(dstStr), data->toType, dst);
+
+    char buffer[512];
+    sprintf_s(buffer, sizeof(buffer),
+        "\n*** UBSAN: implicit conversion (%s) ***\n    value %s (type %s) changed to %s (type %s)\n    at %s:%u:%u\n",
+        getImplicitConversionKindName(data->kind),
+        srcStr,
+        data->fromType ? data->fromType->typeName : "<unknown>",
+        dstStr,
+        data->toType ? data->toType->typeName : "<unknown>",
+        data->loc.filename ? data->loc.filename : "<unknown>",
+        data->loc.line,
+        data->loc.column);
+
+    ubsan_output(buffer);
+    __debugbreak();
+}
+
+__declspec(dllexport) void __ubsan_handle_implicit_conversion_abort(ImplicitConversionData* data, ValueHandle src, ValueHandle dst)
+{
+    __ubsan_handle_implicit_conversion(data, src, dst);
+}
+
 } // extern "C"
+
+#pragma clang attribute pop
 
 #endif // VPDEBUG
