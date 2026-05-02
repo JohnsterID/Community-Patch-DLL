@@ -849,6 +849,50 @@ __declspec(dllexport) void __ubsan_handle_implicit_conversion_abort(ImplicitConv
     if (impl_implicit_conversion(data, src, dst)) __debugbreak();
 }
 
+// ---- Local out-of-bounds (-fsanitize=local-bounds, added Dec 2024) ----
+// No data struct or source location -- the compiler inserts this as a trap
+// at the point of the violation.  We can only report a generic message.
+
+__declspec(dllexport) void __ubsan_handle_local_out_of_bounds()
+{
+    static volatile LONG s_reported = 0;
+    if (InterlockedCompareExchange(&s_reported, 1, 0) != 0) return;
+    ubsan_output("\n*** UBSAN: local array out of bounds (no source location available) ***\n");
+    ubsan_break();
+}
+
+__declspec(dllexport) void __ubsan_handle_local_out_of_bounds_abort()
+{
+    static volatile LONG s_reported = 0;
+    if (InterlockedCompareExchange(&s_reported, 1, 0) != 0) return;
+    ubsan_output("\n*** UBSAN: local array out of bounds (no source location available) ***\n");
+    __debugbreak();
+}
+
+// ---- Nullability annotations (C _Nonnull; same layout as nonnull_*) ----
+// These fire for _Nonnull-annotated pointers in headers compiled as C.
+// Identical data structs, so we alias directly to the nonnull handlers.
+
+__declspec(dllexport) void __ubsan_handle_nullability_arg(NonNullArgData* data)
+{
+    if (impl_nonnull_arg(data)) ubsan_break();
+}
+
+__declspec(dllexport) void __ubsan_handle_nullability_arg_abort(NonNullArgData* data)
+{
+    if (impl_nonnull_arg(data)) __debugbreak();
+}
+
+__declspec(dllexport) void __ubsan_handle_nullability_return_v1(NonNullReturnData* data, SourceLocation* loc)
+{
+    if (ubsan_report(loc, "null returned from _Nonnull-annotated function", *loc)) ubsan_break();
+}
+
+__declspec(dllexport) void __ubsan_handle_nullability_return_v1_abort(NonNullReturnData* data, SourceLocation* loc)
+{
+    if (ubsan_report(loc, "null returned from _Nonnull-annotated function", *loc)) __debugbreak();
+}
+
 } // extern "C"
 
 
