@@ -3,9 +3,11 @@
 # Note: Enum sanitizer disabled via -fno-sanitize=enum (all Civ5 enums are open/database-driven)
 #
 # Active sanitizers:
-#   -fsanitize=undefined                         (core UB checks)
-#   -fsanitize=unsigned-integer-overflow          (catches unintentional unsigned wrapping)
-#   -fsanitize=implicit-signed-integer-truncation (catches lossy signed narrowing conversions)
+#   -fsanitize=undefined                          (core UB checks)
+#   -fsanitize=unsigned-integer-overflow           (catches unintentional unsigned wrapping)
+#   -fsanitize=implicit-signed-integer-truncation  (lossy signed narrowing: int32->int8 losing high bits)
+#   -fsanitize=implicit-unsigned-integer-truncation (lossy unsigned narrowing: uint32->uint8)
+#   -fsanitize=implicit-integer-sign-change        (sign-confused assignments: large uint -> int)
 #
 # Suppress unsigned-integer-overflow in FNV-1a hash functions where wrapping is intentional.
 # Unsigned modular arithmetic (wrapping mod 2^32) is well-defined in C++ and is

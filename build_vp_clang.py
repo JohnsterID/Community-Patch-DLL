@@ -331,9 +331,11 @@ def build_cl_config_args(config: Config) -> list[str]:
     # UBSan for Debug builds (using custom VS2008-compatible handlers in ubsan_handlers.cpp)
     if get_sanitizer(config) == Sanitizer.UBSAN:
         args.append('-fsanitize=undefined')
-        args.append('-fsanitize=unsigned-integer-overflow')     # Not UB but catches unintentional unsigned wrapping
-        args.append('-fsanitize=implicit-signed-integer-truncation')  # Catches lossy signed narrowing conversions
-        args.append('-fno-sanitize=enum')  # All Civ5 enums are "open" (database-driven values)
+        args.append('-fsanitize=unsigned-integer-overflow')             # not UB but catches unintentional unsigned wrapping
+        args.append('-fsanitize=implicit-signed-integer-truncation')    # lossy signed narrowing (int32 -> int8 losing high bits)
+        args.append('-fsanitize=implicit-unsigned-integer-truncation')  # lossy unsigned narrowing (uint32 -> uint8)
+        args.append('-fsanitize=implicit-integer-sign-change')          # sign-confused assignments (large uint -> int)
+        args.append('-fno-sanitize=enum')  # all Civ5 enums are "open" (database-driven values)
         args.append(f'-fsanitize-ignorelist={os.path.join(PROJECT_DIR, "ubsan.ignore")}')
     return args
 
