@@ -1,3 +1,63 @@
 # UBSan ignorelist
 # https://clang.llvm.org/docs/SanitizerSpecialCaseList.html
 # Note: Enum sanitizer disabled via -fno-sanitize=enum (all Civ5 enums are open/database-driven)
+#
+# Active sanitizers:
+#   -fsanitize=undefined                         (core UB checks)
+#   -fsanitize=unsigned-integer-overflow          (catches unintentional unsigned wrapping)
+#   -fsanitize=implicit-signed-integer-truncation (catches lossy signed narrowing conversions)
+#
+# Suppress unsigned-integer-overflow in FNV-1a hash functions where wrapping is intentional.
+# Unsigned modular arithmetic (wrapping mod 2^32) is well-defined in C++ and is
+# fundamental to FNV hash distribution — every multiply is designed to overflow.
+[unsigned-integer-overflow]
+# VS2008 STL <xhash> FNV-1a: stdext::_Hash_value<T> (line 57)
+# Used by stdext::hash_map/hash_set — triggered during CacheGameDatabaseData/setInfoTypeFromString
+fun:*_Hash_value*
+# VS2008 STL <functional> FNV-1a: std::tr1::hash<string/wstring>::operator() (lines 1291, 1313)
+# Used by std::tr1::unordered_map — triggered during CvTypes::AcquireTypes
+# Must use src: not fun: — MSVC ABI mangling encodes namespaces with @ not ::
+# (?operator()@?$hash@...@tr1@std@@...), so "tr1::hash" never appears literally
+# in the mangled symbol name; fun:*tr1::hash* is a no-op on this target.
+src:*functional*
+# VS2008 STL <deque>: _Deque_const_iterator::operator+= circular-buffer index arithmetic
+# _Myoff (size_type/unsigned) += difference_type(-1) wraps intentionally for back() and --end().
+# end()._Myoff = N; (end()-1)._Myoff = N + UINT_MAX mod 2^32 = N-1 (correct element address).
+# Triggered via CvPathNodeArray::GetFinalPlot() → std::deque<CvPathNode>::back() (line 203).
+src:*deque*
+# Game code FNV-1a in CvGame.cpp: struct stringHash::operator()
+fun:*stringHash*
+# Game code FNV-1a in CvGlobals.cpp: HashGameDataCombine<T> (game data integrity hash)
+fun:*HashGameDataCombine*
+# CvGame::randRangeInclusive / randRangeExclusive — two's-complement signed range arithmetic
+# (uint)max - (uint)min wraps when min<0 to give correct unsigned range width (max-min).
+# r + (uint)min wraps when min<0 to give correct signed result (r + min).
+# Both wraps are intentional: this is the standard technique for signed-range RNG via uint.
+# Confirmed: AI personality logs show all flavor values clamped correctly to [1,10].
+fun:*randRange*
+# CvRandom.cpp: CvRandom::get LCG advance step (line 109)
+# ullNewSeed = RANDOM_A * m_ullRandomSeed + RANDOM_C where RANDOM_A=1103515245
+# This is the glibc-style LCG; mod 2^64 is the implicit modulus via unsigned overflow.
+src:*CvRandom.cpp*
+# CvRandom.h: hash32 (PCG32 output permutation) and CvSeeder::mixRawAssign (Boost hash_combine)
+# hash32:        state = input * 747796405u + 2891336453u  (L22, overflows for input >= 6)
+#                word  = (...) * 277803737u                (L23, virtually always overflows)
+# mixRawAssign:  value ^= otherValue + 0x9e3779b9 + (value<<6) + (value>>2)  (addition chain)
+# All arithmetic here is intentional modular arithmetic for hash/RNG distribution.
+# Covers inline expansion in all 12+ TUs that include CvRandom.h.
+src:*CvRandom.h*
+# CvTacticalAI.h: four Boost hash_combine-style hash functors, all using the same pattern:
+#   h ^= val + 0x9e3779b9 + (h << 6) + (h >> 2)
+# where 0x9e3779b9 = 2^32/phi (golden ratio constant, same as Boost hash_combine).
+# The additions intentionally overflow modulo 2^32 for uniform hash distribution.
+#   SPathFinderStartPosHash::hash_combine  (line 804)
+#   SIntPairHash::hash_combine             (line 826)
+#   DefendKeyHash::operator()              (lines 1006-1008)  <- reported fire
+#   AttackKeyHash::operator()              (lines 1042-1047)
+# Confirmed: DefendKeyHash fired with iDefenderId=1207, iPlotId=6493, iPrevDamage=0.
+#   h=1207, after mixing iPlotId: h=2654521012; then 0x9e3779b9 + (h<<6 mod 2^32)
+#   = 2654435769 + 2385620224 = 5040055993 > UINT_MAX -- intentional hash avalanche.
+# Log: India (player 10) turn 4, unit 1207 at 93:50 (plot index 6493),
+#   HomelandAI -> PerformRangedOpportunityAttack -> FindBestUnitAssignments
+#   -> CDangerCache::findDanger -> DefendKeyHash::operator().
+src:*CvTacticalAI.h*
