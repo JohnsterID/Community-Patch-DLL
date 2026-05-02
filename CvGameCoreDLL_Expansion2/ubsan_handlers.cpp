@@ -6,12 +6,14 @@
 //
 // CRITICAL: This entire file must not be instrumented by any sanitizer.
 // The handler functions ARE the sanitizer runtime — instrumenting them causes
-// infinite recursion (e.g. hashLocation's FNV-1a unsigned multiply triggers
-// unsigned-integer-overflow handler which calls hashLocation again).
+// infinite recursion (e.g. FNV-1a hash arithmetic triggers unsigned-integer-
+// overflow handler which calls the hash again).
 
 #include "CvGameCoreDLLPCH.h"
 
 #ifdef VPDEBUG
+
+#include <dbghelp.h>    // CaptureStackBackTrace, SymFromAddr (stack traces)
 
 // Disable all sanitizer instrumentation for every function in this file
 #pragma clang attribute push(__attribute__((no_sanitize("undefined", "unsigned-integer-overflow", "implicit-conversion"))), apply_to = function)
@@ -216,16 +218,108 @@ static void formatValue(char* buffer, size_t bufSize, const TypeDescriptor* type
 // Core Reporting
 // ============================================================================
 
+// ---- Log file ----
+// Written to ubsan.log in the process's working directory (same folder as the
+// DLL/EXE).  Persists across multiple violation fires in the same session;
+// survives debugger output-window clears.
+
+static volatile LONG g_logInitDone = 0;
+static FILE*         g_ubsanLog    = NULL;
+
+static void ubsan_ensure_log()
+{
+    if (InterlockedCompareExchange(&g_logInitDone, 1, 0) == 0) {
+        g_ubsanLog = fopen("ubsan.log", "a");
+        if (g_ubsanLog) {
+            fprintf(g_ubsanLog, "\n=== UBSan session started ===\n");
+            fflush(g_ubsanLog);
+        }
+    }
+}
+
+// ---- Stack traces via Windows DbgHelp ----
+// CaptureStackBackTrace lives in kernel32 (no extra import needed).
+// SymFromAddr lives in dbghelp.dll (linked via dbghelp.lib in DEFAULT_LIBS).
+// SymInitialize must be called once before use; we do it lazily on first report.
+
+static volatile LONG g_symInitDone = 0;
+
+static void ensureSymInit()
+{
+    if (InterlockedCompareExchange(&g_symInitDone, 1, 0) == 0) {
+        SymSetOptions(SYMOPT_LOAD_LINES | SYMOPT_UNDNAME | SYMOPT_DEFERRED_LOADS);
+        SymInitialize(GetCurrentProcess(), NULL, TRUE);
+    }
+}
+
+// Appends a stack trace to buf (in-place).
+// SkipFrames=3 skips CaptureStackBackTrace + appendStackTrace + ubsan_output,
+// so the first visible frame (#0) is the reporting helper or impl_ function —
+// which names the check type — followed by the game code frames.
+static void appendStackTrace(char* buf, size_t bufSize)
+{
+    ensureSymInit();
+
+    void*  frames[24];
+    memset(frames, 0, sizeof(frames));
+    USHORT count = CaptureStackBackTrace(3, 24, frames, NULL);
+
+    char symBuf[sizeof(SYMBOL_INFO) + 256];
+    SYMBOL_INFO* sym = (SYMBOL_INFO*)symBuf;
+
+    size_t used = strlen(buf);
+    const char* hdr = "  Stack:\n";
+    size_t hlen = strlen(hdr);
+    if (used + hlen < bufSize) {
+        memcpy(buf + used, hdr, hlen);
+        used += hlen;
+        buf[used] = '\0';
+    }
+
+    for (USHORT i = 0; i < count && used + 160 < bufSize; ++i) {
+        memset(symBuf, 0, sizeof(symBuf));
+        sym->SizeOfStruct = sizeof(SYMBOL_INFO);
+        sym->MaxNameLen   = 255;
+
+        char line[192];
+        DWORD64 addr = (DWORD64)(DWORD)(uintptr_t)frames[i];
+        if (addr && SymFromAddr(GetCurrentProcess(), addr, 0, sym))
+            sprintf_s(line, sizeof(line), "    #%-2u  %s\n", (unsigned)i, sym->Name);
+        else
+            sprintf_s(line, sizeof(line), "    #%-2u  0x%p\n", (unsigned)i, frames[i]);
+
+        size_t llen = strlen(line);
+        if (used + llen < bufSize) {
+            memcpy(buf + used, line, llen);
+            used += llen;
+            buf[used] = '\0';
+        }
+    }
+}
+
+// ---- Output ----
+
 static void ubsan_output(const char* message)
 {
-    OutputDebugStringA(message);
-    fprintf(stderr, "%s", message);
+    ubsan_ensure_log();
+
+    // Build message + stack trace in a local buffer (stack alloc, debug-only).
+    char full[2048];
+    sprintf_s(full, sizeof(full), "%s", message);
+    appendStackTrace(full, sizeof(full));
+
+    OutputDebugStringA(full);
+    fprintf(stderr, "%s", full);
     fflush(stderr);
+    if (g_ubsanLog) {
+        fprintf(g_ubsanLog, "%s", full);
+        fflush(g_ubsanLog);
+    }
 }
 
 // Break into the debugger only when one is attached.
 // Used by recoverable handlers so the game continues running without a debugger
-// (accumulating all violations in output) while still breaking when debugging.
+// (accumulating all violations in the log) while still breaking when debugging.
 static void ubsan_break()
 {
     if (IsDebuggerPresent())

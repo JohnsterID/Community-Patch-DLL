@@ -57,6 +57,7 @@ DEFAULT_LIBS = [
     'uuid.lib',
     'odbc32.lib',
     'odbccp32.lib',
+    'dbghelp.lib',     # CaptureStackBackTrace + SymFromAddr for UBSan stack traces
 ]
 DEF_FILE = 'CvGameCoreDLL_Expansion2\\CvGameCoreDLL.def'
 INCLUDE_DIRS = [
