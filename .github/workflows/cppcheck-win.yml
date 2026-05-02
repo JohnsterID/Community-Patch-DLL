@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
 
 env:
-  CPPCHECK_VERSION: "2.18.0"
+  CPPCHECK_VERSION: "2.20.0"
 
 jobs:
   setup:
