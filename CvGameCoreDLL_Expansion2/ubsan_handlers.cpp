@@ -98,7 +98,10 @@ struct PointerOverflowData {
     SourceLocation loc;
 };
 
-struct FloatCastOverflowData {
+// Legacy v1 layout emitted by very old clang (no source location):
+//   struct FloatCastOverflowData { const TypeDescriptor *FromType, *ToType; };
+// Current v2 layout (with source location) — always emitted by modern clang:
+struct FloatCastOverflowDataV2 {
     SourceLocation loc;
     const TypeDescriptor* fromType;
     const TypeDescriptor* toType;
@@ -124,43 +127,45 @@ struct ImplicitConversionData {
     SourceLocation loc;
     const TypeDescriptor* fromType;
     const TypeDescriptor* toType;
-    unsigned char kind; // 0=integer truncation, 1=unsigned integer truncation, 2=sign change, 3=signed truncation/sign change
+    // ImplicitConversionCheckKind (keep in sync with LLVM CGExprScalar.cpp):
+    //   0 = ICCK_IntegerTruncation (legacy clang 7)
+    //   1 = ICCK_UnsignedIntegerTruncation
+    //   2 = ICCK_SignedIntegerTruncation
+    //   3 = ICCK_IntegerSignChange
+    //   4 = ICCK_SignedIntegerTruncationOrSignChange
+    unsigned char kind;
+    unsigned int BitfieldBits; // non-zero when source is a bitfield of this width
 };
 
 // ============================================================================
-// Deduplication (simple hash set to avoid reporting same error repeatedly)
+// Deduplication
 // ============================================================================
+//
+// Each UBSan data struct (OverflowData, TypeMismatchData, etc.) is emitted by
+// the compiler as a static const local variable — its address is permanently
+// unique per source violation site.  Using the data pointer as key gives:
+//   • No false collisions (unlike hashing filename+line+col strings)
+//   • No string iteration (O(1) instead of O(filename length))
+//   • Thread safety via InterlockedCompareExchange (Windows XP+, no CRT needed)
+//
+// Slot collision (two distinct sites mapping to the same index) means the
+// secondary site loses dedup and fires repeatedly — acceptable in a 1024-slot
+// table with the handful of active sites a typical debug session produces.
 
 static const size_t DEDUP_TABLE_SIZE = 1024;
-static unsigned int g_dedupTable[DEDUP_TABLE_SIZE] = {0};
+static volatile LONG g_dedupTable[DEDUP_TABLE_SIZE];
 
-static unsigned int hashLocation(const SourceLocation& loc)
+// Returns true (duplicate — suppress) if this data pointer has already been
+// reported. Returns false (new — report) and claims the slot otherwise.
+static bool isDuplicate(const void* data)
 {
-    // Simple FNV-1a hash
-    unsigned int hash = 2166136261u;
-    if (loc.filename) {
-        for (const char* p = loc.filename; *p; ++p) {
-            hash ^= (unsigned char)*p;
-            hash *= 16777619u;
-        }
-    }
-    hash ^= loc.line;
-    hash *= 16777619u;
-    hash ^= loc.column;
-    hash *= 16777619u;
-    return hash;
-}
-
-static bool isDuplicate(const SourceLocation& loc)
-{
-    unsigned int hash = hashLocation(loc);
-    size_t index = hash % DEDUP_TABLE_SIZE;
-    
-    if (g_dedupTable[index] == hash) {
-        return true;  // Already reported
-    }
-    g_dedupTable[index] = hash;
-    return false;
+    LONG key   = (LONG)(uintptr_t)data;
+    size_t idx = ((uintptr_t)data >> 4) % DEDUP_TABLE_SIZE;
+    // CAS: if slot is 0 (empty), write key and return 0 → first report → NOT dup.
+    //      if slot already holds key, return key                → IS dup.
+    //      if slot holds another key (collision), return other  → NOT dup (report again).
+    LONG prev  = InterlockedCompareExchange(&g_dedupTable[idx], key, 0);
+    return prev == key;
 }
 
 // ============================================================================
@@ -218,33 +223,43 @@ static void ubsan_output(const char* message)
     fflush(stderr);
 }
 
-static void ubsan_report(const char* errorType, const SourceLocation& loc, bool doBreak = true)
+// Break into the debugger only when one is attached.
+// Used by recoverable handlers so the game continues running without a debugger
+// (accumulating all violations in output) while still breaking when debugging.
+static void ubsan_break()
 {
-    if (isDuplicate(loc)) return;
-    
+    if (IsDebuggerPresent())
+        __debugbreak();
+}
+
+// Returns true if the violation was newly reported (caller should break).
+// Returns false if it was a duplicate (caller should silently continue).
+static bool ubsan_report(const void* key, const char* errorType, const SourceLocation& loc)
+{
+    if (isDuplicate(key)) return false;
+
     char buffer[512];
-    sprintf_s(buffer, sizeof(buffer), 
+    sprintf_s(buffer, sizeof(buffer),
         "\n*** UBSAN: %s ***\n    at %s:%u:%u\n",
         errorType,
         loc.filename ? loc.filename : "<unknown>",
         loc.line,
         loc.column);
-    
+
     ubsan_output(buffer);
-    if (doBreak) __debugbreak();
+    return true;
 }
 
-static void ubsan_report_with_value(const char* errorType, const SourceLocation& loc,
-                                     const char* desc, const TypeDescriptor* type, ValueHandle value,
-                                     bool doBreak = true)
+static bool ubsan_report_with_value(const void* key, const char* errorType, const SourceLocation& loc,
+                                     const char* desc, const TypeDescriptor* type, ValueHandle value)
 {
-    if (isDuplicate(loc)) return;
-    
+    if (isDuplicate(key)) return false;
+
     char valStr[64];
     formatValue(valStr, sizeof(valStr), type, value);
-    
+
     char buffer[512];
-    sprintf_s(buffer, sizeof(buffer), 
+    sprintf_s(buffer, sizeof(buffer),
         "\n*** UBSAN: %s ***\n    %s: %s (type: %s)\n    at %s:%u:%u\n",
         errorType,
         desc,
@@ -253,23 +268,22 @@ static void ubsan_report_with_value(const char* errorType, const SourceLocation&
         loc.filename ? loc.filename : "<unknown>",
         loc.line,
         loc.column);
-    
+
     ubsan_output(buffer);
-    if (doBreak) __debugbreak();
+    return true;
 }
 
-static void ubsan_report_overflow(const char* op, const SourceLocation& loc,
-                                   const TypeDescriptor* type, ValueHandle lhs, ValueHandle rhs,
-                                   bool doBreak = true)
+static bool ubsan_report_overflow(const void* key, const char* op, const SourceLocation& loc,
+                                   const TypeDescriptor* type, ValueHandle lhs, ValueHandle rhs)
 {
-    if (isDuplicate(loc)) return;
-    
+    if (isDuplicate(key)) return false;
+
     char lhsStr[64], rhsStr[64];
     formatValue(lhsStr, sizeof(lhsStr), type, lhs);
     formatValue(rhsStr, sizeof(rhsStr), type, rhs);
-    
+
     char buffer[512];
-    sprintf_s(buffer, sizeof(buffer), 
+    sprintf_s(buffer, sizeof(buffer),
         "\n*** UBSAN: %s overflow ***\n    %s %s %s cannot be represented in type %s\n    at %s:%u:%u\n",
         type && type->isSigned() ? "signed integer" : "unsigned integer",
         lhsStr, op, rhsStr,
@@ -277,9 +291,9 @@ static void ubsan_report_overflow(const char* op, const SourceLocation& loc,
         loc.filename ? loc.filename : "<unknown>",
         loc.line,
         loc.column);
-    
+
     ubsan_output(buffer);
-    if (doBreak) __debugbreak();
+    return true;
 }
 
 // ============================================================================
@@ -288,7 +302,8 @@ static void ubsan_report_overflow(const char* op, const SourceLocation& loc,
 
 extern "C" {
 
-// Type check kinds for type mismatch
+// ---- Type mismatch ----
+
 static const char* getTypeCheckKindName(unsigned char kind)
 {
     static const char* names[] = {
@@ -300,78 +315,79 @@ static const char* getTypeCheckKindName(unsigned char kind)
     return kind < sizeof(names)/sizeof(names[0]) ? names[kind] : "access of";
 }
 
-// Type mismatch (null pointer, misaligned, wrong vptr)
-__declspec(dllexport) void __ubsan_handle_type_mismatch_v1(TypeMismatchData* data, ValueHandle pointer)
+static bool impl_type_mismatch(TypeMismatchData* data, ValueHandle pointer)
 {
-    if (isDuplicate(data->loc)) return;
-    
-    const char* typeName = data->type ? data->type->typeName : "<unknown>";
+    if (isDuplicate(data)) return false;
+    const char* typeName  = data->type ? data->type->typeName : "<unknown>";
     const char* checkKind = getTypeCheckKindName(data->typeCheckKind);
-    
     char buffer[512];
     if (!pointer) {
         sprintf_s(buffer, sizeof(buffer),
             "\n*** UBSAN: null pointer access ***\n    %s null pointer of type %s\n    at %s:%u:%u\n",
             checkKind, typeName, data->loc.filename, data->loc.line, data->loc.column);
-    } else if ((pointer & ((1 << data->logAlignment) - 1)) != 0) {
+    } else if ((pointer & ((1u << data->logAlignment) - 1u)) != 0) {
         sprintf_s(buffer, sizeof(buffer),
-            "\n*** UBSAN: misaligned address ***\n    %s misaligned address 0x%p for type %s (requires %u byte alignment)\n    at %s:%u:%u\n",
+            "\n*** UBSAN: misaligned address ***\n    %s misaligned address 0x%p for type %s (requires %u-byte alignment)\n    at %s:%u:%u\n",
             checkKind, (void*)pointer, typeName, 1u << data->logAlignment,
             data->loc.filename, data->loc.line, data->loc.column);
     } else {
         sprintf_s(buffer, sizeof(buffer),
             "\n*** UBSAN: type mismatch ***\n    %s address 0x%p with insufficient space for type %s\n    at %s:%u:%u\n",
-            checkKind, (void*)pointer, typeName, data->loc.filename, data->loc.line, data->loc.column);
+            checkKind, (void*)pointer, typeName,
+            data->loc.filename, data->loc.line, data->loc.column);
     }
-    
     ubsan_output(buffer);
-    __debugbreak();
+    return true;
+}
+
+__declspec(dllexport) void __ubsan_handle_type_mismatch_v1(TypeMismatchData* data, ValueHandle pointer)
+{
+    if (impl_type_mismatch(data, pointer)) ubsan_break();
 }
 
 __declspec(dllexport) void __ubsan_handle_type_mismatch_v1_abort(TypeMismatchData* data, ValueHandle pointer)
 {
-    __ubsan_handle_type_mismatch_v1(data, pointer);
+    if (impl_type_mismatch(data, pointer)) __debugbreak();
 }
 
-// Integer overflow handlers
+// ---- Integer overflow ----
+
 __declspec(dllexport) void __ubsan_handle_add_overflow(OverflowData* data, ValueHandle lhs, ValueHandle rhs)
 {
-    ubsan_report_overflow("+", data->loc, data->type, lhs, rhs);
+    if (ubsan_report_overflow(data, "+", data->loc, data->type, lhs, rhs)) ubsan_break();
 }
 
 __declspec(dllexport) void __ubsan_handle_add_overflow_abort(OverflowData* data, ValueHandle lhs, ValueHandle rhs)
 {
-    __ubsan_handle_add_overflow(data, lhs, rhs);
+    if (ubsan_report_overflow(data, "+", data->loc, data->type, lhs, rhs)) __debugbreak();
 }
 
 __declspec(dllexport) void __ubsan_handle_sub_overflow(OverflowData* data, ValueHandle lhs, ValueHandle rhs)
 {
-    ubsan_report_overflow("-", data->loc, data->type, lhs, rhs);
+    if (ubsan_report_overflow(data, "-", data->loc, data->type, lhs, rhs)) ubsan_break();
 }
 
 __declspec(dllexport) void __ubsan_handle_sub_overflow_abort(OverflowData* data, ValueHandle lhs, ValueHandle rhs)
 {
-    __ubsan_handle_sub_overflow(data, lhs, rhs);
+    if (ubsan_report_overflow(data, "-", data->loc, data->type, lhs, rhs)) __debugbreak();
 }
 
 __declspec(dllexport) void __ubsan_handle_mul_overflow(OverflowData* data, ValueHandle lhs, ValueHandle rhs)
 {
-    ubsan_report_overflow("*", data->loc, data->type, lhs, rhs);
+    if (ubsan_report_overflow(data, "*", data->loc, data->type, lhs, rhs)) ubsan_break();
 }
 
 __declspec(dllexport) void __ubsan_handle_mul_overflow_abort(OverflowData* data, ValueHandle lhs, ValueHandle rhs)
 {
-    __ubsan_handle_mul_overflow(data, lhs, rhs);
+    if (ubsan_report_overflow(data, "*", data->loc, data->type, lhs, rhs)) __debugbreak();
 }
 
-__declspec(dllexport) void __ubsan_handle_divrem_overflow(OverflowData* data, ValueHandle lhs, ValueHandle rhs)
+static bool impl_divrem_overflow(OverflowData* data, ValueHandle lhs, ValueHandle rhs)
 {
-    if (isDuplicate(data->loc)) return;
-    
+    if (isDuplicate(data)) return false;
     char lhsStr[64], rhsStr[64];
     formatValue(lhsStr, sizeof(lhsStr), data->type, lhs);
     formatValue(rhsStr, sizeof(rhsStr), data->type, rhs);
-    
     char buffer[512];
     if (rhs == 0) {
         sprintf_s(buffer, sizeof(buffer),
@@ -383,77 +399,82 @@ __declspec(dllexport) void __ubsan_handle_divrem_overflow(OverflowData* data, Va
             lhsStr, rhsStr, data->type ? data->type->typeName : "<unknown>",
             data->loc.filename, data->loc.line, data->loc.column);
     }
-    
     ubsan_output(buffer);
-    __debugbreak();
+    return true;
+}
+
+__declspec(dllexport) void __ubsan_handle_divrem_overflow(OverflowData* data, ValueHandle lhs, ValueHandle rhs)
+{
+    if (impl_divrem_overflow(data, lhs, rhs)) ubsan_break();
 }
 
 __declspec(dllexport) void __ubsan_handle_divrem_overflow_abort(OverflowData* data, ValueHandle lhs, ValueHandle rhs)
 {
-    __ubsan_handle_divrem_overflow(data, lhs, rhs);
+    if (impl_divrem_overflow(data, lhs, rhs)) __debugbreak();
 }
 
 __declspec(dllexport) void __ubsan_handle_negate_overflow(OverflowData* data, ValueHandle val)
 {
-    ubsan_report_with_value("negation overflow", data->loc, "cannot negate", data->type, val);
+    if (ubsan_report_with_value(data, "negation overflow", data->loc, "cannot negate", data->type, val)) ubsan_break();
 }
 
 __declspec(dllexport) void __ubsan_handle_negate_overflow_abort(OverflowData* data, ValueHandle val)
 {
-    __ubsan_handle_negate_overflow(data, val);
+    if (ubsan_report_with_value(data, "negation overflow", data->loc, "cannot negate", data->type, val)) __debugbreak();
 }
 
-// Shift errors
-__declspec(dllexport) void __ubsan_handle_shift_out_of_bounds(ShiftOutOfBoundsData* data, ValueHandle lhs, ValueHandle rhs)
+// ---- Shift errors ----
+
+static bool impl_shift_out_of_bounds(ShiftOutOfBoundsData* data, ValueHandle lhs, ValueHandle rhs)
 {
-    if (isDuplicate(data->loc)) return;
-    
+    if (isDuplicate(data)) return false;
     char lhsStr[64], rhsStr[64];
     formatValue(lhsStr, sizeof(lhsStr), data->lhsType, lhs);
     formatValue(rhsStr, sizeof(rhsStr), data->rhsType, rhs);
-    
     char buffer[512];
-    sprintf_s(buffer, sizeof(buffer),
-        "\n*** UBSAN: shift out of bounds ***\n    shift amount %s is too large for %s-bit type %s (value: %s)\n    at %s:%u:%u\n",
-        rhsStr, 
-        data->lhsType ? (data->lhsType->isInteger() ? (char[16]){0} : "?") : "?",
-        data->lhsType ? data->lhsType->typeName : "<unknown>",
-        lhsStr,
-        data->loc.filename, data->loc.line, data->loc.column);
-    
-    // Fix: fill in bit width
     if (data->lhsType && data->lhsType->isInteger()) {
         sprintf_s(buffer, sizeof(buffer),
             "\n*** UBSAN: shift out of bounds ***\n    shift amount %s is invalid for %u-bit type %s (value: %s)\n    at %s:%u:%u\n",
-            rhsStr, data->lhsType->getIntBitWidth(),
-            data->lhsType->typeName, lhsStr,
+            rhsStr, data->lhsType->getIntBitWidth(), data->lhsType->typeName, lhsStr,
+            data->loc.filename, data->loc.line, data->loc.column);
+    } else {
+        sprintf_s(buffer, sizeof(buffer),
+            "\n*** UBSAN: shift out of bounds ***\n    shift amount %s is invalid for type %s (value: %s)\n    at %s:%u:%u\n",
+            rhsStr, data->lhsType ? data->lhsType->typeName : "<unknown>", lhsStr,
             data->loc.filename, data->loc.line, data->loc.column);
     }
-    
     ubsan_output(buffer);
-    __debugbreak();
+    return true;
+}
+
+__declspec(dllexport) void __ubsan_handle_shift_out_of_bounds(ShiftOutOfBoundsData* data, ValueHandle lhs, ValueHandle rhs)
+{
+    if (impl_shift_out_of_bounds(data, lhs, rhs)) ubsan_break();
 }
 
 __declspec(dllexport) void __ubsan_handle_shift_out_of_bounds_abort(ShiftOutOfBoundsData* data, ValueHandle lhs, ValueHandle rhs)
 {
-    __ubsan_handle_shift_out_of_bounds(data, lhs, rhs);
+    if (impl_shift_out_of_bounds(data, lhs, rhs)) __debugbreak();
 }
 
-// Array bounds
+// ---- Array bounds ----
+
 __declspec(dllexport) void __ubsan_handle_out_of_bounds(OutOfBoundsData* data, ValueHandle index)
 {
-    ubsan_report_with_value("array index out of bounds", data->loc, "index", data->indexType, index);
+    if (ubsan_report_with_value(data, "array index out of bounds", data->loc, "index", data->indexType, index)) ubsan_break();
 }
 
 __declspec(dllexport) void __ubsan_handle_out_of_bounds_abort(OutOfBoundsData* data, ValueHandle index)
 {
-    __ubsan_handle_out_of_bounds(data, index);
+    if (ubsan_report_with_value(data, "array index out of bounds", data->loc, "index", data->indexType, index)) __debugbreak();
 }
 
-// Unreachable code
+// ---- Unreachable / missing return (UNRECOVERABLE -- always fatal) ----
+
 __declspec(dllexport) void __ubsan_handle_builtin_unreachable(UnreachableData* data)
 {
-    ubsan_report("execution reached __builtin_unreachable()", data->loc);
+    if (ubsan_report(data, "execution reached __builtin_unreachable()", data->loc))
+        __debugbreak();
 }
 
 __declspec(dllexport) void __ubsan_handle_builtin_unreachable_abort(UnreachableData* data)
@@ -461,10 +482,10 @@ __declspec(dllexport) void __ubsan_handle_builtin_unreachable_abort(UnreachableD
     __ubsan_handle_builtin_unreachable(data);
 }
 
-// Missing return
 __declspec(dllexport) void __ubsan_handle_missing_return(UnreachableData* data)
 {
-    ubsan_report("execution reached end of non-void function without returning a value", data->loc);
+    if (ubsan_report(data, "execution reached end of non-void function without returning a value", data->loc))
+        __debugbreak();
 }
 
 __declspec(dllexport) void __ubsan_handle_missing_return_abort(UnreachableData* data)
@@ -472,103 +493,130 @@ __declspec(dllexport) void __ubsan_handle_missing_return_abort(UnreachableData* 
     __ubsan_handle_missing_return(data);
 }
 
-// VLA bound
+// ---- VLA bound ----
+
 __declspec(dllexport) void __ubsan_handle_vla_bound_not_positive(VLABoundData* data, ValueHandle bound)
 {
-    ubsan_report_with_value("variable length array bound is not positive", data->loc, "bound", data->type, bound);
+    if (ubsan_report_with_value(data, "variable length array bound is not positive", data->loc, "bound", data->type, bound)) ubsan_break();
 }
 
 __declspec(dllexport) void __ubsan_handle_vla_bound_not_positive_abort(VLABoundData* data, ValueHandle bound)
 {
-    __ubsan_handle_vla_bound_not_positive(data, bound);
+    if (ubsan_report_with_value(data, "variable length array bound is not positive", data->loc, "bound", data->type, bound)) __debugbreak();
 }
 
-// Float cast overflow
-__declspec(dllexport) void __ubsan_handle_float_cast_overflow(FloatCastOverflowData* data, ValueHandle val)
+// ---- Float cast overflow ----
+// Takes void* to accommodate both legacy v1 (no SourceLocation) and current v2
+// (with SourceLocation) layouts.  Modern clang always emits v2.
+
+static bool impl_float_cast_overflow(void* dataPtr, ValueHandle val)
 {
-    if (isDuplicate(data->loc)) return;
-    
+    FloatCastOverflowDataV2* data = (FloatCastOverflowDataV2*)dataPtr;
+    if (isDuplicate(data)) return false;
     char valStr[64];
     formatValue(valStr, sizeof(valStr), data->fromType, val);
-    
     char buffer[512];
     sprintf_s(buffer, sizeof(buffer),
-        "\n*** UBSAN: float cast overflow ***\n    %s (type %s) is outside the range of representable values of type %s\n    at %s:%u:%u\n",
+        "\n*** UBSAN: float cast overflow ***\n    %s (type %s) is outside the range of type %s\n    at %s:%u:%u\n",
         valStr,
         data->fromType ? data->fromType->typeName : "<unknown>",
-        data->toType ? data->toType->typeName : "<unknown>",
+        data->toType   ? data->toType->typeName   : "<unknown>",
         data->loc.filename, data->loc.line, data->loc.column);
-    
     ubsan_output(buffer);
-    __debugbreak();
+    return true;
 }
 
-__declspec(dllexport) void __ubsan_handle_float_cast_overflow_abort(FloatCastOverflowData* data, ValueHandle val)
+__declspec(dllexport) void __ubsan_handle_float_cast_overflow(void* data, ValueHandle val)
 {
-    __ubsan_handle_float_cast_overflow(data, val);
+    if (impl_float_cast_overflow(data, val)) ubsan_break();
 }
 
-// Load invalid value (bad bool/enum)
+__declspec(dllexport) void __ubsan_handle_float_cast_overflow_abort(void* data, ValueHandle val)
+{
+    if (impl_float_cast_overflow(data, val)) __debugbreak();
+}
+
+// ---- Load of invalid value (bad bool / unscoped enum) ----
+
 __declspec(dllexport) void __ubsan_handle_load_invalid_value(InvalidValueData* data, ValueHandle val)
 {
-    ubsan_report_with_value("load of value outside valid range for type", data->loc, "value", data->type, val);
+    if (ubsan_report_with_value(data, "load of value outside valid range for type", data->loc, "value", data->type, val)) ubsan_break();
 }
 
 __declspec(dllexport) void __ubsan_handle_load_invalid_value_abort(InvalidValueData* data, ValueHandle val)
 {
-    __ubsan_handle_load_invalid_value(data, val);
+    if (ubsan_report_with_value(data, "load of value outside valid range for type", data->loc, "value", data->type, val)) __debugbreak();
 }
 
-// Invalid builtin (e.g., __builtin_clz(0))
+// ---- Invalid builtin (__builtin_ctz/clz(0), __builtin_assume(false)) ----
+
+static bool impl_invalid_builtin(InvalidBuiltinData* data)
+{
+    const char* msg;
+    char buf[96];
+    switch (data->kind) {
+    case 0:  msg = "passing zero to __builtin_ctz(), which is undefined"; break;
+    case 1:  msg = "passing zero to __builtin_clz(), which is undefined"; break;
+    case 2:  msg = "__builtin_assume() evaluated to false";                break;
+    default:
+        sprintf_s(buf, sizeof(buf), "invalid use of builtin (kind=%u)", (unsigned)data->kind);
+        msg = buf;
+        break;
+    }
+    return ubsan_report(data, msg, data->loc);
+}
+
 __declspec(dllexport) void __ubsan_handle_invalid_builtin(InvalidBuiltinData* data)
 {
-    const char* builtinName = data->kind == 0 ? "__builtin_ctz" : "__builtin_clz";
-    char buffer[256];
-    sprintf_s(buffer, sizeof(buffer), "passing zero to %s, which is undefined", builtinName);
-    ubsan_report(buffer, data->loc);
+    if (impl_invalid_builtin(data)) ubsan_break();
 }
 
 __declspec(dllexport) void __ubsan_handle_invalid_builtin_abort(InvalidBuiltinData* data)
 {
-    __ubsan_handle_invalid_builtin(data);
+    if (impl_invalid_builtin(data)) __debugbreak();
 }
 
-// Nonnull argument
-__declspec(dllexport) void __ubsan_handle_nonnull_arg(NonNullArgData* data)
+// ---- Nonnull argument / return ----
+
+static bool impl_nonnull_arg(NonNullArgData* data)
 {
-    if (isDuplicate(data->loc)) return;
-    
+    if (isDuplicate(data)) return false;
     char buffer[512];
     sprintf_s(buffer, sizeof(buffer),
         "\n*** UBSAN: null pointer passed to nonnull argument ***\n    argument index: %d\n    at %s:%u:%u\n",
         data->argIndex,
         data->loc.filename, data->loc.line, data->loc.column);
-    
     ubsan_output(buffer);
-    __debugbreak();
+    return true;
+}
+
+__declspec(dllexport) void __ubsan_handle_nonnull_arg(NonNullArgData* data)
+{
+    if (impl_nonnull_arg(data)) ubsan_break();
 }
 
 __declspec(dllexport) void __ubsan_handle_nonnull_arg_abort(NonNullArgData* data)
 {
-    __ubsan_handle_nonnull_arg(data);
+    if (impl_nonnull_arg(data)) __debugbreak();
 }
 
-// Nonnull return
+// Dedup key uses loc (the return-statement SourceLocation*) -- a static const
+// unique per return site, same dedup guarantee as using data*.
 __declspec(dllexport) void __ubsan_handle_nonnull_return_v1(NonNullReturnData* data, SourceLocation* loc)
 {
-    ubsan_report("null returned from function declared to never return null", *loc);
+    if (ubsan_report(loc, "null returned from function declared to never return null", *loc)) ubsan_break();
 }
 
 __declspec(dllexport) void __ubsan_handle_nonnull_return_v1_abort(NonNullReturnData* data, SourceLocation* loc)
 {
-    __ubsan_handle_nonnull_return_v1(data, loc);
+    if (ubsan_report(loc, "null returned from function declared to never return null", *loc)) __debugbreak();
 }
 
-// Pointer overflow
-__declspec(dllexport) void __ubsan_handle_pointer_overflow(PointerOverflowData* data, ValueHandle base, ValueHandle result)
+// ---- Pointer overflow ----
+
+static bool impl_pointer_overflow(PointerOverflowData* data, ValueHandle base, ValueHandle result)
 {
-    if (isDuplicate(data->loc)) return;
-    
+    if (isDuplicate(data)) return false;
     char buffer[512];
     if (base == 0 && result == 0) {
         sprintf_s(buffer, sizeof(buffer),
@@ -583,42 +631,50 @@ __declspec(dllexport) void __ubsan_handle_pointer_overflow(PointerOverflowData* 
             "\n*** UBSAN: pointer overflow ***\n    pointer 0x%p with offset overflowed to 0x%p\n    at %s:%u:%u\n",
             (void*)base, (void*)result, data->loc.filename, data->loc.line, data->loc.column);
     }
-    
     ubsan_output(buffer);
-    __debugbreak();
+    return true;
+}
+
+__declspec(dllexport) void __ubsan_handle_pointer_overflow(PointerOverflowData* data, ValueHandle base, ValueHandle result)
+{
+    if (impl_pointer_overflow(data, base, result)) ubsan_break();
 }
 
 __declspec(dllexport) void __ubsan_handle_pointer_overflow_abort(PointerOverflowData* data, ValueHandle base, ValueHandle result)
 {
-    __ubsan_handle_pointer_overflow(data, base, result);
+    if (impl_pointer_overflow(data, base, result)) __debugbreak();
 }
 
-// Function type mismatch (indirect call)
-__declspec(dllexport) void __ubsan_handle_function_type_mismatch(FunctionTypeMismatchData* data, ValueHandle ptr)
+// ---- Function type mismatch (indirect call through wrong-type pointer) ----
+
+static bool impl_function_type_mismatch(FunctionTypeMismatchData* data, ValueHandle ptr)
 {
-    if (isDuplicate(data->loc)) return;
-    
+    if (isDuplicate(data)) return false;
     char buffer[512];
     sprintf_s(buffer, sizeof(buffer),
         "\n*** UBSAN: indirect function call type mismatch ***\n    call through pointer 0x%p to function of wrong type %s\n    at %s:%u:%u\n",
         (void*)ptr,
         data->type ? data->type->typeName : "<unknown>",
         data->loc.filename, data->loc.line, data->loc.column);
-    
     ubsan_output(buffer);
-    __debugbreak();
+    return true;
+}
+
+__declspec(dllexport) void __ubsan_handle_function_type_mismatch(FunctionTypeMismatchData* data, ValueHandle ptr)
+{
+    if (impl_function_type_mismatch(data, ptr)) ubsan_break();
 }
 
 __declspec(dllexport) void __ubsan_handle_function_type_mismatch_abort(FunctionTypeMismatchData* data, ValueHandle ptr)
 {
-    __ubsan_handle_function_type_mismatch(data, ptr);
+    if (impl_function_type_mismatch(data, ptr)) __debugbreak();
 }
 
-// Alignment assumption
-__declspec(dllexport) void __ubsan_handle_alignment_assumption(AlignmentAssumptionData* data, ValueHandle ptr, ValueHandle align, ValueHandle offset)
+// ---- Alignment assumption ----
+
+static bool impl_alignment_assumption(AlignmentAssumptionData* data, ValueHandle ptr, ValueHandle align, ValueHandle offset)
 {
-    if (isDuplicate(data->loc)) return;
-    
+    if (isDuplicate(data)) return false;
     char buffer[512];
     if (offset) {
         sprintf_s(buffer, sizeof(buffer),
@@ -633,58 +689,74 @@ __declspec(dllexport) void __ubsan_handle_alignment_assumption(AlignmentAssumpti
             data->type ? data->type->typeName : "<unknown>",
             data->loc.filename, data->loc.line, data->loc.column);
     }
-    
     ubsan_output(buffer);
-    __debugbreak();
+    return true;
+}
+
+__declspec(dllexport) void __ubsan_handle_alignment_assumption(AlignmentAssumptionData* data, ValueHandle ptr, ValueHandle align, ValueHandle offset)
+{
+    if (impl_alignment_assumption(data, ptr, align, offset)) ubsan_break();
 }
 
 __declspec(dllexport) void __ubsan_handle_alignment_assumption_abort(AlignmentAssumptionData* data, ValueHandle ptr, ValueHandle align, ValueHandle offset)
 {
-    __ubsan_handle_alignment_assumption(data, ptr, align, offset);
+    if (impl_alignment_assumption(data, ptr, align, offset)) __debugbreak();
 }
 
-// Implicit conversion (integer truncation, sign change)
+// ---- Implicit conversion (truncation, sign change) ----
+
 static const char* getImplicitConversionKindName(unsigned char kind)
 {
     static const char* names[] = {
-        "integer truncation",
-        "unsigned integer truncation",
-        "sign change",
-        "signed truncation or sign change"
+        "integer truncation",              // 0 (legacy clang 7)
+        "unsigned integer truncation",     // 1
+        "signed integer truncation",       // 2
+        "integer sign change",             // 3
+        "signed truncation or sign change" // 4
     };
     return kind < sizeof(names)/sizeof(names[0]) ? names[kind] : "implicit conversion";
 }
 
-__declspec(dllexport) void __ubsan_handle_implicit_conversion(ImplicitConversionData* data, ValueHandle src, ValueHandle dst)
+static bool impl_implicit_conversion(ImplicitConversionData* data, ValueHandle src, ValueHandle dst)
 {
-    if (isDuplicate(data->loc)) return;
-
+    if (isDuplicate(data)) return false;
     char srcStr[64], dstStr[64];
     formatValue(srcStr, sizeof(srcStr), data->fromType, src);
-    formatValue(dstStr, sizeof(dstStr), data->toType, dst);
-
+    formatValue(dstStr, sizeof(dstStr), data->toType,   dst);
     char buffer[512];
-    sprintf_s(buffer, sizeof(buffer),
-        "\n*** UBSAN: implicit conversion (%s) ***\n    value %s (type %s) changed to %s (type %s)\n    at %s:%u:%u\n",
-        getImplicitConversionKindName(data->kind),
-        srcStr,
-        data->fromType ? data->fromType->typeName : "<unknown>",
-        dstStr,
-        data->toType ? data->toType->typeName : "<unknown>",
-        data->loc.filename ? data->loc.filename : "<unknown>",
-        data->loc.line,
-        data->loc.column);
-
+    if (data->BitfieldBits) {
+        sprintf_s(buffer, sizeof(buffer),
+            "\n*** UBSAN: implicit conversion (%s) ***\n    value %s (type %s, bitfield %u bits) changed to %s (type %s)\n    at %s:%u:%u\n",
+            getImplicitConversionKindName(data->kind),
+            srcStr, data->fromType ? data->fromType->typeName : "<unknown>", data->BitfieldBits,
+            dstStr, data->toType   ? data->toType->typeName   : "<unknown>",
+            data->loc.filename ? data->loc.filename : "<unknown>",
+            data->loc.line, data->loc.column);
+    } else {
+        sprintf_s(buffer, sizeof(buffer),
+            "\n*** UBSAN: implicit conversion (%s) ***\n    value %s (type %s) changed to %s (type %s)\n    at %s:%u:%u\n",
+            getImplicitConversionKindName(data->kind),
+            srcStr, data->fromType ? data->fromType->typeName : "<unknown>",
+            dstStr, data->toType   ? data->toType->typeName   : "<unknown>",
+            data->loc.filename ? data->loc.filename : "<unknown>",
+            data->loc.line, data->loc.column);
+    }
     ubsan_output(buffer);
-    __debugbreak();
+    return true;
+}
+
+__declspec(dllexport) void __ubsan_handle_implicit_conversion(ImplicitConversionData* data, ValueHandle src, ValueHandle dst)
+{
+    if (impl_implicit_conversion(data, src, dst)) ubsan_break();
 }
 
 __declspec(dllexport) void __ubsan_handle_implicit_conversion_abort(ImplicitConversionData* data, ValueHandle src, ValueHandle dst)
 {
-    __ubsan_handle_implicit_conversion(data, src, dst);
+    if (impl_implicit_conversion(data, src, dst)) __debugbreak();
 }
 
 } // extern "C"
+
 
 #pragma clang attribute pop
 
