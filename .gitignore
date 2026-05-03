@@ -38,6 +38,7 @@
 !*.py
 !*.rc
 !ubsan.ignore
+!asan.ignore
 !*.rtf
 !*.sh
 !*.sln

@@ -16,12 +16,13 @@ class Config(Enum):
 class Sanitizer(Enum):
     NONE = 0
     UBSAN = 1
+    ASAN = 2
 
-# 32-bit LLVM path for UBSan support
+# 32-bit LLVM path for sanitizer builds (UBSan and ASan)
 LLVM_PATH = Path(r'C:\Program Files (x86)\LLVM\bin')
-
-def get_sanitizer(config: Config) -> Sanitizer:
-    return Sanitizer.UBSAN if config == Config.Debug else Sanitizer.NONE
+# ASan runtime DLL produced by the 32-bit LLVM toolchain; must sit next to the
+# game DLL at runtime so Windows can load it.
+ASAN_RUNTIME_DLL = 'clang_rt.asan_dynamic-i386.dll'
 
 VS_2008_VARS_BAT = Path(os.environ['VS90COMNTOOLS']).joinpath('vsvars32.bat')
 CORE_DLL = 'CvGameCore_Expansion2'
@@ -312,7 +313,7 @@ class TaskMan:
                 self.pending.put(task)
         return results
 
-def build_cl_config_args(config: Config) -> list[str]:
+def build_cl_config_args(config: Config, sanitizer: Sanitizer) -> list[str]:
     args = ['-m32', '-msse3', '/c', '/MD', '/GS', '/EHsc', '/fp:precise', '/Zc:wchar_t', '/Zi', '/FS']
     if config == Config.Release:
         args.append('/Ox')
@@ -329,7 +330,7 @@ def build_cl_config_args(config: Config) -> list[str]:
     for suppress in CL_SUPPRESS:
         args.append(f'-Wno-{suppress}')
     # UBSan for Debug builds (using custom VS2008-compatible handlers in ubsan_handlers.cpp)
-    if get_sanitizer(config) == Sanitizer.UBSAN:
+    if sanitizer == Sanitizer.UBSAN:
         args.append('-fsanitize=undefined')
         args.append('-fsanitize=unsigned-integer-overflow')             # not UB but catches unintentional unsigned wrapping
         args.append('-fsanitize=implicit-signed-integer-truncation')    # lossy signed narrowing (int32 -> int8 losing high bits)
@@ -337,6 +338,22 @@ def build_cl_config_args(config: Config) -> list[str]:
         args.append('-fsanitize=implicit-integer-sign-change')          # sign-confused assignments (large uint -> int)
         args.append('-fno-sanitize=enum')  # all Civ5 enums are "open" (database-driven values)
         args.append(f'-fsanitize-ignorelist={os.path.join(PROJECT_DIR, "ubsan.ignore")}')
+    # ASan for Debug builds — uses the dynamic clang_rt.asan_dynamic-i386.dll runtime.
+    # No custom handler file is needed: the runtime supplies all __asan_report_* symbols.
+    #
+    # DLL-only limitation: allocations made by the uninstrumented game EXE are untracked,
+    # so use-after-free and overflows that straddle the EXE/DLL boundary may not be caught.
+    # Everything allocated inside the DLL (heap, stack, globals) is fully instrumented.
+    #
+    # 32-bit address-space note: ASan reserves ~256 MB of shadow memory.  If the game
+    # crashes at startup, try adding "-mllvm -asan-mapping-scale=5" to shrink the shadow.
+    elif sanitizer == Sanitizer.ASAN:
+        args.append('-fsanitize=address')
+        args.append('-fsanitize-recover=address')   # log and continue rather than abort on first error
+        args.append('-fno-omit-frame-pointer')      # preserve frame pointers for readable ASan stack traces
+        args.append('-mllvm')
+        args.append('-asan-use-after-return=never') # skip UAR stack instrumentation; reduces shadow pressure on 32-bit
+        args.append(f'-fsanitize-ignorelist={os.path.join(PROJECT_DIR, "asan.ignore")}')
     return args
 
 def build_link_config_args(config: Config) -> list[str]:
@@ -466,13 +483,51 @@ def link_dll(link: str, link_args: list[str], build_dir: Path, out_dir: Path, lo
         sys.exit(1)
     print(f'linking dll finished after {end_time - start_time} seconds')
 
+def find_asan_runtime() -> typing.Optional[Path]:
+    """Return the path of clang_rt.asan_dynamic-i386.dll from the LLVM installation, or None."""
+    # Prefer bin/ (some installers drop a copy there for convenience)
+    candidate = LLVM_PATH / ASAN_RUNTIME_DLL
+    if candidate.exists():
+        return candidate
+    # Fall back to the versioned resource directory: lib/clang/*/lib/windows/
+    llvm_root = LLVM_PATH.parent
+    for p in sorted(llvm_root.glob(f'lib/clang/*/lib/windows/{ASAN_RUNTIME_DLL}'), reverse=True):
+        return p  # take the newest version
+    return None
+
+def copy_asan_runtime(out_dir: Path, log: typing.IO):
+    """Copy clang_rt.asan_dynamic-i386.dll into the output directory."""
+    import shutil
+    src = find_asan_runtime()
+    if src is None:
+        msg = (f'Warning: {ASAN_RUNTIME_DLL} not found under {LLVM_PATH.parent}.\n'
+               f'The ASan-instrumented DLL will fail to load at runtime without it.\n'
+               f'Copy the file manually from your LLVM installation to the output directory.\n')
+        print(msg, end='')
+        log.write(msg.encode())
+        return
+    dest = out_dir / ASAN_RUNTIME_DLL
+    shutil.copy2(str(src), str(dest))
+    msg = f'Copied ASan runtime: {src} -> {dest}\n'
+    print(msg, end='')
+    log.write(msg.encode())
+
 arg_parser = argparse.ArgumentParser(description='Build VP.')
 arg_parser.add_argument('--config', type=str, default='debug', choices=['release', 'debug'])
+arg_parser.add_argument(
+    '--sanitizer', type=str, default='ubsan',
+    choices=['none', 'ubsan', 'asan'],
+    help='Sanitizer to enable for Debug builds (default: ubsan). '
+         'Release builds always use none.')
 args = arg_parser.parse_args()
 config = Config.Release if args.config == 'release' else Config.Debug
 
-# Use 32-bit LLVM for UBSan builds
-if get_sanitizer(config) == Sanitizer.UBSAN:
+# Sanitizer only applies to Debug; Release is always uninstrumented.
+_san_map = {'none': Sanitizer.NONE, 'ubsan': Sanitizer.UBSAN, 'asan': Sanitizer.ASAN}
+sanitizer = _san_map[args.sanitizer] if config == Config.Debug else Sanitizer.NONE
+
+# Use 32-bit LLVM for sanitizer builds so that clang-rt is the right architecture.
+if sanitizer in (Sanitizer.UBSAN, Sanitizer.ASAN):
     cl = str(LLVM_PATH / 'clang-cl.exe')
     link = str(LLVM_PATH / 'lld-link.exe')
 else:
@@ -480,7 +535,7 @@ else:
     link = 'lld-link.exe'
 build_dir = PROJECT_DIR.joinpath(BUILD_DIR[config])
 out_dir = PROJECT_DIR.joinpath(PROJECT_DIR, OUT_DIR[config])
-cl_args = ' '.join(build_cl_config_args(config))
+cl_args = ' '.join(build_cl_config_args(config, sanitizer))
 link_args = build_link_config_args(config)
 pch_path = os.path.join(build_dir, PCH)
 prepare_dirs(build_dir, out_dir)
@@ -492,5 +547,7 @@ try:
     build_pch(cl, cl_args, pch_path, build_dir, log)
     build_cpps(cl, cl_args, pch_path, build_dir, log)
     link_dll(link, link_args, build_dir, out_dir, log)
+    if sanitizer == Sanitizer.ASAN:
+        copy_asan_runtime(out_dir, log)
 finally:
     log.close()

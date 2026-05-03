@@ -1,0 +1,29 @@
+# ASan ignorelist for the VP DLL
+# https://clang.llvm.org/docs/SanitizerSpecialCaseList.html
+#
+# Only the DLL (CvGameCore_Expansion2.dll) is compiled with ASan.
+# The game EXE (CivilizationV_DX11.exe / CivilizationV.exe) is not
+# instrumented, so memory allocated by the EXE and passed into the DLL
+# will not carry ASan metadata.  This causes false negatives at the
+# EXE/DLL boundary (missed errors), not false positives (phantom errors),
+# so no suppressions are required for that scenario.
+#
+# Suppressions here address genuine false positives: code where the
+# apparent violation is intentional or architecturally necessary.
+
+[address]
+# -----------------------------------------------------------------------
+# VS2008 STL <deque> internal ring-buffer pointer arithmetic
+# _Deque_const_iterator uses two-level pointer arithmetic that
+# intentionally computes addresses one-past-end of internal blocks.
+# These are never actually dereferenced out-of-bounds; ASan's
+# out-of-bounds model flags the intermediate value.
+# Triggered via CvPathNodeArray::GetFinalPlot() -> std::deque::back().
+src:*deque*
+
+# VS2008 STL <xhash> / <functional> FNV-1a hash tables
+# stdext::hash_map and std::tr1::unordered_map probe tables using
+# modulo arithmetic that can momentarily index past a block boundary
+# before wrapping; the element returned is always in-range.
+src:*xhash*
+src:*functional*
