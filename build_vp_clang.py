@@ -353,8 +353,14 @@ def build_cl_config_args(config: Config, sanitizer: Sanitizer) -> list[str]:
         # Frame pointers: clang-cl uses /Oy- (already appended above for Debug); no GCC-style flag needed.
         args.append('-mllvm')
         args.append('-asan-use-after-return=never') # skip UAR stack instrumentation; reduces shadow pressure on 32-bit
-        args.append('-mllvm')                       # each -mllvm takes exactly one argument
-        args.append('-asan-mapping-scale=5')        # 1:16 shadow ratio → ~128 MB vs default 1:8 (~256 MB)
+        # NOTE: -asan-mapping-scale has NO effect when using the pre-built clang_rt.asan_dynamic-i386.dll.
+        # That DLL has scale=3 and shadow_offset=0x30000000 compiled-in as constants; they cannot be
+        # overridden externally.  With -fsanitize=address in DLL mode clang-cl emits call-out
+        # instrumentation (__asan_loadN/__asan_storeN) rather than inline shadow checks, so the
+        # compiler-side scale flag is also a no-op at runtime.  The flag is kept here for
+        # completeness in case the static runtime is ever used instead.
+        args.append('-mllvm')
+        args.append('-asan-mapping-scale=5')        # 1:32 shadow ratio — effective only with static runtime
         args.append(f'-fsanitize-ignorelist={os.path.join(PROJECT_DIR, "asan.ignore")}')
     return args
 
