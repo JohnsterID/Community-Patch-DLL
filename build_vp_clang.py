@@ -206,7 +206,7 @@ CPP = [
     'CvGameCoreDLL_Expansion2\\CvFractal.cpp',
     'CvGameCoreDLL_Expansion2\\CvGame.cpp',
     'CvGameCoreDLL_Expansion2\\CvGameCoreDLL.cpp',
-    'CvGameCoreDLL_Expansion2\\asan_annotations.cpp',
+    'CvGameCoreDLL_Expansion2\\asan_compat.cpp',
     'CvGameCoreDLL_Expansion2\\CvGameCoreEnumSerialization.cpp',
     'CvGameCoreDLL_Expansion2\\CvGameCoreStructs.cpp',
     'CvGameCoreDLL_Expansion2\\CvGameCoreUtils.cpp',

@@ -10,7 +10,7 @@
 #include "ICvDLLUserInterface.h"
 #include "Win32/FDebugHelper.h"
 #include "CvDllContext.h"
-#include "asan_annotations.h"
+#include "asan_compat.h"
 
 // must be included after all other headers
 #include "LintFree.h"

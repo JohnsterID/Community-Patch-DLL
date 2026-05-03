@@ -1,10 +1,10 @@
 // ASan annotation support — compiled into the VP DLL.
-// See asan_annotations.h for full documentation.
+// See asan_compat.h for full documentation.
 
 #include "CvGameCoreDLLPCH.h"
 
 #if defined(__has_feature) && __has_feature(address_sanitizer)
-#include "asan_annotations.h"
+#include "asan_compat.h"
 
 // Disable sanitizer instrumentation for this file: it runs during DLL init,
 // before ASan's own shadow is fully committed, so any instrumented access

@@ -52,7 +52,7 @@ r// All macros expand to nothing when not compiled with -fsanitize=address.
 #  define VP_ASAN_IS_POISONED(addr)      __asan_address_is_poisoned((addr))
 #  define VP_ASAN_DESCRIBE_ADDRESS(addr) __asan_describe_address((addr))
 
-// Shadow pinning — implementation in asan_annotations.cpp
+// Shadow pinning — implementation in asan_compat.cpp
 void VP_Asan_PinRuntime();
 #  define VP_ASAN_PIN_RUNTIME() VP_Asan_PinRuntime()
 
