@@ -354,7 +354,7 @@ def build_cl_config_args(config: Config, sanitizer: Sanitizer) -> list[str]:
         args.append('-mllvm')
         args.append('-asan-use-after-return=never') # skip UAR stack instrumentation; reduces shadow pressure on 32-bit
         args.append('-mllvm')                       # each -mllvm takes exactly one argument
-        args.append('-asan-mapping-scale=4')        # 1:16 shadow ratio → ~128 MB vs default 1:8 (~256 MB)
+        args.append('-asan-mapping-scale=5')        # 1:16 shadow ratio → ~128 MB vs default 1:8 (~256 MB)
         args.append(f'-fsanitize-ignorelist={os.path.join(PROJECT_DIR, "asan.ignore")}')
     return args
 
