@@ -350,16 +350,24 @@ def build_cl_config_args(config: Config, sanitizer: Sanitizer) -> list[str]:
     elif sanitizer == Sanitizer.ASAN:
         args.append('-fsanitize=address')
         args.append('-fsanitize-recover=address')   # log and continue rather than abort on first error
-        args.append('-fno-omit-frame-pointer')      # preserve frame pointers for readable ASan stack traces
+        # Frame pointers: clang-cl uses /Oy- (already appended above for Debug); no GCC-style flag needed.
         args.append('-mllvm')
         args.append('-asan-use-after-return=never') # skip UAR stack instrumentation; reduces shadow pressure on 32-bit
         args.append(f'-fsanitize-ignorelist={os.path.join(PROJECT_DIR, "asan.ignore")}')
     return args
 
-def build_link_config_args(config: Config) -> list[str]:
+def build_link_config_args(config: Config, sanitizer: Sanitizer) -> list[str]:
     args = ['/MACHINE:x86', '/DLL', '/DEBUG', '/LTCG', '/DYNAMICBASE', '/NXCOMPAT', '/SUBSYSTEM:WINDOWS', '/MANIFEST:EMBED', '/FORCE:MULTIPLE', f'/DEF:"{os.path.join(PROJECT_DIR, DEF_FILE)}"']
     if config == Config.Release:
         args += ['/OPT:REF', '/OPT:ICF']
+    # lld-link is invoked directly via a response file, so clang-cl's automatic
+    # runtime-library injection does not happen.  Add the ASan import library
+    # and its search path explicitly so ___asan_* symbols resolve.
+    if sanitizer == Sanitizer.ASAN:
+        lib_dir = find_asan_lib_dir()
+        if lib_dir:
+            args.append(f'/LIBPATH:"{lib_dir}"')
+        args.append('/DEFAULTLIB:clang_rt.asan_dynamic-i386.lib')
     return args
 
 def prepare_dirs(build_dir: Path, out_dir: Path):
@@ -483,6 +491,13 @@ def link_dll(link: str, link_args: list[str], build_dir: Path, out_dir: Path, lo
         sys.exit(1)
     print(f'linking dll finished after {end_time - start_time} seconds')
 
+def find_asan_lib_dir() -> typing.Optional[Path]:
+    """Return the directory that contains clang_rt.asan_dynamic-i386.lib (the import library)."""
+    llvm_root = LLVM_PATH.parent
+    for p in sorted(llvm_root.glob('lib/clang/*/lib/windows/clang_rt.asan_dynamic-i386.lib'), reverse=True):
+        return p.parent  # take the newest version
+    return None
+
 def find_asan_runtime() -> typing.Optional[Path]:
     """Return the path of clang_rt.asan_dynamic-i386.dll from the LLVM installation, or None."""
     # Prefer bin/ (some installers drop a copy there for convenience)
@@ -490,9 +505,11 @@ def find_asan_runtime() -> typing.Optional[Path]:
     if candidate.exists():
         return candidate
     # Fall back to the versioned resource directory: lib/clang/*/lib/windows/
-    llvm_root = LLVM_PATH.parent
-    for p in sorted(llvm_root.glob(f'lib/clang/*/lib/windows/{ASAN_RUNTIME_DLL}'), reverse=True):
-        return p  # take the newest version
+    lib_dir = find_asan_lib_dir()
+    if lib_dir:
+        candidate = lib_dir / ASAN_RUNTIME_DLL
+        if candidate.exists():
+            return candidate
     return None
 
 def copy_asan_runtime(out_dir: Path, log: typing.IO):
@@ -536,7 +553,7 @@ else:
 build_dir = PROJECT_DIR.joinpath(BUILD_DIR[config])
 out_dir = PROJECT_DIR.joinpath(PROJECT_DIR, OUT_DIR[config])
 cl_args = ' '.join(build_cl_config_args(config, sanitizer))
-link_args = build_link_config_args(config)
+link_args = build_link_config_args(config, sanitizer)
 pch_path = os.path.join(build_dir, PCH)
 prepare_dirs(build_dir, out_dir)
 
