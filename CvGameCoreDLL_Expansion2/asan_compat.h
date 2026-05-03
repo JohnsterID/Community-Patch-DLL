@@ -1,14 +1,14 @@
 #pragma once
 // ASan annotation helpers for the VP DLL.
 //
-r// All macros expand to nothing when not compiled with -fsanitize=address.
+// All macros expand to nothing when not compiled with -fsanitize=address.
 //
-// ── Shadow memory pinning ────────────────────────────────────────────────────
+// -- Shadow memory pinning ----------------------------------------------------
 // Problem: the pre-built clang_rt.asan_dynamic-i386.dll reserves its shadow
-// at [0x30000000-0x4fffffff] (scale=3, offset=0x30000000 — fixed constants
+// at [0x30000000-0x4fffffff] (scale=3, offset=0x30000000 -- fixed constants
 // compiled into the DLL, not changeable at runtime or via -asan-mapping-scale).
 // When the game engine calls FreeLibrary(CvGameCore_Expansion2.dll) and then
-// LoadLibraryW() it again (the normal main-menu → new-game path), the runtime's
+// LoadLibraryW() it again (the normal main-menu -> new-game path), the runtime's
 // ref-count hits zero, Windows releases the shadow, the heap grows into that
 // range, and the second LoadLibraryW() aborts:
 //   "Shadow memory range interleaves with an existing memory mapping. ABORTING."
@@ -21,17 +21,17 @@ r// All macros expand to nothing when not compiled with -fsanitize=address.
 //
 // Call VP_ASAN_PIN_RUNTIME() once, early in DLL_PROCESS_ATTACH (CvGameCoreDLL.cpp).
 //
-// ── Pool / free-list allocators ──────────────────────────────────────────────
+// -- Pool / free-list allocators ----------------------------------------------
 // FObjectPool and FFreeListTrashArray keep objects alive but logically "free".
 // ASan cannot see those logical frees without annotations.  Use:
 //
-//   VP_ASAN_POOL_FREE(ptr, size)   // slot returned to pool  → poisons it
-//   VP_ASAN_POOL_ALLOC(ptr, size)  // slot handed to caller  → unpoisons it
+//   VP_ASAN_POOL_FREE(ptr, size)   // slot returned to pool  -> poisons it
+//   VP_ASAN_POOL_ALLOC(ptr, size)  // slot handed to caller  -> unpoisons it
 //
 // Typical pool constructor: VP_ASAN_POOL_FREE each pre-allocated object once
 // so that the entire pool is poisoned until GetFreeObject() is called.
 //
-// ── Reference ────────────────────────────────────────────────────────────────
+// -- Reference ----------------------------------------------------------------
 // https://github.com/llvm/llvm-project/blob/main/compiler-rt/include/sanitizer/asan_interface.h
 
 #if defined(__has_feature) && __has_feature(address_sanitizer)
@@ -52,7 +52,7 @@ r// All macros expand to nothing when not compiled with -fsanitize=address.
 #  define VP_ASAN_IS_POISONED(addr)      __asan_address_is_poisoned((addr))
 #  define VP_ASAN_DESCRIBE_ADDRESS(addr) __asan_describe_address((addr))
 
-// Shadow pinning — implementation in asan_compat.cpp
+// Shadow pinning -- implementation in asan_compat.cpp
 void VP_Asan_PinRuntime();
 #  define VP_ASAN_PIN_RUNTIME() VP_Asan_PinRuntime()
 
