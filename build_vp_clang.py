@@ -23,6 +23,13 @@ LLVM_PATH = Path(r'C:\Program Files (x86)\LLVM\bin')
 # ASan runtime DLL produced by the 32-bit LLVM toolchain; must sit next to the
 # game DLL at runtime so Windows can load it.
 ASAN_RUNTIME_DLL = 'clang_rt.asan_dynamic-i386.dll'
+# Fixed preferred base address for the ASan runtime copy placed in the output
+# directory.  Without this, ASLR can land the DLL anywhere in the 32-bit
+# address space, including the ASan shadow range [0x30000000-0x4fffffff],
+# which causes __asan_init() to abort on the very first LoadLibraryW call.
+# 0x72000000 is in HighMem (>= 0x50000000), well above all shadow regions,
+# and matches where ASLR placed the DLL in all previously successful sessions.
+ASAN_REBASE_ADDRESS = '0x72000000'
 
 VS_2008_VARS_BAT = Path(os.environ['VS90COMNTOOLS']).joinpath('vsvars32.bat')
 CORE_DLL = 'CvGameCore_Expansion2'
@@ -538,6 +545,70 @@ def copy_asan_runtime(out_dir: Path, log: typing.IO):
     print(msg, end='')
     log.write(msg.encode())
 
+def find_editbin() -> typing.Optional[str]:
+    """Return the path to editbin.exe from a Visual Studio installation, or None."""
+    import shutil, subprocess as sp
+    # 1. Already on PATH (Developer Command Prompt)
+    found = shutil.which('editbin.exe')
+    if found:
+        return found
+    # 2. Locate VS via vswhere.exe (present since VS 2017)
+    for vswhere in [
+        r'C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe',
+        r'C:\Program Files\Microsoft Visual Studio\Installer\vswhere.exe',
+    ]:
+        if not os.path.exists(vswhere):
+            continue
+        try:
+            r = sp.run([vswhere, '-latest', '-property', 'installationPath'],
+                       capture_output=True, text=True, timeout=10)
+            vs = r.stdout.strip()
+            if not vs:
+                continue
+            # editbin.exe lives under VC/Tools/MSVC/<ver>/bin/Host*/x86/
+            for pattern in ('VC/Tools/MSVC/*/bin/HostX86/x86/editbin.exe',
+                            'VC/Tools/MSVC/*/bin/HostX64/x86/editbin.exe'):
+                matches = sorted(Path(vs).glob(pattern), reverse=True)
+                if matches:
+                    return str(matches[0])
+        except Exception:
+            pass
+    return None
+
+def rebase_asan_runtime(out_dir: Path, log: typing.IO):
+    """Rebase the copied clang_rt.asan_dynamic-i386.dll to ASAN_REBASE_ADDRESS.
+
+    Without a fixed preferred base, ASLR can place the DLL anywhere in the
+    32-bit address space.  If it lands inside the ASan shadow range
+    [0x30000000-0x4fffffff], __asan_init() detects the overlap and aborts,
+    making the game DLL fail to load with ERROR_DLL_INIT_FAILED (1114).
+    """
+    import subprocess as sp
+    dll = out_dir / ASAN_RUNTIME_DLL
+    if not dll.exists():
+        return  # copy_asan_runtime already warned
+    editbin = find_editbin()
+    if editbin is None:
+        msg = (f'Warning: editbin.exe not found; cannot rebase {ASAN_RUNTIME_DLL}.\n'
+               f'ASLR may place the DLL inside the ASan shadow and abort on startup.\n'
+               f'Fix manually:\n'
+               f'  editbin /REBASE:BASE={ASAN_REBASE_ADDRESS} "{dll}"\n')
+        print(msg, end='')
+        log.write(msg.encode())
+        return
+    cmd = [editbin, f'/REBASE:BASE={ASAN_REBASE_ADDRESS}', str(dll)]
+    msg = f'Rebasing ASan runtime to {ASAN_REBASE_ADDRESS}: {" ".join(cmd)}\n'
+    print(msg, end='')
+    log.write(msg.encode())
+    cp = sp.run(cmd, capture_output=True)
+    if cp.returncode != 0:
+        err = cp.stderr.decode(errors='replace')
+        msg = f'Warning: editbin /REBASE failed (exit {cp.returncode}):\n{err}\n'
+    else:
+        msg = f'Rebased {ASAN_RUNTIME_DLL} to {ASAN_REBASE_ADDRESS}\n'
+    print(msg, end='')
+    log.write(msg.encode())
+
 arg_parser = argparse.ArgumentParser(description='Build VP.')
 arg_parser.add_argument('--config', type=str, default='debug', choices=['release', 'debug'])
 arg_parser.add_argument(
@@ -575,5 +646,6 @@ try:
     link_dll(link, link_args, build_dir, out_dir, log)
     if sanitizer == Sanitizer.ASAN:
         copy_asan_runtime(out_dir, log)
+        rebase_asan_runtime(out_dir, log)
 finally:
     log.close()
