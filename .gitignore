@@ -1,6 +1,7 @@
 #ignore everything except files used in the mod
 *
 !*/
+!*.c
 !*.cpp
 !*.h
 !*.sql

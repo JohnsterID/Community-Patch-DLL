@@ -30,6 +30,10 @@ ASAN_RUNTIME_DLL = 'clang_rt.asan_dynamic-i386.dll'
 # 0x72000000 is in HighMem (>= 0x50000000), well above all shadow regions,
 # and matches where ASLR placed the DLL in all previously successful sessions.
 ASAN_REBASE_ADDRESS = '0x72000000'
+# Shadow-range pre-reservation shim; built alongside clang_rt.asan_dynamic-i386.dll
+# and injected into CivilizationV.exe at process start via AppInit_DLLs.
+SHADOW_BOOT_DLL = 'asan_shadow_boot.dll'
+SHADOW_BOOT_SRC = Path('asan_shadow_boot') / 'asan_shadow_boot.c'
 
 VS_2008_VARS_BAT = Path(os.environ['VS90COMNTOOLS']).joinpath('vsvars32.bat')
 CORE_DLL = 'CvGameCore_Expansion2'
@@ -609,6 +613,90 @@ def rebase_asan_runtime(out_dir: Path, log: typing.IO):
     print(msg, end='')
     log.write(msg.encode())
 
+def build_shadow_boot(cl: str, link: str, out_dir: Path, log: typing.IO):
+    """Build asan_shadow_boot.dll — the shadow-range pre-reservation shim.
+
+    This tiny DLL must be injected into CivilizationV.exe at process start via
+    AppInit_DLLs so it runs before D3D/GPU driver initialisation can consume
+    the ASan shadow range [0x2FFF0000-0x4FFFFFFF].
+
+    The build uses clang-cl in two steps (compile then link) targeting x86
+    with the dynamic CRT (/MD) and no extra dependencies beyond kernel32.
+    """
+    import subprocess as sp
+
+    src = PROJECT_DIR / SHADOW_BOOT_SRC
+    if not src.exists():
+        msg = f'Warning: {src} not found; skipping {SHADOW_BOOT_DLL} build.\n'
+        print(msg, end='')
+        log.write(msg.encode())
+        return
+
+    obj  = out_dir / 'asan_shadow_boot.obj'
+    dll  = out_dir / SHADOW_BOOT_DLL
+    pdb  = out_dir / 'asan_shadow_boot.pdb'
+
+    # --- Step 1: compile ---
+    compile_cmd = [
+        cl, '/nologo', '/W3', '/O2', '/MD', '/GS-',
+        str(src), f'/Fo:{obj}', '/c',
+    ]
+    msg = f'Compiling {SHADOW_BOOT_SRC.name} ...\n'
+    print(msg, end='')
+    log.write(msg.encode())
+    cp = sp.run(compile_cmd, capture_output=True)
+    for chunk in (cp.stdout, cp.stderr):
+        if chunk: log.write(chunk)
+    if cp.returncode != 0:
+        msg = f'Error: {SHADOW_BOOT_DLL} compile failed (exit {cp.returncode}).\n'
+        print(msg, end='')
+        log.write(msg.encode())
+        return
+
+    # --- Step 2: link ---
+    link_cmd = [
+        link, '/nologo', '/DLL', '/MACHINE:x86',
+        str(obj), f'/OUT:{dll}', f'/PDB:{pdb}',
+        '/SUBSYSTEM:WINDOWS',
+        'kernel32.lib',
+    ]
+    msg = f'Linking {SHADOW_BOOT_DLL} ...\n'
+    print(msg, end='')
+    log.write(msg.encode())
+    cp = sp.run(link_cmd, capture_output=True, cwd=str(out_dir))
+    for chunk in (cp.stdout, cp.stderr):
+        if chunk: log.write(chunk)
+    if cp.returncode != 0:
+        msg = f'Error: {SHADOW_BOOT_DLL} link failed (exit {cp.returncode}).\n'
+        print(msg, end='')
+        log.write(msg.encode())
+        return
+
+    msg = (
+        f'Built {SHADOW_BOOT_DLL} -> {dll}\n'
+        f'\n'
+        f'  *** DEPLOYMENT — run once from an elevated command prompt ***\n'
+        f'\n'
+        f'  Register (inject at CivilizationV.exe startup):\n'
+        f'    reg add "HKLM\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows NT\\'
+        f'CurrentVersion\\Windows" /v AppInit_DLLs /t REG_SZ /d "{dll}" /f\n'
+        f'    reg add "HKLM\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows NT\\'
+        f'CurrentVersion\\Windows" /v LoadAppInit_DLLs /t REG_DWORD /d 1 /f\n'
+        f'    reg add "HKLM\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows NT\\'
+        f'CurrentVersion\\Windows" /v RequireSignedAppInit_DLLs /t REG_DWORD /d 0 /f\n'
+        f'\n'
+        f'  Unregister when ASan testing is done:\n'
+        f'    reg add "HKLM\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows NT\\'
+        f'CurrentVersion\\Windows" /v AppInit_DLLs /t REG_SZ /d "" /f\n'
+        f'    reg add "HKLM\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows NT\\'
+        f'CurrentVersion\\Windows" /v LoadAppInit_DLLs /t REG_DWORD /d 0 /f\n'
+        f'\n'
+        f'  NOTE: Wow6432Node is correct for 32-bit processes on 64-bit Windows.\n'
+        f'        The DLL is a no-op in every non-game process.\n'
+    )
+    print(msg, end='')
+    log.write(msg.encode())
+
 arg_parser = argparse.ArgumentParser(description='Build VP.')
 arg_parser.add_argument('--config', type=str, default='debug', choices=['release', 'debug'])
 arg_parser.add_argument(
@@ -647,5 +735,6 @@ try:
     if sanitizer == Sanitizer.ASAN:
         copy_asan_runtime(out_dir, log)
         rebase_asan_runtime(out_dir, log)
+        build_shadow_boot(cl, link, out_dir, log)
 finally:
     log.close()
