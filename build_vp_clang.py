@@ -353,6 +353,7 @@ def build_cl_config_args(config: Config, sanitizer: Sanitizer) -> list[str]:
         # Frame pointers: clang-cl uses /Oy- (already appended above for Debug); no GCC-style flag needed.
         args.append('-mllvm')
         args.append('-asan-use-after-return=never') # skip UAR stack instrumentation; reduces shadow pressure on 32-bit
+        args.append('-asan-mapping-scale=5')
         args.append(f'-fsanitize-ignorelist={os.path.join(PROJECT_DIR, "asan.ignore")}')
     return args
 
