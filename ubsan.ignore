@@ -63,3 +63,14 @@ src:*CvRandom.h*
 #   HomelandAI -> PerformRangedOpportunityAttack -> FindBestUnitAssignments
 #   -> CDangerCache::findDanger -> DefendKeyHash::operator().
 src:*CvTacticalAI.h*
+
+[implicit-integer-sign-change]
+# VS2008 STL <deque>: _Deque_const_iterator::operator+= circular-buffer index arithmetic
+# _Myoff (size_type/unsigned) += difference_type _Off where _Off = -1 (from operator-=).
+# The implicit conversion of int(-1) to unsigned int(4294967295) is the operand promotion
+# before the addition; this is the MSVC STL's deliberate ring-buffer design.
+# Both checks fire on the same expression -- this entry covers the sign-change half;
+# the unsigned-integer-overflow entry above covers the arithmetic-result half.
+# Triggered via CvPathNodeArray::GetFinalPlot() -> std::deque<CvPathNode>::back() (deque:203).
+# Confirmed false positive: empty() guard is present, deque had size=2, game logic correct.
+src:*deque*
