@@ -10,6 +10,7 @@
 #include "ICvDLLUserInterface.h"
 #include "Win32/FDebugHelper.h"
 #include "CvDllContext.h"
+#include "asan_annotations.h"
 
 // must be included after all other headers
 #include "LintFree.h"
@@ -30,6 +31,7 @@ BOOL APIENTRY DllMain(HANDLE hModule,
 	{
 		// The DLL is being loaded into the virtual address space of the current process as a result of the process starting up
 		OutputDebugString("DLL_PROCESS_ATTACH\n");
+		VP_ASAN_PIN_RUNTIME();
 		FDebugHelper::GetInstance().LoadSymbols((HMODULE)hModule);
 		// set timer precision
 		MMRESULT iTimeSet = timeBeginPeriod(1);		// set timeGetTime and sleep resolution to 1 ms, otherwise it's 10-16ms
