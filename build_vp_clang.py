@@ -641,8 +641,10 @@ def build_shadow_boot(cl: str, link: str, out_dir: Path, log: typing.IO):
     pdb  = out_dir / 'asan_shadow_boot.pdb'
 
     # --- Step 1: compile ---
+    # /D_CRT_SECURE_NO_WARNINGS suppresses strcat/strncpy/fopen deprecation warnings.
     compile_cmd = [
         cl, '/nologo', '/W3', '/O2', '/MD', '/GS-',
+        '/D_CRT_SECURE_NO_WARNINGS',
         str(src), f'/Fo:{obj}', '/c',
     ]
     msg = f'Compiling {SHADOW_BOOT_SRC.name} ...\n'
@@ -708,8 +710,10 @@ def build_asan_launcher(cl: str, link: str, out_dir: Path, log: typing.IO):
     # --- Step 1: compile ---
     # /MT (static CRT) makes the launcher self-contained — no MSVCR*.dll needed.
     # Matches Zenith-test build_zenith_launcher_v90.py which uses libcmt.lib.
+    # /D_CRT_SECURE_NO_WARNINGS suppresses strncpy/fopen deprecation warnings.
     compile_cmd = [
         cl, '/nologo', '/W3', '/O2', '/MT', '/GS-',
+        '/D_CRT_SECURE_NO_WARNINGS',
         str(src), f'/Fo:{obj}', '/c',
     ]
     msg = f'Compiling {ASAN_LAUNCHER_SRC.name} ...\n'

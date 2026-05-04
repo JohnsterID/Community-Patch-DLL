@@ -299,18 +299,32 @@ install_loadlibrary_diag(void)
 
 /* ------------------------------------------------------------------ */
 /*  LdrRegisterDllNotification                                         */
+/*                                                                     */
+/*  UNICODE_STRING / NTSTATUS / NTAPI live in winternl.h / ntdef.h    */
+/*  which are NOT pulled in by WIN32_LEAN_AND_MEAN.  Define the        */
+/*  minimal types privately with an AB_ prefix to be 100% conflict-   */
+/*  free regardless of which Windows SDK version is on the build host. */
 /* ------------------------------------------------------------------ */
 
 typedef struct {
-    ULONG           Flags;
-    PUNICODE_STRING FullDllName;
-    PUNICODE_STRING BaseDllName;
-    PVOID           DllBase;
-    ULONG           SizeOfImage;
+    USHORT Length;
+    USHORT MaximumLength;
+    PWSTR  Buffer;
+} AB_UNICODE_STRING, *PAB_UNICODE_STRING;
+
+typedef LONG AB_NTSTATUS;
+#define AB_NTAPI __stdcall
+
+typedef struct {
+    ULONG                Flags;
+    PAB_UNICODE_STRING   FullDllName;
+    PAB_UNICODE_STRING   BaseDllName;
+    PVOID                DllBase;
+    ULONG                SizeOfImage;
 } MY_LDR_DATA;
 
-typedef VOID   (CALLBACK *MY_NOTIFY_FN)(ULONG, MY_LDR_DATA *, PVOID);
-typedef NTSTATUS (NTAPI *PFN_REGISTER) (ULONG, MY_NOTIFY_FN, PVOID, PVOID *);
+typedef VOID          (CALLBACK     *MY_NOTIFY_FN)(ULONG, MY_LDR_DATA *, PVOID);
+typedef AB_NTSTATUS   (AB_NTAPI *PFN_REGISTER)    (ULONG, MY_NOTIFY_FN, PVOID, PVOID *);
 
 #define LDR_DLL_NOTIFICATION_REASON_LOADED   1
 #define LDR_DLL_NOTIFICATION_REASON_UNLOADED 2
@@ -318,7 +332,7 @@ typedef NTSTATUS (NTAPI *PFN_REGISTER) (ULONG, MY_NOTIFY_FN, PVOID, PVOID *);
 static PVOID g_ldr_cookie;
 
 static int
-us_starts_w(PUNICODE_STRING us, const WCHAR *prefix, int prefix_len)
+us_starts_w(PAB_UNICODE_STRING us, const WCHAR *prefix, int prefix_len)
 {
     if (!us || !us->Buffer) return 0;
     int len = us->Length / (int)sizeof(WCHAR);
@@ -334,7 +348,7 @@ ldr_notify(ULONG reason, MY_LDR_DATA *data, PVOID ctx)
     if (reason != LDR_DLL_NOTIFICATION_REASON_LOADED) return;
     if (!data || !data->BaseDllName || !data->BaseDllName->Buffer) return;
 
-    PUNICODE_STRING n = data->BaseDllName;
+    PAB_UNICODE_STRING n = data->BaseDllName;
     int len = n->Length / (int)sizeof(WCHAR);
     blog("[B1] DLL loaded: %.*ls  base=%p  size=0x%lX",
          len, n->Buffer, data->DllBase, data->SizeOfImage);
@@ -373,7 +387,7 @@ register_ldr_notification(void)
     HMODULE ntdll = GetModuleHandleA("ntdll.dll");
     PFN_REGISTER fn = (PFN_REGISTER)GetProcAddress(ntdll, "LdrRegisterDllNotification");
     if (!fn) { blog("[B1] LdrRegisterDllNotification not in ntdll"); return; }
-    NTSTATUS st = fn(0, ldr_notify, NULL, &g_ldr_cookie);
+    AB_NTSTATUS st = fn(0, ldr_notify, NULL, &g_ldr_cookie);
     blog("[B1] LdrRegisterDllNotification: status=0x%08lX  cookie=%p",
          (unsigned long)st, g_ldr_cookie);
 }
