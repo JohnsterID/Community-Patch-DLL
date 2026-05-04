@@ -124,12 +124,25 @@ log_open(void)
 
 
 /* ------------------------------------------------------------------ */
-/*  VirtualQuery diagnostic — walk the full shadow range and log       */
-/*  every region (state, type, protect, allocation base, size).        */
-/*  Called before and after VirtualFree so we can see exactly what     */
-/*  is (or is not) occupying [SHADOW_BASE, 0x50000000).                */
+/*  VirtualQuery helpers                                               */
 /* ------------------------------------------------------------------ */
 
+/*
+ * Walk [SHADOW_BASE, 0x50000000) and log every region with its state,
+ * type, protection, and allocation base.  Called before and after
+ * VirtualFree to capture exactly what occupies the shadow range.
+ *
+ * Pre-free interpretation:
+ *   - Only one MEM_RESERVE PRIVATE region (our own) → ldr_notify fires
+ *     BEFORE DllMain.  After VirtualFree the range will be MEM_FREE.
+ *   - Any MEM_COMMIT regions → ldr_notify fires AFTER DllMain; something
+ *     has already been mapped in the shadow range.
+ *
+ * Post-free interpretation:
+ *   - Single MEM_FREE region → VirtualFree succeeded; __asan_init will
+ *     find the range clear.
+ *   - Anything else → VirtualFree failed or something raced in.
+ */
 static void
 vquery_shadow_diag(const char *tag)
 {
@@ -169,6 +182,72 @@ vquery_shadow_diag(const char *tag)
         addr = (LPVOID)((BYTE *)mbi.BaseAddress + mbi.RegionSize);
     }
     blog("[vq-%s]   %d region(s) logged.", tag, regions);
+}
+
+/*
+ * Scan the full 32-bit user address space for large (>= 128 MB) private
+ * blocks that are MEM_RESERVE or MEM_COMMIT.  The ASan 32-bit shadow is
+ * ~512 MB; this will locate it regardless of where the dynamic runtime
+ * placed it.  Called once after CvGameCore initialises so that __asan_init
+ * has either committed the shadow or aborted.
+ *
+ * Also reads __asan_shadow_memory_dynamic_address from clang_rt via
+ * GetProcAddress — this is the runtime's own record of the shadow base.
+ */
+static void
+find_asan_shadow(void)
+{
+    /* Read the symbol directly from the ASan runtime */
+    HMODULE hasan = GetModuleHandleA("clang_rt.asan_dynamic-i386.dll");
+    if (hasan) {
+        FARPROC sym = GetProcAddress(hasan,
+                          "__asan_shadow_memory_dynamic_address");
+        if (sym)
+            blog("[shadow-hunt] __asan_shadow_memory_dynamic_address"
+                 " @ %p  value=0x%08lX",
+                 (void *)sym, (unsigned long)*(DWORD *)sym);
+        else
+            blog("[shadow-hunt] __asan_shadow_memory_dynamic_address"
+                 " not exported from clang_rt");
+    } else {
+        blog("[shadow-hunt] clang_rt.asan_dynamic-i386.dll not in process");
+    }
+
+    /* Walk the full user address space for large private blocks */
+    blog("[shadow-hunt] Scanning user space for large (>=128MB) private"
+         " blocks:");
+    LPVOID addr = (LPVOID)0x00010000;
+    LPVOID end  = (LPVOID)0xC0000000;  /* 32-bit user space ceiling */
+    int    hits = 0;
+    while (addr < end) {
+        MEMORY_BASIC_INFORMATION mbi;
+        SIZE_T ret = VirtualQuery(addr, &mbi, sizeof(mbi));
+        if (!ret) break;
+
+        if (mbi.RegionSize >= 0x8000000 &&       /* >= 128 MB            */
+            mbi.State      != MEM_FREE   &&
+            mbi.Type       == MEM_PRIVATE)
+        {
+            const char *state =
+                (mbi.State == MEM_RESERVE) ? "RESERVE" :
+                (mbi.State == MEM_COMMIT)  ? "COMMIT"  : "???";
+            blog("[shadow-hunt]   %p - %p  size=0x%08lX  %s  "
+                 "protect=%08lX  allocBase=%p",
+                 mbi.BaseAddress,
+                 (LPVOID)((BYTE *)mbi.BaseAddress + mbi.RegionSize),
+                 (unsigned long)mbi.RegionSize,
+                 state,
+                 (unsigned long)mbi.Protect,
+                 mbi.AllocationBase);
+            ++hits;
+        }
+        addr = (LPVOID)((BYTE *)mbi.BaseAddress + mbi.RegionSize);
+    }
+    if (hits == 0)
+        blog("[shadow-hunt]   No large private blocks found — "
+             "ASan may have aborted before mapping shadow.");
+    else
+        blog("[shadow-hunt]   %d large private block(s) found.", hits);
 }
 
 
@@ -362,17 +441,21 @@ ldr_notify(ULONG reason, MY_LDR_DATA *data, PVOID ctx)
          len, n->Buffer, data->DllBase, data->SizeOfImage);
 
     /* Diagnostic: log vanilla/mod CvGameCore loads.
-     * For the mod (ASAN-instrumented) CvGameCore, also dump the shadow range
-     * to capture what the address space looks like after __asan_init has run
-     * (or aborted).  This reveals whether committed pages remain in shadow. */
+     * For the mod (ASAN-instrumented) CvGameCore, run the full shadow-hunt:
+     *   - vquery_shadow_diag: confirms state of [0x2FFF0000, 0x50000000)
+     *   - find_asan_shadow:   scans the FULL address space for the actual
+     *     shadow block and reads __asan_shadow_memory_dynamic_address.
+     * By this point clang_rt DllMain (__asan_init) has already run, so the
+     * shadow is either committed somewhere or ASan aborted. */
     if (us_starts_w(n, CVGAME_PREFIX_W, CVGAME_PFX_LEN)) {
-        if (data->DllBase == (PVOID)0x95730000 ||   /* known mod base — heuristic */
-            data->SizeOfImage > 0x1000000)           /* mod DLL is very large      */
-        {
-            blog("     -> CvGameCore_Expansion2 (mod/ASAN build) detected");
+        if (data->SizeOfImage > 0x1000000) {   /* mod/ASAN build is very large */
+            blog("     -> CvGameCore_Expansion2 (mod/ASAN build) detected"
+                 "  base=%p  size=0x%lX", data->DllBase, data->SizeOfImage);
             vquery_shadow_diag("post-CvGame");
+            find_asan_shadow();
         } else {
-            blog("     -> CvGameCore_Expansion2 (factory/DLC) detected (shadow kept reserved)");
+            blog("     -> CvGameCore_Expansion2 (factory/DLC) detected"
+                 " (shadow kept reserved)");
         }
         return;
     }
