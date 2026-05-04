@@ -124,6 +124,55 @@ log_open(void)
 
 
 /* ------------------------------------------------------------------ */
+/*  VirtualQuery diagnostic — walk the full shadow range and log       */
+/*  every region (state, type, protect, allocation base, size).        */
+/*  Called before and after VirtualFree so we can see exactly what     */
+/*  is (or is not) occupying [SHADOW_BASE, 0x50000000).                */
+/* ------------------------------------------------------------------ */
+
+static void
+vquery_shadow_diag(const char *tag)
+{
+    LPVOID addr = SHADOW_BASE;
+    LPVOID end  = (LPVOID)0x50000000;
+    int regions = 0;
+
+    blog("[vq-%s] VirtualQuery scan [%p, 0x50000000):", tag, SHADOW_BASE);
+    while (addr < end) {
+        MEMORY_BASIC_INFORMATION mbi;
+        SIZE_T ret = VirtualQuery(addr, &mbi, sizeof(mbi));
+        if (!ret) {
+            blog("[vq-%s]   VirtualQuery(%p) failed err=%lu", tag, addr,
+                 (unsigned long)GetLastError());
+            break;
+        }
+
+        const char *state =
+            (mbi.State == MEM_FREE)    ? "FREE" :
+            (mbi.State == MEM_RESERVE) ? "RESERVE" :
+            (mbi.State == MEM_COMMIT)  ? "COMMIT" : "???";
+        const char *type =
+            (mbi.State == MEM_FREE)   ? "-" :
+            (mbi.Type  == MEM_IMAGE)  ? "IMAGE" :
+            (mbi.Type  == MEM_MAPPED) ? "MAPPED" :
+            (mbi.Type  == MEM_PRIVATE)? "PRIVATE" : "???";
+
+        blog("[vq-%s]   %p - %p  %-7s  %-7s  protect=%08lX  allocBase=%p",
+             tag,
+             mbi.BaseAddress,
+             (LPVOID)((BYTE *)mbi.BaseAddress + mbi.RegionSize),
+             state, type,
+             (unsigned long)mbi.Protect,
+             mbi.AllocationBase);
+        ++regions;
+
+        addr = (LPVOID)((BYTE *)mbi.BaseAddress + mbi.RegionSize);
+    }
+    blog("[vq-%s]   %d region(s) logged.", tag, regions);
+}
+
+
+/* ------------------------------------------------------------------ */
 /*  Shadow reservation release (one-shot)                              */
 /* ------------------------------------------------------------------ */
 
@@ -136,9 +185,11 @@ release_shadow(const char *trigger)
         blog("    release_shadow: already released (called from <%s>)", trigger);
         return;
     }
-    BOOL ok = VirtualFree(SHADOW_BASE, 0, MEM_RELEASE);
-    blog("[+] release_shadow via <%s>: VirtualFree(%p) = %s",
-         trigger, SHADOW_BASE, ok ? "OK" : "FAILED");
+    SetLastError(0);
+    BOOL ok  = VirtualFree(SHADOW_BASE, 0, MEM_RELEASE);
+    DWORD err = GetLastError();
+    blog("[+] release_shadow via <%s>: VirtualFree(%p) = %s  err=%lu",
+         trigger, SHADOW_BASE, ok ? "OK" : "FAILED", (unsigned long)err);
 }
 
 
@@ -310,9 +361,19 @@ ldr_notify(ULONG reason, MY_LDR_DATA *data, PVOID ctx)
     blog("[B1] DLL loaded: %.*ls  base=%p  size=0x%lX",
          len, n->Buffer, data->DllBase, data->SizeOfImage);
 
-    /* Diagnostic: log vanilla/mod CvGameCore loads (shadow NOT released here) */
+    /* Diagnostic: log vanilla/mod CvGameCore loads.
+     * For the mod (ASAN-instrumented) CvGameCore, also dump the shadow range
+     * to capture what the address space looks like after __asan_init has run
+     * (or aborted).  This reveals whether committed pages remain in shadow. */
     if (us_starts_w(n, CVGAME_PREFIX_W, CVGAME_PFX_LEN)) {
-        blog("     -> CvGameCore_Expansion2 detected (shadow kept reserved)");
+        if (data->DllBase == (PVOID)0x95730000 ||   /* known mod base — heuristic */
+            data->SizeOfImage > 0x1000000)           /* mod DLL is very large      */
+        {
+            blog("     -> CvGameCore_Expansion2 (mod/ASAN build) detected");
+            vquery_shadow_diag("post-CvGame");
+        } else {
+            blog("     -> CvGameCore_Expansion2 (factory/DLC) detected (shadow kept reserved)");
+        }
         return;
     }
 
@@ -327,10 +388,24 @@ ldr_notify(ULONG reason, MY_LDR_DATA *data, PVOID ctx)
      * An IAT hook on VirtualAlloc therefore cannot intercept shadow init.
      *
      * Release the reservation right here, while we are still in the notification
-     * callback (i.e. before DllMain runs), so __asan_init finds the range free. */
+     * callback (i.e. before DllMain runs), so __asan_init finds the range free.
+     *
+     * The VirtualQuery scans below (before and after VirtualFree) answer two
+     * diagnostic questions:
+     *   1. What occupies the shadow range when this callback fires?
+     *      - Only MEM_RESERVE (our reservation): callback fires BEFORE DllMain.
+     *        After VirtualFree the range is free; if ASan still fails something
+     *        allocates in the window between our free and __asan_init's check.
+     *      - MEM_COMMIT pages present: callback fires AFTER DllMain ran (and
+     *        __asan_init may have partially set up or aborted).
+     *   2. After VirtualFree, is the range truly MEM_FREE?
+     *      If not, VirtualFree failed for some reason. */
     if (us_starts_w(n, ASAN_RT_PREFIX_W, ASAN_RT_PFX_LEN)) {
-        blog("     -> ASan runtime detected — releasing shadow reservation now");
+        blog("     -> ASan runtime detected  base=%p  size=0x%lX",
+             data->DllBase, data->SizeOfImage);
+        vquery_shadow_diag("pre-free");
         release_shadow("LdrDllNotification-clang_rt");
+        vquery_shadow_diag("post-free");
         return;
     }
 }
