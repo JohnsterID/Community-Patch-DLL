@@ -746,24 +746,21 @@ def build_asan_launcher(cl: str, link: str, out_dir: Path, log: typing.IO):
     msg = (
         f'Built {ASAN_LAUNCHER_EXE} -> {exe}\n'
         f'\n'
-        f'  *** ASan session setup ***\n'
+        f'  *** ASan session workflow ***\n'
         f'\n'
-        f'  1. Set ASAN_OPTIONS (once, per session):\n'
-        f'       set ASAN_OPTIONS=log_path=asan_game.log:halt_on_error=0:'
-        f'detect_leaks=0\n'
+        f'  Copy both files to your Civ5 game directory (next to CivilizationV.exe):\n'
+        f'    copy "{exe}" "<game_dir>"\n'
+        f'    copy "{out_dir / SHADOW_BOOT_DLL}" "<game_dir>"\n'
         f'\n'
-        f'  2. Launch game via the launcher (instead of CivilizationV.exe directly):\n'
-        f'       "{exe}"\n'
-        f'     Or with explicit EXE path:\n'
-        f'       "{exe}" "C:\\Games\\Sid Meier\'s Civilization V\\CivilizationV.exe"\n'
+        f'  Then from that directory:\n'
+        f'    set ASAN_OPTIONS=log_path=asan_game.log:halt_on_error=0:detect_leaks=0\n'
+        f'    {ASAN_LAUNCHER_EXE} CivilizationV.exe\n'
+        f'      -- or via env var --\n'
+        f'    set CIVV_EXE=<full path to CivilizationV.exe>\n'
+        f'    {ASAN_LAUNCHER_EXE}\n'
         f'\n'
-        f'  3. In-game: activate mod -> ASan shadow maps OK -> play to trigger detections.\n'
-        f'\n'
-        f'  4. Reports written to asan_game.log.<PID> next to the game EXE.\n'
-        f'\n'
-        f'  Copy to game output folder alongside the other DLLs:\n'
-        f'    copy "{exe}" "{{game_dir}}"\n'
-        f'    copy "{out_dir / SHADOW_BOOT_DLL}" "{{game_dir}}"\n'
+        f'  In-game: main menu -> mod menu -> activate VP mod -> play.\n'
+        f'  ASan reports: asan_game.log.<PID> next to the game EXE.\n'
     )
     print(msg, end='')
     log.write(msg.encode())
@@ -807,5 +804,6 @@ try:
         copy_asan_runtime(out_dir, log)
         rebase_asan_runtime(out_dir, log)
         build_shadow_boot(cl, link, out_dir, log)
+        build_asan_launcher(cl, link, out_dir, log)
 finally:
     log.close()
