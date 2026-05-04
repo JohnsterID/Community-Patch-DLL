@@ -52,6 +52,7 @@
 #include <stdio.h>
 #include <stdarg.h>
 #include <string.h>
+#include <wchar.h>
 
 /* ------------------------------------------------------------------ */
 /*  Constants                                                          */
@@ -258,9 +259,8 @@ name_starts_a(LPCSTR name, const char *prefix, int prefix_len)
     if (!name) return 0;
     for (LPCSTR p = name; *p; ++p)
         if (*p == '\\' || *p == '/') name = p + 1;
-    return lstrlenA(name) >= prefix_len &&
-           CompareStringA(LOCALE_INVARIANT, NORM_IGNORECASE,
-                          name, prefix_len, prefix, prefix_len) == CSTR_EQUAL;
+    return (int)strlen(name) >= prefix_len &&
+           _strnicmp(name, prefix, (size_t)prefix_len) == 0;
 }
 
 static HMODULE WINAPI
@@ -336,9 +336,8 @@ us_starts_w(PAB_UNICODE_STRING us, const WCHAR *prefix, int prefix_len)
 {
     if (!us || !us->Buffer) return 0;
     int len = us->Length / (int)sizeof(WCHAR);
-    return len >= prefix_len &&
-           CompareStringOrdinal(us->Buffer, prefix_len,
-                                prefix, prefix_len, TRUE) == CSTR_EQUAL;
+    if (len < prefix_len) return 0;
+    return _wcsnicmp(us->Buffer, prefix, (size_t)prefix_len) == 0;
 }
 
 static VOID CALLBACK
