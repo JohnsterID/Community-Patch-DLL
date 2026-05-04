@@ -169,13 +169,13 @@ inject_dll(HANDLE proc, const char *dll_abs)
 
     /*
      * The original DLL (first commit, no logging/hook code) is 8704 bytes.
-     * The current DLL with LdrDllNotification + VirtualAlloc hook + file
+     * The current DLL with LdrDllNotification + VirtualQuery hook + file
      * logging is substantially larger.  Warn if the file looks stale.
      */
     if (dll_sz <= 9000) {
         log_warn("DLL is only %lu bytes — this looks like a stale build.", dll_sz);
         log_warn("  The current version has logging, LdrDllNotification,");
-        log_warn("  and a VirtualAlloc hook; it will be significantly larger.");
+        log_warn("  and a VirtualQuery hook; it will be significantly larger.");
         log_warn("  Rebuild: python build_vp_clang.py --sanitizer asan");
         log_warn("  Then copy asan_shadow_boot.dll to the game directory.");
     }
@@ -369,9 +369,12 @@ int main(int argc, char **argv)
 
     /* ----------------------------------------------------------------
      * 4.  Inject asan_shadow_boot.dll
-     *     Phase A (DllMain):  VirtualAlloc shadow range — GPU cannot claim it
-     *     Phase B (IAT hook): LoadLibraryA -> detect vanilla CvGameCore ->
-     *                         VirtualFree -> ASan init gets a clean range
+     *     Phase A (DllMain):        VirtualAlloc shadow range — GPU/ASLR
+     *                               cannot claim it before clang_rt loads.
+     *     Phase B (ldr_notify +     Detect clang_rt; hook VirtualQuery in
+     *              VirtualQuery      its IAT; release reservation INSIDE
+     *              IAT hook):        the first VirtualQuery for the shadow
+     *                               range (zero window — no heap races).
      * ---------------------------------------------------------------- */
 
     printf("\n");
@@ -383,7 +386,7 @@ int main(int argc, char **argv)
         log_ok("Injection succeeded.");
         log_info("Phase A: VirtualAlloc [%s, %s) — result in DLL log.",
                  SHADOW_BASE_STR, SHADOW_END_STR);
-        log_info("Phase B: LdrDllNotification + VirtualAlloc hook registered.");
+        log_info("Phase B: LdrDllNotification + VirtualQuery hook registered.");
         log_info("DLL log written to %%TEMP%%\\asan_shadow_boot_debug.log");
         {
             char tmp[MAX_PATH];

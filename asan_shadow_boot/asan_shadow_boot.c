@@ -31,10 +31,20 @@
  * Phase B (via LdrRegisterDllNotification, fires BEFORE DllMain on Win10/11):
  *   When "clang_rt.asan_dynamic" is detected:
  *     - The DLL image is already placed safely outside shadow (Phase A ensured it).
- *     - VirtualFree the reservation immediately, while still in the notification
- *       callback (before the DLL's DllMain / __asan_init() runs).
- *     - __asan_init() then finds the range MEM_FREE, calls NtAllocateVirtualMemory
- *       successfully, and ASan initialises normally.
+ *     - Hook VirtualQuery in clang_rt's IAT.
+ *     - When ASan's MemoryRangeIsAvailable calls VirtualQuery for the first
+ *       shadow-range address (inside DllMain), our hook releases the reservation
+ *       INSIDE that call — zero window between free and check.  Real VirtualQuery
+ *       then returns MEM_FREE; the check passes; __asan_init maps the shadow.
+ *
+ *   Why not VirtualFree in ldr_notify directly?
+ *     Tried and failed (PID 3428): ldr_notify fires before DllMain, VirtualFree
+ *     succeeds ([vq-post-free]=FREE), yet ASan aborts (__asan_shadow_memory_-
+ *     dynamic_address=0).  Between ldr_notify returning and DllMain being called,
+ *     the loader expands the TLS slot array / does bookkeeping via HeapAlloc.
+ *     That allocation lands at 0x2FFF0000+ (lowest free range), occupying the
+ *     shadow range before ASan's check. VirtualQuery-inside-the-hook eliminates
+ *     the window entirely.
  *
  * Diagnostic:
  *   Every event is logged to %TEMP%\asan_shadow_boot_debug.log.
@@ -333,6 +343,64 @@ patch_iat(FARPROC *slot, FARPROC new_fn, FARPROC *saved)
 
 
 /* ------------------------------------------------------------------ */
+/*  VirtualQuery hook — installed in clang_rt's IAT at ldr_notify     */
+/*                                                                     */
+/*  Root cause (PID 3428 / __asan_shadow_memory_dynamic_address=0):   */
+/*  ldr_notify fires before DllMain (proven by [vq-pre-free]).        */
+/*  We called VirtualFree there; [vq-post-free] confirmed MEM_FREE.   */
+/*  Yet ASan aborted.  The window:                                    */
+/*                                                                     */
+/*    ldr_notify returns                                               */
+/*       |                                                             */
+/*       +--> loader TLS slot expansion / bookkeeping (heap alloc)    */
+/*       |    -> new heap segment lands at 0x2FFF0000+                */
+/*       |       (lowest free range after our VirtualFree)            */
+/*       |                                                             */
+/*    DllMain called                                                   */
+/*       |                                                             */
+/*       +--> __asan_init -> MemoryRangeIsAvailable                   */
+/*              -> VirtualQuery(0x2FFF0000) -> MEM_COMMIT             */
+/*              -> "shadow interleaves" ABORT                         */
+/*                                                                     */
+/*  Fix: don't VirtualFree in ldr_notify.  Instead, hook VirtualQuery */
+/*  in clang_rt's IAT.  When ASan's MemoryRangeIsAvailable calls      */
+/*  VirtualQuery for the first shadow-range address, we release the   */
+/*  reservation INSIDE that call — zero window between free and check.*/
+/*  The hook is one-shot: IAT is restored immediately so subsequent   */
+/*  VirtualQuery calls in the loop go to the real function.           */
+/* ------------------------------------------------------------------ */
+
+static FARPROC *g_vq_slot;
+static FARPROC  g_real_vq;
+
+static SIZE_T WINAPI
+hooked_VirtualQuery(LPCVOID lpAddress,
+                    PMEMORY_BASIC_INFORMATION lpBuffer,
+                    SIZE_T dwLength)
+{
+    DWORD addr = (DWORD)(DWORD_PTR)lpAddress;
+
+    if (addr >= (DWORD)(DWORD_PTR)SHADOW_BASE && addr < 0x50000000u) {
+        blog("[VQ-hook] VirtualQuery(%p) in shadow range — releasing reservation",
+             lpAddress);
+
+        /* Restore real VirtualQuery first to avoid any re-entrancy */
+        FARPROC *slot = g_vq_slot;
+        if (slot) {
+            patch_iat(slot, g_real_vq, NULL);
+            g_vq_slot = NULL;
+        }
+
+        /* Release the reservation so the real VirtualQuery sees MEM_FREE */
+        release_shadow("VirtualQuery-hook");
+    }
+
+    return ((SIZE_T (WINAPI *)(LPCVOID, PMEMORY_BASIC_INFORMATION, SIZE_T))
+            g_real_vq)(lpAddress, lpBuffer, dwLength);
+}
+
+
+/* ------------------------------------------------------------------ */
 /*  LoadLibrary IAT hooks on EXE — diagnostic only (no VirtualFree)   */
 /* ------------------------------------------------------------------ */
 
@@ -460,35 +528,36 @@ ldr_notify(ULONG reason, MY_LDR_DATA *data, PVOID ctx)
         return;
     }
 
-    /* Primary trigger: clang_rt.asan_dynamic — fires BEFORE DllMain on Win10/11.
-     * The DLL image is already mapped (and placed outside the shadow range by
-     * Phase A).  __asan_init() has not run yet.
+    /* Primary trigger: clang_rt.asan_dynamic — fires BEFORE DllMain.
      *
-     * __asan_init() uses NtAllocateVirtualMemory (direct ntdll syscall) —
-     * not kernel32 VirtualAlloc — for shadow setup.  It first calls VirtualQuery
-     * to check the range is MEM_FREE; if anything occupies it (including our
-     * own MEM_RESERVE) it aborts immediately without ever calling VirtualAlloc.
-     * An IAT hook on VirtualAlloc therefore cannot intercept shadow init.
-     *
-     * Release the reservation right here, while we are still in the notification
-     * callback (i.e. before DllMain runs), so __asan_init finds the range free.
-     *
-     * The VirtualQuery scans below (before and after VirtualFree) answer two
-     * diagnostic questions:
-     *   1. What occupies the shadow range when this callback fires?
-     *      - Only MEM_RESERVE (our reservation): callback fires BEFORE DllMain.
-     *        After VirtualFree the range is free; if ASan still fails something
-     *        allocates in the window between our free and __asan_init's check.
-     *      - MEM_COMMIT pages present: callback fires AFTER DllMain ran (and
-     *        __asan_init may have partially set up or aborted).
-     *   2. After VirtualFree, is the range truly MEM_FREE?
-     *      If not, VirtualFree failed for some reason. */
+     * Strategy: hook VirtualQuery in clang_rt's IAT.
+     *   - ASan's MemoryRangeIsAvailable calls VirtualQuery for each page of
+     *     the shadow range.  Our hook fires on the FIRST such call, releases
+     *     the reservation inside that call (zero window), then restores the
+     *     real VirtualQuery so subsequent loop iterations go directly.
+     *   - Fallback: if VirtualQuery is not in clang_rt's IAT, call
+     *     release_shadow now (old approach; window exists but rare). */
     if (us_starts_w(n, ASAN_RT_PREFIX_W, ASAN_RT_PFX_LEN)) {
         blog("     -> ASan runtime detected  base=%p  size=0x%lX",
              data->DllBase, data->SizeOfImage);
-        vquery_shadow_diag("pre-free");
-        release_shadow("LdrDllNotification-clang_rt");
-        vquery_shadow_diag("post-free");
+
+        vquery_shadow_diag("pre-hook");   /* confirm only our RESERVE is present */
+
+        FARPROC *vq_slot = find_iat_slot_in(data->DllBase,
+                               "KERNEL32.DLL", "VirtualQuery");
+        if (vq_slot) {
+            patch_iat(vq_slot, (FARPROC)hooked_VirtualQuery, &g_real_vq);
+            g_vq_slot = vq_slot;
+            blog("     VirtualQuery IAT hooked @ %p  real=%p", vq_slot, g_real_vq);
+            blog("     Shadow will be released inside first VirtualQuery"
+                 " for shadow range.");
+            /* Do NOT call release_shadow here — hook fires at the right moment */
+        } else {
+            blog("     WARNING: VirtualQuery not in clang_rt IAT — "
+                 "releasing now (window may exist)");
+            release_shadow("ldr_notify-fallback");
+            vquery_shadow_diag("post-free-fallback");
+        }
         return;
     }
 }
