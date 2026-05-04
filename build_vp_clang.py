@@ -30,10 +30,14 @@ ASAN_RUNTIME_DLL = 'clang_rt.asan_dynamic-i386.dll'
 # 0x72000000 is in HighMem (>= 0x50000000), well above all shadow regions,
 # and matches where ASLR placed the DLL in all previously successful sessions.
 ASAN_REBASE_ADDRESS = '0x72000000'
-# Shadow-range pre-reservation shim; built alongside clang_rt.asan_dynamic-i386.dll
-# and injected into CivilizationV.exe at process start via AppInit_DLLs.
+# Shadow-range pre-reservation shim built alongside clang_rt.asan_dynamic-i386.dll.
+# Injected into CivilizationV.exe at process start by asan_launcher.exe.
 SHADOW_BOOT_DLL = 'asan_shadow_boot.dll'
 SHADOW_BOOT_SRC = Path('asan_shadow_boot') / 'asan_shadow_boot.c'
+# Launcher EXE: suspends CivilizationV.exe, injects the boot DLL, then resumes.
+# Replaces AppInit_DLLs; no registry changes needed.
+ASAN_LAUNCHER_EXE = 'asan_launcher.exe'
+ASAN_LAUNCHER_SRC = Path('asan_launcher') / 'asan_launcher.c'
 
 VS_2008_VARS_BAT = Path(os.environ['VS90COMNTOOLS']).joinpath('vsvars32.bat')
 CORE_DLL = 'CvGameCore_Expansion2'
@@ -672,27 +676,94 @@ def build_shadow_boot(cl: str, link: str, out_dir: Path, log: typing.IO):
         log.write(msg.encode())
         return
 
+    msg = f'Built {SHADOW_BOOT_DLL} -> {dll}\n'
+    print(msg, end='')
+    log.write(msg.encode())
+
+def build_asan_launcher(cl: str, link: str, out_dir: Path, log: typing.IO):
+    """Build asan_launcher.exe — the preferred injection launcher.
+
+    Creates CivilizationV.exe as a suspended process, injects asan_shadow_boot.dll
+    via CreateRemoteThread, then resumes.  No registry changes, no elevation.
+
+    Must be 32-bit (/MACHINE:x86): GetProcAddress("LoadLibraryW") must return
+    the 32-bit kernel32 address that is valid inside the 32-bit game process.
+    On 64-bit Windows all 32-bit processes share the same ASLR base for system
+    DLLs (randomised once at boot), so the 32-bit address from our process is
+    correct for the target.
+    """
+    import subprocess as sp
+
+    src = PROJECT_DIR / ASAN_LAUNCHER_SRC
+    if not src.exists():
+        msg = f'Warning: {src} not found; skipping {ASAN_LAUNCHER_EXE} build.\n'
+        print(msg, end='')
+        log.write(msg.encode())
+        return
+
+    obj  = out_dir / 'asan_launcher.obj'
+    exe  = out_dir / ASAN_LAUNCHER_EXE
+    pdb  = out_dir / 'asan_launcher.pdb'
+
+    # --- Step 1: compile ---
+    # /MT (static CRT) makes the launcher self-contained — no MSVCR*.dll needed.
+    # Matches Zenith-test build_zenith_launcher_v90.py which uses libcmt.lib.
+    compile_cmd = [
+        cl, '/nologo', '/W3', '/O2', '/MT', '/GS-',
+        str(src), f'/Fo:{obj}', '/c',
+    ]
+    msg = f'Compiling {ASAN_LAUNCHER_SRC.name} ...\n'
+    print(msg, end='')
+    log.write(msg.encode())
+    cp = sp.run(compile_cmd, capture_output=True)
+    for chunk in (cp.stdout, cp.stderr):
+        if chunk: log.write(chunk)
+    if cp.returncode != 0:
+        msg = f'Error: {ASAN_LAUNCHER_EXE} compile failed (exit {cp.returncode}).\n'
+        print(msg, end='')
+        log.write(msg.encode())
+        return
+
+    # --- Step 2: link as console EXE (static runtime, no CRT DLL dependency) ---
+    link_cmd = [
+        link, '/nologo', '/MACHINE:x86',
+        str(obj), f'/OUT:{exe}', f'/PDB:{pdb}',
+        '/SUBSYSTEM:CONSOLE',
+        'kernel32.lib', 'advapi32.lib', 'libcmt.lib',
+    ]
+    msg = f'Linking {ASAN_LAUNCHER_EXE} ...\n'
+    print(msg, end='')
+    log.write(msg.encode())
+    cp = sp.run(link_cmd, capture_output=True, cwd=str(out_dir))
+    for chunk in (cp.stdout, cp.stderr):
+        if chunk: log.write(chunk)
+    if cp.returncode != 0:
+        msg = f'Error: {ASAN_LAUNCHER_EXE} link failed (exit {cp.returncode}).\n'
+        print(msg, end='')
+        log.write(msg.encode())
+        return
+
     msg = (
-        f'Built {SHADOW_BOOT_DLL} -> {dll}\n'
+        f'Built {ASAN_LAUNCHER_EXE} -> {exe}\n'
         f'\n'
-        f'  *** DEPLOYMENT — run once from an elevated command prompt ***\n'
+        f'  *** ASan session setup ***\n'
         f'\n'
-        f'  Register (inject at CivilizationV.exe startup):\n'
-        f'    reg add "HKLM\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows NT\\'
-        f'CurrentVersion\\Windows" /v AppInit_DLLs /t REG_SZ /d "{dll}" /f\n'
-        f'    reg add "HKLM\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows NT\\'
-        f'CurrentVersion\\Windows" /v LoadAppInit_DLLs /t REG_DWORD /d 1 /f\n'
-        f'    reg add "HKLM\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows NT\\'
-        f'CurrentVersion\\Windows" /v RequireSignedAppInit_DLLs /t REG_DWORD /d 0 /f\n'
+        f'  1. Set ASAN_OPTIONS (once, per session):\n'
+        f'       set ASAN_OPTIONS=log_path=asan_game.log:halt_on_error=0:'
+        f'detect_leaks=0\n'
         f'\n'
-        f'  Unregister when ASan testing is done:\n'
-        f'    reg add "HKLM\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows NT\\'
-        f'CurrentVersion\\Windows" /v AppInit_DLLs /t REG_SZ /d "" /f\n'
-        f'    reg add "HKLM\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows NT\\'
-        f'CurrentVersion\\Windows" /v LoadAppInit_DLLs /t REG_DWORD /d 0 /f\n'
+        f'  2. Launch game via the launcher (instead of CivilizationV.exe directly):\n'
+        f'       "{exe}"\n'
+        f'     Or with explicit EXE path:\n'
+        f'       "{exe}" "C:\\Games\\Sid Meier\'s Civilization V\\CivilizationV.exe"\n'
         f'\n'
-        f'  NOTE: Wow6432Node is correct for 32-bit processes on 64-bit Windows.\n'
-        f'        The DLL is a no-op in every non-game process.\n'
+        f'  3. In-game: activate mod -> ASan shadow maps OK -> play to trigger detections.\n'
+        f'\n'
+        f'  4. Reports written to asan_game.log.<PID> next to the game EXE.\n'
+        f'\n'
+        f'  Copy to game output folder alongside the other DLLs:\n'
+        f'    copy "{exe}" "{{game_dir}}"\n'
+        f'    copy "{out_dir / SHADOW_BOOT_DLL}" "{{game_dir}}"\n'
     )
     print(msg, end='')
     log.write(msg.encode())

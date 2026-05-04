@@ -24,43 +24,41 @@
  *   because the range is already committed to this process.
  *
  * Phase B (IAT hook on LoadLibraryW, just before ASan claims the shadow):
- *   When the game calls LoadLibraryW("...CvGameCore_Expansion2..."), release
- *   our reservation and unhook.  __asan_init() runs immediately after, finds
- *   the shadow range free, and maps it successfully.  The Windows loader lock
- *   is held for the entire LoadLibraryW call, so no GPU driver thread can
- *   grab the released range in the window between our VirtualFree and ASan's
- *   VirtualAlloc.
+ *   Civ5 loads TWO DLLs named CvGameCore_Expansion2.dll in sequence:
+ *     1. The vanilla game DLL (game directory) — loaded at EXE startup,
+ *        no ASan instrumentation, no shadow conflict.
+ *     2. The VP mod DLL (MODS directory) — loaded after the user activates
+ *        the mod via the in-game mod menu, fully ASan-instrumented.
+ *   The hook fires on load #1 (vanilla DLL).  It releases the shadow
+ *   reservation and unhooks itself.  By the time load #2 (VP mod DLL)
+ *   happens, the shadow range is free: GPU drivers have already settled
+ *   their allocations elsewhere (blocked by Phase A).  __asan_init() in
+ *   clang_rt.asan_dynamic-i386.dll then VirtualAllocs the shadow and
+ *   succeeds.  The Windows loader lock is held throughout LoadLibraryW,
+ *   so no thread can sneak into the freed range before ASan claims it.
  *
  * Deployment
  * ----------
- * Register via AppInit_DLLs so Windows injects this DLL into CivilizationV.exe
- * at process start, before any other initialisation code runs.
+ * Preferred: use asan_launcher.exe (built alongside this DLL).  The
+ * launcher creates CivilizationV.exe as a suspended process, injects this
+ * DLL via CreateRemoteThread, then resumes — no registry changes needed.
  *
- * From an elevated command prompt:
+ *   asan_launcher.exe [path\to\CivilizationV.exe]
  *
+ * Alternative (requires elevated prompt, affects all GUI processes):
  *   reg add "HKLM\SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion\Windows" ^
- *       /v AppInit_DLLs /t REG_SZ ^
- *       /d "<full path to asan_shadow_boot.dll>" /f
+ *       /v AppInit_DLLs /t REG_SZ /d "<full path to asan_shadow_boot.dll>" /f
  *   reg add "HKLM\SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion\Windows" ^
  *       /v LoadAppInit_DLLs /t REG_DWORD /d 1 /f
  *   reg add "HKLM\SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion\Windows" ^
  *       /v RequireSignedAppInit_DLLs /t REG_DWORD /d 0 /f
  *
- * To remove registration:
- *
- *   reg add "HKLM\SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion\Windows" ^
- *       /v AppInit_DLLs /t REG_SZ /d "" /f
- *   reg add "HKLM\SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion\Windows" ^
- *       /v LoadAppInit_DLLs /t REG_DWORD /d 0 /f
- *
  * Notes
  * -----
- * - AppInit_DLLs injects into every GUI process.  The DLL checks for
- *   CivilizationV.exe and returns immediately in all other processes.
- * - The DLL is safe to leave registered between sessions; it is a no-op in
- *   every non-game process.
- * - The companion build_vp_clang.py --sanitizer asan builds this DLL and
- *   prints the registration commands automatically.
+ * - The DLL checks GetModuleHandleW("CivilizationV.exe") and returns
+ *   immediately in all other processes (safe with AppInit_DLLs).
+ * - build_vp_clang.py --sanitizer asan builds this DLL and asan_launcher.exe
+ *   automatically and prints usage instructions.
  */
 
 #define WIN32_LEAN_AND_MEAN
@@ -169,15 +167,19 @@ Shadow_LoadLibraryW(LPCWSTR lpLibFileName)
                 g_iat_slot = NULL;
             }
             /*
-             * Release the shadow reservation.  The loader lock is held for
-             * the duration of LoadLibraryW, so no GPU thread can reclaim
-             * this range in the window between our VirtualFree and ASan's
-             * VirtualAlloc inside __asan_init().
+             * Release the shadow reservation.  Always free SHADOW_BASE
+             * directly so this works whether the reservation was made by
+             * Phase A (DllMain) or by an external launcher via VirtualAllocEx.
+             * The loader lock is held for the duration of LoadLibraryW, so no
+             * GPU thread can reclaim the range in the window between our
+             * VirtualFree and ASan's VirtualAlloc inside __asan_init().
+             *
+             * Note: this fires on the FIRST CvGameCore_Expansion2 load
+             * (the vanilla game DLL, no ASan).  That clears the range so
+             * the subsequent VP mod DLL load can map the shadow successfully.
              */
-            if (g_reservation) {
-                VirtualFree(g_reservation, 0, MEM_RELEASE);
-                g_reservation = NULL;
-            }
+            VirtualFree(SHADOW_BASE, 0, MEM_RELEASE);
+            g_reservation = NULL;
         } else {
             /* Wrong DLL - allow the hook to fire again on the next call */
             InterlockedExchange(&g_released, 0);
