@@ -358,10 +358,11 @@ int main(int argc, char **argv)
 
     if (ok) {
         log_ok("Injection succeeded.");
-        log_info("Phase A: shadow [%s, %s) reserved.", SHADOW_BASE_STR, SHADOW_END_STR);
-        log_info("Phase B: LoadLibraryA IAT hook active in %s.", GAME_EXE_NAME);
-        log_info("         Hook fires on first CvGameCore_Expansion2 load (vanilla)");
-        log_info("         -> releases shadow -> VP mod load -> __asan_init() OK.");
+        log_info("Phase A: VirtualAlloc [%s, %s) — result in DLL log.",
+                 SHADOW_BASE_STR, SHADOW_END_STR);
+        log_info("Phase B: LdrDllNotification + IAT hooks registered — see:");
+        log_info("         <game_dir>\\asan_shadow_boot_debug.log");
+        log_info("         That log shows which trigger released the shadow.");
     } else {
         log_warn("Injection failed — resuming game anyway.");
         log_warn("ASan may abort if GPU drivers occupy [%s, %s).",
