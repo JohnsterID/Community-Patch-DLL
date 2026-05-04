@@ -395,8 +395,22 @@ hooked_VirtualQuery(LPCVOID lpAddress,
         release_shadow("VirtualQuery-hook");
     }
 
-    return ((SIZE_T (WINAPI *)(LPCVOID, PMEMORY_BASIC_INFORMATION, SIZE_T))
-            g_real_vq)(lpAddress, lpBuffer, dwLength);
+    SIZE_T ret = ((SIZE_T (WINAPI *)(LPCVOID, PMEMORY_BASIC_INFORMATION, SIZE_T))
+                  g_real_vq)(lpAddress, lpBuffer, dwLength);
+
+    /* Log what ASan receives for the first shadow-range query so we can
+     * confirm MEM_FREE is returned (the check will pass) vs anything else
+     * (the check will fail and ASan will abort). */
+    if (addr >= (DWORD)(DWORD_PTR)SHADOW_BASE && addr < 0x50000000u && ret && lpBuffer) {
+        const char *state =
+            lpBuffer->State == MEM_FREE    ? "FREE" :
+            lpBuffer->State == MEM_RESERVE ? "RESERVE" :
+            lpBuffer->State == MEM_COMMIT  ? "COMMIT"  : "???";
+        blog("[VQ-hook] result for %p: state=%s  size=0x%08lX",
+             lpAddress, state, (unsigned long)lpBuffer->RegionSize);
+    }
+
+    return ret;
 }
 
 
@@ -431,11 +445,32 @@ hook_LoadLibraryA(LPCSTR name)
 static HMODULE WINAPI
 hook_LoadLibraryW(LPCWSTR name)
 {
+    char narrow[MAX_PATH];
+    int is_mods_cvgame = 0;
+
     if (name) {
-        char narrow[MAX_PATH]; WideCharToMultiByte(CP_UTF8,0,name,-1,narrow,MAX_PATH,NULL,NULL);
+        WideCharToMultiByte(CP_UTF8, 0, name, -1, narrow, MAX_PATH, NULL, NULL);
         blog("[diag-W] LoadLibraryW(\"%s\")", narrow);
+        /* Detect the MODS CvGameCore (ASan build): path contains both a
+         * mod-directory marker and the CvGameCore DLL name. */
+        is_mods_cvgame = (strstr(narrow, "MODS") || strstr(narrow, "mods")) &&
+                          name_starts_a(narrow, CVGAME_PREFIX, CVGAME_PFX_LEN);
     }
-    return ((HMODULE(WINAPI*)(LPCWSTR))g_real_w)(name);
+
+    HMODULE result = ((HMODULE(WINAPI*)(LPCWSTR))g_real_w)(name);
+
+    /* After the real LoadLibraryW returns for the MODS CvGameCore, every
+     * DllMain, ldr_notify callback, and TLS callback has completed.  If
+     * ASan initialised successfully the shadow is now committed and
+     * __asan_shadow_memory_dynamic_address is non-zero.  This is the
+     * definitive "did ASan succeed?" checkpoint. */
+    if (is_mods_cvgame) {
+        blog("[post-load] LoadLibraryW(\"%s\") = %p", narrow, (void *)result);
+        blog("[post-load] All init complete (DllMain + ldr_notify + TLS).");
+        find_asan_shadow();
+    }
+
+    return result;
 }
 
 static void
