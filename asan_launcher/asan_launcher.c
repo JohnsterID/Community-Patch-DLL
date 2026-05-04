@@ -360,9 +360,13 @@ int main(int argc, char **argv)
         log_ok("Injection succeeded.");
         log_info("Phase A: VirtualAlloc [%s, %s) — result in DLL log.",
                  SHADOW_BASE_STR, SHADOW_END_STR);
-        log_info("Phase B: LdrDllNotification + IAT hooks registered — see:");
-        log_info("         <game_dir>\\asan_shadow_boot_debug.log");
-        log_info("         That log shows which trigger released the shadow.");
+        log_info("Phase B: LdrDllNotification + VirtualAlloc hook registered.");
+        log_info("DLL log written to %%TEMP%%\\asan_shadow_boot_debug.log");
+        {
+            char tmp[MAX_PATH];
+            if (GetTempPathA(MAX_PATH, tmp))
+                log_info("         -> %sasan_shadow_boot_debug.log", tmp);
+        }
     } else {
         log_warn("Injection failed — resuming game anyway.");
         log_warn("ASan may abort if GPU drivers occupy [%s, %s).",

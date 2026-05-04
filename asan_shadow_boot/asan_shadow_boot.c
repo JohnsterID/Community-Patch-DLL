@@ -86,19 +86,39 @@ blog(const char *fmt, ...)
     va_end(ap);
 }
 
+static char g_log_path[MAX_PATH];
+
 static void
 log_open(void)
 {
-    /* Try CWD first (== game install dir when launched by asan_launcher.exe) */
-    g_log = fopen("asan_shadow_boot_debug.log", "w");
+    /*
+     * The game install directory (CWD and DLL directory) is typically
+     * UAC-protected on Vista+: user processes cannot write there without
+     * elevation.  Use %TEMP% (C:\Users\<user>\AppData\Local\Temp\) which
+     * is always writable by the current user.
+     */
+    DWORD n = GetTempPathA(MAX_PATH, g_log_path);
+    if (n && n < MAX_PATH - 32) {
+        strcat(g_log_path, "asan_shadow_boot_debug.log");
+        g_log = fopen(g_log_path, "w");
+    }
+
+    /* Fallback 1: CWD (game install dir — may fail if UAC-protected) */
     if (!g_log) {
-        /* Fallback: next to the DLL itself */
-        char dir[MAX_PATH];
-        DWORD n = GetModuleFileNameA(
-            GetModuleHandleA("asan_shadow_boot.dll"), dir, MAX_PATH);
-        while (n > 0 && dir[n-1] != '\\') --n;
-        if (n) { dir[n] = '\0'; strcat(dir, "asan_shadow_boot_debug.log"); }
-        g_log = fopen(dir, "w");
+        strncpy(g_log_path, "asan_shadow_boot_debug.log", MAX_PATH - 1);
+        g_log = fopen(g_log_path, "w");
+    }
+
+    /* Fallback 2: directory containing the DLL itself */
+    if (!g_log) {
+        DWORD m = GetModuleFileNameA(
+            GetModuleHandleA("asan_shadow_boot.dll"), g_log_path, MAX_PATH);
+        while (m > 0 && g_log_path[m-1] != '\\') --m;
+        if (m) {
+            g_log_path[m] = '\0';
+            strcat(g_log_path, "asan_shadow_boot_debug.log");
+            g_log = fopen(g_log_path, "w");
+        }
     }
 }
 
@@ -374,6 +394,7 @@ DllMain(HINSTANCE hInst, DWORD reason, LPVOID reserved)
 
     log_open();
     blog("[A] DllMain DLL_PROCESS_ATTACH  hInst=%p", (void*)hInst);
+    blog("[A] Log: %s", g_log_path[0] ? g_log_path : "(failed to open)");
 
     /* Phase A: reserve shadow range before D3D/GPU init */
     LPVOID res = VirtualAlloc(SHADOW_BASE, SHADOW_SIZE, MEM_RESERVE, PAGE_NOACCESS);
