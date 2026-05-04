@@ -145,7 +145,7 @@ inject_dll(HANDLE proc, const char *dll_abs)
 {
     log_info("Injection: %s", dll_abs);
 
-    /* Verify DLL exists and log its size */
+    /* Verify DLL exists, log its size and modification time */
     HANDLE hf = CreateFileA(dll_abs, GENERIC_READ, FILE_SHARE_READ,
                             NULL, OPEN_EXISTING, 0, NULL);
     if (hf == INVALID_HANDLE_VALUE) {
@@ -154,8 +154,31 @@ inject_dll(HANDLE proc, const char *dll_abs)
         return FALSE;
     }
     DWORD dll_sz = GetFileSize(hf, NULL);
+
+    FILETIME ft_write; SYSTEMTIME st_write;
+    if (GetFileTime(hf, NULL, NULL, &ft_write) &&
+        FileTimeToSystemTime(&ft_write, &st_write)) {
+        log_dbg("DLL file size:     %lu bytes", dll_sz);
+        log_dbg("DLL last modified: %04d-%02d-%02d %02d:%02d:%02d UTC",
+                st_write.wYear, st_write.wMonth, st_write.wDay,
+                st_write.wHour, st_write.wMinute, st_write.wSecond);
+    } else {
+        log_dbg("DLL file size: %lu bytes", dll_sz);
+    }
     CloseHandle(hf);
-    log_dbg("DLL file size: %lu bytes", dll_sz);
+
+    /*
+     * The original DLL (first commit, no logging/hook code) is 8704 bytes.
+     * The current DLL with LdrDllNotification + VirtualAlloc hook + file
+     * logging is substantially larger.  Warn if the file looks stale.
+     */
+    if (dll_sz <= 9000) {
+        log_warn("DLL is only %lu bytes — this looks like a stale build.", dll_sz);
+        log_warn("  The current version has logging, LdrDllNotification,");
+        log_warn("  and a VirtualAlloc hook; it will be significantly larger.");
+        log_warn("  Rebuild: python build_vp_clang.py --sanitizer asan");
+        log_warn("  Then copy asan_shadow_boot.dll to the game directory.");
+    }
 
     /* Verify DLL is x86 */
     WORD mach = pe_machine(dll_abs);
