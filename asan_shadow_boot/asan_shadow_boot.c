@@ -465,7 +465,21 @@ hook_LoadLibraryW(LPCWSTR name)
      * __asan_shadow_memory_dynamic_address is non-zero.  This is the
      * definitive "did ASan succeed?" checkpoint. */
     if (is_mods_cvgame) {
-        blog("[post-load] LoadLibraryW(\"%s\") = %p", narrow, (void *)result);
+        DWORD load_err = GetLastError();
+        blog("[post-load] LoadLibraryW(\"%s\") = %p  GetLastError=%lu",
+             narrow, (void *)result, (unsigned long)load_err);
+
+        /* If LoadLibraryW returned NULL, check whether the DLL is still
+         * accessible via GetModuleHandle.  This disambiguates:
+         *   handle != NULL -> DLL IS loaded; game uses GetModuleHandle,
+         *                     not LoadLibraryW return value.  ASan running.
+         *   handle == NULL -> DLL NOT in process; true load failure.     */
+        if (!result) {
+            HMODULE hmod = GetModuleHandleW(L"CvGameCore_Expansion2.dll");
+            blog("[post-load] GetModuleHandleW(CvGameCore_Expansion2) = %p",
+                 (void *)hmod);
+        }
+
         blog("[post-load] All init complete (DllMain + ldr_notify + TLS).");
         find_asan_shadow();
     }
