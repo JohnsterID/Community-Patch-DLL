@@ -6,40 +6,39 @@
  * Problem
  * -------
  * clang_rt.asan_dynamic-i386.dll is loaded late (as a dependency of the VP
- * mod DLL) and __asan_init() calls VirtualAlloc to claim the shadow range
- * [0x30000000, 0x35FFFFFF].  Two failure modes observed across sessions:
+ * mod DLL).  __asan_init() must claim the shadow range [0x2fff0000-0x4fffffff]
+ * but by that point GPU drivers (amdxc32, igc32, etc.) have consumed large
+ * anonymous pools that can fall inside that range.  If any mapping overlaps
+ * the shadow range, __asan_init aborts with:
+ *   "Shadow memory range interleaves with an existing memory mapping."
  *
- *   Run 17468: shadow reserved at injection, reservation never freed
- *              -> __asan_init VirtualAlloc hit our own reservation -> abort
- *   Run 23856: reservation freed on vanilla DLL load, ASLR then placed
- *              the ASan DLL IMAGE at 0x2FD70000 (spanning into shadow)
- *              -> __asan_init could not map shadow -> abort
- *
- * Both failures stem from the same root cause: the reservation was released
- * at the WRONG time.  The correct release point is *inside* the ASan DLL's
- * DllMain, at the exact VirtualAlloc call __asan_init() makes for the shadow.
+ * Key finding (PID 11988 / asan_game.log):
+ *   __asan_init() does NOT use kernel32 VirtualAlloc to set up the shadow.
+ *   It uses NtAllocateVirtualMemory (a direct ntdll syscall) and first calls
+ *   VirtualQuery to verify the range is MEM_FREE.  If anything — including our
+ *   own MEM_RESERVE — occupies the range, it aborts before any VirtualAlloc
+ *   call is made.  An IAT hook on VirtualAlloc in the ASan DLL therefore
+ *   cannot intercept shadow initialisation; it only sees heap/pool allocations
+ *   (0x2F800000, 0x52000000, etc.) that are unrelated to the shadow mapping.
  *
  * Solution
  * --------
  * Phase A (DLL_PROCESS_ATTACH, before D3D/GPU init):
  *   VirtualAlloc([SHADOW_BASE, SHADOW_END), MEM_RESERVE, PAGE_NOACCESS).
  *   GPU anonymous pools cannot claim the shadow range.
- *   ASLR cannot place the ASan DLL image in the shadow range.
+ *   ASLR cannot place the ASan DLL image inside the shadow range.
  *
  * Phase B (via LdrRegisterDllNotification, fires BEFORE DllMain on Win10/11):
- *   When "clang_rt.asan_dynamic" is detected loading:
- *     - Shadow is still reserved -> ASan DLL placed safely outside shadow
- *     - Hook VirtualAlloc in the ASan DLL's own IAT
- *   When hooked VirtualAlloc is called with a shadow-range address:
- *     - VirtualFree our reservation (exactly when __asan_init needs the range)
- *     - Restore real VirtualAlloc in IAT (one-shot)
- *     - Forward the call -> __asan_init claims the shadow -> SUCCESS
+ *   When "clang_rt.asan_dynamic" is detected:
+ *     - The DLL image is already placed safely outside shadow (Phase A ensured it).
+ *     - VirtualFree the reservation immediately, while still in the notification
+ *       callback (before the DLL's DllMain / __asan_init() runs).
+ *     - __asan_init() then finds the range MEM_FREE, calls NtAllocateVirtualMemory
+ *       successfully, and ASan initialises normally.
  *
  * Diagnostic:
- *   Every event is logged to asan_shadow_boot_debug.log in the game directory
- *   (CWD when DllMain runs, typically the game install directory).
- *   IAT hooks on LoadLibraryA + W in the EXE are retained as diagnostic logging
- *   only — they no longer release the shadow.
+ *   Every event is logged to %TEMP%\asan_shadow_boot_debug.log.
+ *   IAT hooks on LoadLibraryA/W in the EXE provide call-site logging only.
  *
  * Deployment:
  *   asan_launcher.exe (built by build_vp_clang.py --sanitizer asan) creates
@@ -204,47 +203,6 @@ patch_iat(FARPROC *slot, FARPROC new_fn, FARPROC *saved)
 
 
 /* ------------------------------------------------------------------ */
-/*  VirtualAlloc hook — planted in the ASan DLL's own IAT             */
-/*                                                                     */
-/*  Fires when __asan_init() calls VirtualAlloc for the shadow range.  */
-/*  Releases our reservation at the last possible moment so the call   */
-/*  succeeds.                                                           */
-/* ------------------------------------------------------------------ */
-
-static FARPROC *g_va_slot;    /* VirtualAlloc slot in ASan DLL's IAT */
-static FARPROC  g_real_va;
-
-static LPVOID WINAPI
-hooked_VirtualAlloc(LPVOID lpAddress, SIZE_T dwSize,
-                    DWORD  flAllocationType, DWORD flProtect)
-{
-    blog("[B-VA] VirtualAlloc(%p, %Iu, 0x%08lX, 0x%08lX)",
-         lpAddress, dwSize, (unsigned long)flAllocationType,
-         (unsigned long)flProtect);
-
-    /* Detect __asan_init's shadow claim: MEM_RESERVE in the shadow range */
-    if ((flAllocationType & MEM_RESERVE) &&
-        (DWORD)(DWORD_PTR)lpAddress >= (DWORD)(DWORD_PTR)SHADOW_BASE &&
-        (DWORD)(DWORD_PTR)lpAddress < 0x50000000u)
-    {
-        blog("[B-VA] Shadow-range VirtualAlloc detected — releasing reservation");
-
-        /* Restore real VirtualAlloc FIRST so recursive calls are clean */
-        FARPROC *slot = g_va_slot;
-        if (slot) {
-            patch_iat(slot, g_real_va, NULL);
-            g_va_slot = NULL;
-        }
-        /* Release our shadow reservation so the real VirtualAlloc succeeds */
-        release_shadow("VirtualAlloc-hook");
-    }
-
-    return ((LPVOID(WINAPI*)(LPVOID,SIZE_T,DWORD,DWORD))g_real_va)
-               (lpAddress, dwSize, flAllocationType, flProtect);
-}
-
-
-/* ------------------------------------------------------------------ */
 /*  LoadLibrary IAT hooks on EXE — diagnostic only (no VirtualFree)   */
 /* ------------------------------------------------------------------ */
 
@@ -358,24 +316,21 @@ ldr_notify(ULONG reason, MY_LDR_DATA *data, PVOID ctx)
         return;
     }
 
-    /* Primary trigger: clang_rt.asan_dynamic — fires BEFORE DllMain on Win10/11
-     * At this point the DLL is mapped but __asan_init() has not run yet.
-     * Shadow is still reserved -> DLL image could not be placed in shadow.
-     * Hook VirtualAlloc in ASan DLL's IAT so we can release the reservation
-     * at the exact moment __asan_init() calls VirtualAlloc for the shadow. */
+    /* Primary trigger: clang_rt.asan_dynamic — fires BEFORE DllMain on Win10/11.
+     * The DLL image is already mapped (and placed outside the shadow range by
+     * Phase A).  __asan_init() has not run yet.
+     *
+     * __asan_init() uses NtAllocateVirtualMemory (direct ntdll syscall) —
+     * not kernel32 VirtualAlloc — for shadow setup.  It first calls VirtualQuery
+     * to check the range is MEM_FREE; if anything occupies it (including our
+     * own MEM_RESERVE) it aborts immediately without ever calling VirtualAlloc.
+     * An IAT hook on VirtualAlloc therefore cannot intercept shadow init.
+     *
+     * Release the reservation right here, while we are still in the notification
+     * callback (i.e. before DllMain runs), so __asan_init finds the range free. */
     if (us_starts_w(n, ASAN_RT_PREFIX_W, ASAN_RT_PFX_LEN)) {
-        blog("     -> ASan runtime detected — hooking VirtualAlloc in its IAT");
-
-        FARPROC *slot = find_iat_slot_in(data->DllBase, "KERNEL32.DLL", "VirtualAlloc");
-        if (slot) {
-            patch_iat(slot, (FARPROC)hooked_VirtualAlloc, &g_real_va);
-            g_va_slot = slot;
-            blog("     VirtualAlloc IAT slot @ %p  real=%p", slot, g_real_va);
-        } else {
-            blog("     WARNING: VirtualAlloc not found in ASan DLL IAT");
-            blog("     Falling back: releasing shadow now (may still conflict)");
-            release_shadow("LdrDllNotification-fallback");
-        }
+        blog("     -> ASan runtime detected — releasing shadow reservation now");
+        release_shadow("LdrDllNotification-clang_rt");
         return;
     }
 }
@@ -414,12 +369,12 @@ DllMain(HINSTANCE hInst, DWORD reason, LPVOID reserved)
     blog("[A] VirtualAlloc(SHADOW_BASE, 512MB, MEM_RESERVE): %s  addr=%p",
          res ? "OK" : "FAILED (range already occupied)", res);
 
-    /* Phase B primary: LdrDllNotification -> VirtualAlloc hook in ASan DLL IAT */
+    /* Phase B: LdrDllNotification -> release shadow when clang_rt is detected */
     register_ldr_notification();
 
     /* Diagnostic: log all LoadLibraryA/W calls from EXE (no release here) */
     install_loadlibrary_diag();
 
-    blog("[A] Init complete. Shadow stays reserved until ASan DLL's VirtualAlloc.");
+    blog("[A] Init complete. Shadow stays reserved until clang_rt.asan_dynamic loads.");
     return TRUE;
 }
