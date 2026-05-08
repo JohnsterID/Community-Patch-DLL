@@ -13,6 +13,16 @@ class Config(Enum):
     Release = 0
     Debug = 1
 
+class Sanitizer(Enum):
+    NONE = 0
+    UBSAN = 1
+
+# 32-bit LLVM path for UBSan support
+LLVM_PATH = Path(r'C:\Program Files (x86)\LLVM\bin')
+
+def get_sanitizer(config: Config) -> Sanitizer:
+    return Sanitizer.UBSAN if config == Config.Debug else Sanitizer.NONE
+
 VS_2008_VARS_BAT = Path(os.environ['VS90COMNTOOLS']).joinpath('vsvars32.bat')
 CORE_DLL = 'CvGameCore_Expansion2'
 PROJECT_DIR = Path().resolve()
@@ -47,6 +57,8 @@ DEFAULT_LIBS = [
     'uuid.lib',
     'odbc32.lib',
     'odbccp32.lib',
+    'dbghelp.lib',     # CaptureStackBackTrace + SymFromAddr for UBSan stack traces
+    'version.lib',     # GetFileVersionInfo for ubsan dbghelp.dll version logging
 ]
 DEF_FILE = 'CvGameCoreDLL_Expansion2\\CvGameCoreDLL.def'
 INCLUDE_DIRS = [
@@ -258,6 +270,7 @@ CPP = [
     'CvGameCoreDLL_Expansion2\\CvWonderProductionAI.cpp',
     'CvGameCoreDLL_Expansion2\\CvWorldBuilderMapLoader.cpp',
     'CvGameCoreDLL_Expansion2\\SqliteLogger.cpp',
+    'CvGameCoreDLL_Expansion2\\ubsan_handlers.cpp',
 ]
 
 class TaskResult:
@@ -317,6 +330,15 @@ def build_cl_config_args(config: Config) -> list[str]:
         args.append(f'/I"{os.path.join(PROJECT_DIR, include_dir)}"')
     for suppress in CL_SUPPRESS:
         args.append(f'-Wno-{suppress}')
+    # UBSan for Debug builds (using custom VS2008-compatible handlers in ubsan_handlers.cpp)
+    if get_sanitizer(config) == Sanitizer.UBSAN:
+        args.append('-fsanitize=undefined')
+        args.append('-fsanitize=unsigned-integer-overflow')             # not UB but catches unintentional unsigned wrapping
+        args.append('-fsanitize=implicit-signed-integer-truncation')    # lossy signed narrowing (int32 -> int8 losing high bits)
+        args.append('-fsanitize=implicit-unsigned-integer-truncation')  # lossy unsigned narrowing (uint32 -> uint8)
+        args.append('-fsanitize=implicit-integer-sign-change')          # sign-confused assignments (large uint -> int)
+        args.append('-fno-sanitize=enum')  # all Civ5 enums are "open" (database-driven values)
+        args.append(f'-fsanitize-ignorelist={os.path.join(PROJECT_DIR, "ubsan.ignore")}')
     return args
 
 def build_link_config_args(config: Config) -> list[str]:
@@ -337,7 +359,7 @@ def build_clang_cpp(cl: str, cl_args: str, build_dir: Path, log: typing.IO):
     start_time = time.time()
     src = PROJECT_DIR.joinpath('clang.cpp')
     out = build_dir.joinpath('clang.obj')
-    command = f'"{VS_2008_VARS_BAT}">NUL && {cl} "{src}" /Fo"{out}" {cl_args}'
+    command = f'"{VS_2008_VARS_BAT}">NUL && "{cl}" "{src}" /Fo"{out}" {cl_args}'
     cp = subprocess.run(command, capture_output=True)
     log.write(str.encode(f'==== {src} ====\n'))
     log.write(cp.stdout)
@@ -368,7 +390,7 @@ def build_pch(cl: str, cl_args: str, pch_path: Path, build_dir: Path, log: typin
     start_time = time.time()
     pch_src = PROJECT_DIR.joinpath(PCH_CPP)
     out = build_dir.joinpath(PCH_CPP).with_suffix('.obj')
-    command = f'"{VS_2008_VARS_BAT}">NUL && {cl} "{pch_src}" /Fo"{out}" /Yc"{PCH_H}" /Fp"{pch_path}" {cl_args}'
+    command = f'"{VS_2008_VARS_BAT}">NUL && "{cl}" "{pch_src}" /Fo"{out}" /Yc"{PCH_H}" /Fp"{pch_path}" {cl_args}'
     cp = subprocess.run(command, capture_output=True)
     log.write(str.encode(f'==== {pch_src} ====\n'))
     log.write(cp.stdout)
@@ -391,7 +413,7 @@ def build_cpps(cl: str, cl_args: str, pch_path: Path, build_dir: Path, log: typi
             cpp_log = tempfile.TemporaryFile()
             logs[cpp_src] = cpp_log
             out = build_dir.joinpath(cpp).with_suffix('.obj')
-            command = f'"{VS_2008_VARS_BAT}">NUL && {cl} "{cpp_src}" /Fo"{out}" /Yu"{PCH_H}" /Fp"{pch_path}" {cl_args}'
+            command = f'"{VS_2008_VARS_BAT}">NUL && "{cl}" "{cpp_src}" /Fo"{out}" /Yu"{PCH_H}" /Fp"{pch_path}" {cl_args}'
             build_tasks.spawn(command, log=cpp_log)
         build_results = build_tasks.wait()
         for cpp_src, cpp_log in logs.items():
@@ -434,7 +456,7 @@ def link_dll(link: str, link_args: list[str], build_dir: Path, out_dir: Path, lo
             cpp_obj = build_dir.joinpath(cpp).with_suffix('.obj')
             link_response_file.write(f'\n"{cpp_obj}"')
         link_response_file.close()
-    command = f'"{VS_2008_VARS_BAT}">NUL && {link} @"{link_response_file_name}"'
+    command = f'"{VS_2008_VARS_BAT}">NUL && "{link}" @"{link_response_file_name}"'
     cp = subprocess.run(command, capture_output=True)
     log.write(str.encode(f'==== {CORE_DLL}.dll ====\n'))
     log.write(cp.stdout)
@@ -451,8 +473,13 @@ arg_parser.add_argument('--config', type=str, default='debug', choices=['release
 args = arg_parser.parse_args()
 config = Config.Release if args.config == 'release' else Config.Debug
 
-cl = 'clang-cl.exe'
-link = 'lld-link.exe'
+# Use 32-bit LLVM for UBSan builds
+if get_sanitizer(config) == Sanitizer.UBSAN:
+    cl = str(LLVM_PATH / 'clang-cl.exe')
+    link = str(LLVM_PATH / 'lld-link.exe')
+else:
+    cl = 'clang-cl.exe'
+    link = 'lld-link.exe'
 build_dir = PROJECT_DIR.joinpath(BUILD_DIR[config])
 out_dir = PROJECT_DIR.joinpath(PROJECT_DIR, OUT_DIR[config])
 cl_args = ' '.join(build_cl_config_args(config))
