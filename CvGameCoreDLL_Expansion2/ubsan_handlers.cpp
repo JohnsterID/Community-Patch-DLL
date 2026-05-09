@@ -1131,7 +1131,7 @@ static void appendStackTrace(char* buf, size_t bufSize)
 
     static const int SKIP_INTERNAL = 2; // appendStackTrace + ubsan_output
     static const int MAX_FRAMES    = 48;
-    static const int MAX_LOCAL_FRAMES = 4;
+    static const int MAX_LOCAL_FRAMES = 48;
 
     struct FrameInfo { DWORD64 pc; DWORD ebp; };
     FrameInfo frames[MAX_FRAMES];
