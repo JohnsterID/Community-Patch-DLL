@@ -31458,7 +31458,6 @@ void CvCity::doProcess()
 {
 	ProcessTypes eProcess = getProductionProcess();
 	PRECONDITION(eProcess != NO_PROCESS, "Invalid Process for city production.");
-	if (eProcess == NO_PROCESS) return;
 
 	if (MOD_PROCESS_STOCKPILE && eProcess == GC.getInfoTypeForString("PROCESS_STOCKPILE", true))
 	{

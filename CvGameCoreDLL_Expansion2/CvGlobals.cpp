@@ -3357,11 +3357,9 @@ int CvGlobals::getRingIterationIndexHex(int i, int j)
 {
 	PRECONDITION(i < (2*MAX_CITY_RADIUS+1), "Index out of bounds");
 	PRECONDITION(i > -1, "Index out of bounds");
-	if(i < 0 || i >= (2*MAX_CITY_RADIUS+1)) return -1;
 
 	PRECONDITION(j < (2*MAX_CITY_RADIUS+1), "Index out of bounds");
 	PRECONDITION(j > -1, "Index out of bounds");
-	if(j < 0 || j >= (2*MAX_CITY_RADIUS+1)) return -1;
 
 	return m_aaiRingPlotIndex[i][j];
 }
@@ -3376,7 +3374,6 @@ DirectionTypes CvGlobals::getTurnLeftDirection(int i)
 	PRECONDITION(i < NUM_DIRECTION_TYPES, "Index out of bounds");
 	PRECONDITION(i > -1, "Index out of bounds");
 
-	if(i < 0 || i >= NUM_DIRECTION_TYPES) return NO_DIRECTION;
 
 	return m_aeTurnLeftDirection[i];
 }
@@ -3391,7 +3388,6 @@ DirectionTypes CvGlobals::getTurnRightDirection(int i)
 	PRECONDITION(i < NUM_DIRECTION_TYPES, "Index out of bounds");
 	PRECONDITION(i > -1, "Index out of bounds");
 
-	if(i < 0 || i >= NUM_DIRECTION_TYPES) return NO_DIRECTION;
 
 	return m_aeTurnRightDirection[i];
 }
