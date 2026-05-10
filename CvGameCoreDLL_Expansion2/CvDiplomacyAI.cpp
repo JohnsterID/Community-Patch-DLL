@@ -3625,7 +3625,8 @@ void CvDiplomacyAI::SetPlayerApproachValue(PlayerTypes ePlayer, CivApproachTypes
 /// Which approach has the highest value for ePlayer?
 CivApproachTypes CvDiplomacyAI::GetHighestValueApproach(PlayerTypes ePlayer, bool bExcludeWar, bool bIncludeOverrides) const
 {
-	if (GetTeam() == GET_PLAYER(ePlayer).getTeam()) return CIV_APPROACH_FRIENDLY;
+	if (GetTeam() == GET_PLAYER(ePlayer).getTeam())
+		return CIV_APPROACH_FRIENDLY;
 
 	CivApproachTypes eBestApproach = CIV_APPROACH_NEUTRAL;
 	int iHighestValue = 0;
@@ -10895,7 +10896,8 @@ void CvDiplomacyAI::DoUpdateWarStates()
 /// What is the integer value of how well we think the war with ePlayer is going?
 int CvDiplomacyAI::GetWarScore(PlayerTypes ePlayer) const
 {
-	if (ePlayer < 0 || ePlayer >= MAX_CIV_PLAYERS) return 0;
+	if (ePlayer < 0 || ePlayer >= MAX_CIV_PLAYERS)
+		return 0;
 
 	if (!IsAtWar(ePlayer))
 		return 0;
@@ -13523,7 +13525,8 @@ int CvDiplomacyAI::CalculateGoldPerTurnLostFromWar(PlayerTypes ePlayer)
 bool CvDiplomacyAI::DoUpdateOnePlayerSaneDiplomaticTarget(PlayerTypes ePlayer, bool bImpulse)
 {
 	ASSERT(ePlayer >= 0 && ePlayer < MAX_CIV_PLAYERS, "Invalid ePlayer index");
-	if (ePlayer < 0 || ePlayer >= MAX_CIV_PLAYERS) return false;
+	if (ePlayer < 0 || ePlayer >= MAX_CIV_PLAYERS)
+		return false;
 
 	// Already at war?
 	if (IsAtWar(ePlayer))
@@ -29036,7 +29039,8 @@ bool CvDiplomacyAI::ShouldHideNegativeMods(PlayerTypes ePlayer) const
 void CvDiplomacyAI::DoWeMadePeaceWithSomeone(TeamTypes eOtherTeam)
 {
 	ASSERT(eOtherTeam >= 0 && eOtherTeam < MAX_CIV_TEAMS, "Invalid eOtherTeam index");
-	if (eOtherTeam < 0 || eOtherTeam >= MAX_CIV_TEAMS) return;
+	if (eOtherTeam < 0 || eOtherTeam >= MAX_CIV_TEAMS)
+		return;
 
 	vector<PlayerTypes> vPlayersToReevaluate;
 	vector<PlayerTypes> vOtherTeam = GET_TEAM(eOtherTeam).getPlayers();
@@ -29090,8 +29094,10 @@ void CvDiplomacyAI::DoWeMadePeaceWithSomeone(TeamTypes eOtherTeam)
 /// ePlayer declared war on someone, so figure out what that means
 void CvDiplomacyAI::DoPlayerDeclaredWarOnSomeone(PlayerTypes ePlayer, TeamTypes eOtherTeam, bool bDefensivePact)
 {
-	if (ePlayer < 0 || ePlayer >= MAX_CIV_PLAYERS || GET_PLAYER(ePlayer).isBarbarian()) return;
-	if (eOtherTeam < 0 || eOtherTeam >= MAX_CIV_TEAMS || GET_TEAM(eOtherTeam).isBarbarian()) return;
+	if (ePlayer < 0 || ePlayer >= MAX_CIV_PLAYERS || GET_PLAYER(ePlayer).isBarbarian())
+		return;
+	if (eOtherTeam < 0 || eOtherTeam >= MAX_CIV_TEAMS || GET_TEAM(eOtherTeam).isBarbarian())
+		return;
 
 	PlayerTypes eMyPlayer = GetID();
 	vector<PlayerTypes> vAttackedTeam = GET_TEAM(eOtherTeam).getPlayers();
@@ -29272,8 +29278,10 @@ void CvDiplomacyAI::DoPlayerDeclaredWarOnSomeone(PlayerTypes ePlayer, TeamTypes 
 void CvDiplomacyAI::DoPlayerBulliedSomeone(PlayerTypes ePlayer, PlayerTypes eOtherPlayer)
 {
 	ASSERT(ePlayer >= 0 && ePlayer < MAX_MAJOR_CIVS, "Invalid ePlayer index");
-	if (ePlayer < 0 || ePlayer >= MAX_MAJOR_CIVS) return;
-	if (eOtherPlayer < MAX_MAJOR_CIVS || eOtherPlayer >= MAX_CIV_PLAYERS) return;
+	if (ePlayer < 0 || ePlayer >= MAX_MAJOR_CIVS)
+		return;
+	if (eOtherPlayer < MAX_MAJOR_CIVS || eOtherPlayer >= MAX_CIV_PLAYERS)
+		return;
 
 	// The bully was someone else
 	if (IsPlayerValid(ePlayer))
@@ -29303,7 +29311,8 @@ void CvDiplomacyAI::DoPlayerBulliedSomeone(PlayerTypes ePlayer, PlayerTypes eOth
 int CvDiplomacyAI::GetOtherPlayerWarmongerScore(PlayerTypes ePlayer) const
 {
 	ASSERT(ePlayer >= 0 && ePlayer < MAX_MAJOR_CIVS, "Invalid ePlayer index");
-	if (ePlayer < 0 || ePlayer >= MAX_MAJOR_CIVS) return 0;
+	if (ePlayer < 0 || ePlayer >= MAX_MAJOR_CIVS)
+		return 0;
 
 	int iReturnValue = GetOtherPlayerWarmongerAmount(ePlayer);
 
@@ -42427,7 +42436,8 @@ void CvDiplomacyAI::CancelAllCoopWars()
 void CvDiplomacyAI::DoDemandMade(PlayerTypes ePlayer, DemandResponseTypes eResponse)
 {
 	ASSERT(ePlayer >= 0 && ePlayer < MAX_MAJOR_CIVS, "Invalid ePlayer index");
-	if (ePlayer < 0 || ePlayer >= MAX_MAJOR_CIVS) return;
+	if (ePlayer < 0 || ePlayer >= MAX_MAJOR_CIVS)
+		return;
 
 	// Don't apply further penalties if it's too soon since the last demand
 	if (eResponse == DEMAND_RESPONSE_REFUSE_TOO_SOON)
@@ -49790,7 +49800,8 @@ void CvDiplomacyAI::LogMinorCivBuyout(PlayerTypes eMinor, int iGoldPaid, bool bS
 int CvDiplomacyAI::EstimateVictoryCompetitiveness(PlayerTypes ePlayer) const
 {
 	ASSERT(ePlayer >= 0 && ePlayer < MAX_MAJOR_CIVS, "Invalid ePlayer index");
-	if (ePlayer < 0 || ePlayer >= MAX_MAJOR_CIVS) return 0;
+	if (ePlayer < 0 || ePlayer >= MAX_MAJOR_CIVS)
+		return 0;
 
 	// We always know our team's flavors
 	if (GetTeam() == GET_PLAYER(ePlayer).getTeam())
@@ -49812,7 +49823,8 @@ int CvDiplomacyAI::EstimateVictoryCompetitiveness(PlayerTypes ePlayer) const
 int CvDiplomacyAI::EstimateWonderCompetitiveness(PlayerTypes ePlayer) const
 {
 	ASSERT(ePlayer >= 0 && ePlayer < MAX_MAJOR_CIVS, "Invalid ePlayer index");
-	if (ePlayer < 0 || ePlayer >= MAX_MAJOR_CIVS) return 0;
+	if (ePlayer < 0 || ePlayer >= MAX_MAJOR_CIVS)
+		return 0;
 
 	// We always know our team's flavors
 	if (GetTeam() == GET_PLAYER(ePlayer).getTeam())
@@ -49839,7 +49851,8 @@ int CvDiplomacyAI::EstimateWonderCompetitiveness(PlayerTypes ePlayer) const
 int CvDiplomacyAI::EstimateMinorCivCompetitiveness(PlayerTypes ePlayer) const
 {
 	ASSERT(ePlayer >= 0 && ePlayer < MAX_MAJOR_CIVS, "Invalid ePlayer index");
-	if (ePlayer < 0 || ePlayer >= MAX_MAJOR_CIVS) return 0;
+	if (ePlayer < 0 || ePlayer >= MAX_MAJOR_CIVS)
+		return 0;
 
 	// We always know our team's flavors
 	if (GetTeam() == GET_PLAYER(ePlayer).getTeam())
@@ -49866,7 +49879,8 @@ int CvDiplomacyAI::EstimateMinorCivCompetitiveness(PlayerTypes ePlayer) const
 int CvDiplomacyAI::EstimateBoldness(PlayerTypes ePlayer) const
 {
 	ASSERT(ePlayer >= 0 && ePlayer < MAX_MAJOR_CIVS, "Invalid ePlayer index");
-	if (ePlayer < 0 || ePlayer >= MAX_MAJOR_CIVS) return 0;
+	if (ePlayer < 0 || ePlayer >= MAX_MAJOR_CIVS)
+		return 0;
 
 	// We always know our team's flavors
 	if (GetTeam() == GET_PLAYER(ePlayer).getTeam())
@@ -49893,7 +49907,8 @@ int CvDiplomacyAI::EstimateBoldness(PlayerTypes ePlayer) const
 int CvDiplomacyAI::EstimateDiploBalance(PlayerTypes ePlayer) const
 {
 	ASSERT(ePlayer >= 0 && ePlayer < MAX_MAJOR_CIVS, "Invalid ePlayer index");
-	if (ePlayer < 0 || ePlayer >= MAX_MAJOR_CIVS) return 0;
+	if (ePlayer < 0 || ePlayer >= MAX_MAJOR_CIVS)
+		return 0;
 
 	// We always know our team's flavors
 	if (GetTeam() == GET_PLAYER(ePlayer).getTeam())
@@ -49915,7 +49930,8 @@ int CvDiplomacyAI::EstimateDiploBalance(PlayerTypes ePlayer) const
 int CvDiplomacyAI::EstimateWarmongerHate(PlayerTypes ePlayer) const
 {
 	ASSERT(ePlayer >= 0 && ePlayer < MAX_MAJOR_CIVS, "Invalid ePlayer index");
-	if (ePlayer < 0 || ePlayer >= MAX_MAJOR_CIVS) return 0;
+	if (ePlayer < 0 || ePlayer >= MAX_MAJOR_CIVS)
+		return 0;
 
 	// We always know our team's flavors
 	if (GetTeam() == GET_PLAYER(ePlayer).getTeam())
@@ -49995,7 +50011,8 @@ int CvDiplomacyAI::EstimateWarmongerHate(PlayerTypes ePlayer) const
 int CvDiplomacyAI::EstimateDoFWillingness(PlayerTypes ePlayer) const
 {
 	ASSERT(ePlayer >= 0 && ePlayer < MAX_MAJOR_CIVS, "Invalid ePlayer index");
-	if (ePlayer < 0 || ePlayer >= MAX_MAJOR_CIVS) return 0;
+	if (ePlayer < 0 || ePlayer >= MAX_MAJOR_CIVS)
+		return 0;
 
 	// We always know our team's flavors
 	if (GetTeam() == GET_PLAYER(ePlayer).getTeam())
@@ -50017,7 +50034,8 @@ int CvDiplomacyAI::EstimateDoFWillingness(PlayerTypes ePlayer) const
 int CvDiplomacyAI::EstimateDenounceWillingness(PlayerTypes ePlayer) const
 {
 	ASSERT(ePlayer >= 0 && ePlayer < MAX_MAJOR_CIVS, "Invalid ePlayer index");
-	if (ePlayer < 0 || ePlayer >= MAX_MAJOR_CIVS) return 0;
+	if (ePlayer < 0 || ePlayer >= MAX_MAJOR_CIVS)
+		return 0;
 
 	// We always know our team's flavors
 	if (GetTeam() == GET_PLAYER(ePlayer).getTeam())
@@ -50039,7 +50057,8 @@ int CvDiplomacyAI::EstimateDenounceWillingness(PlayerTypes ePlayer) const
 int CvDiplomacyAI::EstimateWorkWithWillingness(PlayerTypes ePlayer) const
 {
 	ASSERT(ePlayer >= 0 && ePlayer < MAX_MAJOR_CIVS, "Invalid ePlayer index");
-	if (ePlayer < 0 || ePlayer >= MAX_MAJOR_CIVS) return 0;
+	if (ePlayer < 0 || ePlayer >= MAX_MAJOR_CIVS)
+		return 0;
 
 	// We always know our team's flavors
 	if (GetTeam() == GET_PLAYER(ePlayer).getTeam())
@@ -50061,7 +50080,8 @@ int CvDiplomacyAI::EstimateWorkWithWillingness(PlayerTypes ePlayer) const
 int CvDiplomacyAI::EstimateWorkAgainstWillingness(PlayerTypes ePlayer) const
 {
 	ASSERT(ePlayer >= 0 && ePlayer < MAX_MAJOR_CIVS, "Invalid ePlayer index");
-	if (ePlayer < 0 || ePlayer >= MAX_MAJOR_CIVS) return 0;
+	if (ePlayer < 0 || ePlayer >= MAX_MAJOR_CIVS)
+		return 0;
 
 	// We always know our team's flavors
 	if (GetTeam() == GET_PLAYER(ePlayer).getTeam())
@@ -50083,7 +50103,8 @@ int CvDiplomacyAI::EstimateWorkAgainstWillingness(PlayerTypes ePlayer) const
 int CvDiplomacyAI::EstimateLoyalty(PlayerTypes ePlayer) const
 {
 	ASSERT(ePlayer >= 0 && ePlayer < MAX_MAJOR_CIVS, "Invalid ePlayer index");
-	if (ePlayer < 0 || ePlayer >= MAX_MAJOR_CIVS) return 0;
+	if (ePlayer < 0 || ePlayer >= MAX_MAJOR_CIVS)
+		return 0;
 
 	// We always know our team's flavors
 	if (GetTeam() == GET_PLAYER(ePlayer).getTeam())
@@ -50105,7 +50126,8 @@ int CvDiplomacyAI::EstimateLoyalty(PlayerTypes ePlayer) const
 int CvDiplomacyAI::EstimateForgiveness(PlayerTypes ePlayer) const
 {
 	ASSERT(ePlayer >= 0 && ePlayer < MAX_MAJOR_CIVS, "Invalid ePlayer index");
-	if (ePlayer < 0 || ePlayer >= MAX_MAJOR_CIVS) return 0;
+	if (ePlayer < 0 || ePlayer >= MAX_MAJOR_CIVS)
+		return 0;
 
 	// We always know our team's flavors
 	if (GetTeam() == GET_PLAYER(ePlayer).getTeam())
@@ -50127,7 +50149,8 @@ int CvDiplomacyAI::EstimateForgiveness(PlayerTypes ePlayer) const
 int CvDiplomacyAI::EstimateNeediness(PlayerTypes ePlayer) const
 {
 	ASSERT(ePlayer >= 0 && ePlayer < MAX_MAJOR_CIVS, "Invalid ePlayer index");
-	if (ePlayer < 0 || ePlayer >= MAX_MAJOR_CIVS) return 0;
+	if (ePlayer < 0 || ePlayer >= MAX_MAJOR_CIVS)
+		return 0;
 
 	// We always know our team's flavors
 	if (GetTeam() == GET_PLAYER(ePlayer).getTeam())
@@ -50149,7 +50172,8 @@ int CvDiplomacyAI::EstimateNeediness(PlayerTypes ePlayer) const
 int CvDiplomacyAI::EstimateMeanness(PlayerTypes ePlayer) const
 {
 	ASSERT(ePlayer >= 0 && ePlayer < MAX_MAJOR_CIVS, "Invalid ePlayer index");
-	if (ePlayer < 0 || ePlayer >= MAX_MAJOR_CIVS) return 0;
+	if (ePlayer < 0 || ePlayer >= MAX_MAJOR_CIVS)
+		return 0;
 
 	// We always know our team's flavors
 	if (GetTeam() == GET_PLAYER(ePlayer).getTeam())
@@ -50171,7 +50195,8 @@ int CvDiplomacyAI::EstimateMeanness(PlayerTypes ePlayer) const
 int CvDiplomacyAI::EstimateChattiness(PlayerTypes ePlayer) const
 {
 	ASSERT(ePlayer >= 0 && ePlayer < MAX_MAJOR_CIVS, "Invalid ePlayer index");
-	if (ePlayer < 0 || ePlayer >= MAX_MAJOR_CIVS) return 0;
+	if (ePlayer < 0 || ePlayer >= MAX_MAJOR_CIVS)
+		return 0;
 
 	// We always know our team's flavors
 	if (GetTeam() == GET_PLAYER(ePlayer).getTeam())
@@ -50193,9 +50218,11 @@ int CvDiplomacyAI::EstimateChattiness(PlayerTypes ePlayer) const
 int CvDiplomacyAI::EstimateMajorCivApproachBias(PlayerTypes ePlayer, CivApproachTypes eApproach) const
 {
 	ASSERT(ePlayer >= 0 && ePlayer < MAX_MAJOR_CIVS, "Invalid ePlayer index");
-	if (ePlayer < 0 || ePlayer >= MAX_MAJOR_CIVS) return 0;
+	if (ePlayer < 0 || ePlayer >= MAX_MAJOR_CIVS)
+		return 0;
 	ASSERT(eApproach >= 0 && eApproach < NUM_CIV_APPROACHES, "Invalid eApproach index");
-	if (eApproach < 0 || eApproach >= NUM_CIV_APPROACHES) return 0;
+	if (eApproach < 0 || eApproach >= NUM_CIV_APPROACHES)
+		return 0;
 
 	// We always know our team's flavors
 	if (GetTeam() == GET_PLAYER(ePlayer).getTeam())
@@ -50247,7 +50274,8 @@ int CvDiplomacyAI::EstimateMajorCivApproachBias(PlayerTypes ePlayer, CivApproach
 int CvDiplomacyAI::EstimateMinorCivApproachBias(PlayerTypes ePlayer, CivApproachTypes eApproach) const
 {
 	ASSERT(ePlayer >= 0 && ePlayer < MAX_MAJOR_CIVS, "Invalid ePlayer index");
-	if (ePlayer < 0 || ePlayer >= MAX_MAJOR_CIVS) return 0;
+	if (ePlayer < 0 || ePlayer >= MAX_MAJOR_CIVS)
+		return 0;
 
 	// Only some of the approaches are possible for City-States
 	if (eApproach != CIV_APPROACH_WAR && eApproach != CIV_APPROACH_HOSTILE && eApproach != CIV_APPROACH_NEUTRAL && eApproach != CIV_APPROACH_FRIENDLY)
@@ -50294,8 +50322,10 @@ int CvDiplomacyAI::EstimateMinorCivApproachBias(PlayerTypes ePlayer, CivApproach
 int CvDiplomacyAI::EstimateFlavorValue(PlayerTypes ePlayer, FlavorTypes eFlavor) const
 {
 	ASSERT(ePlayer >= 0 && ePlayer < MAX_MAJOR_CIVS, "Invalid ePlayer index");
-	if (ePlayer < 0 || ePlayer >= MAX_MAJOR_CIVS) return 0;
-	if (eFlavor < 0 || eFlavor >= GC.getNumFlavorTypes()) return 0;
+	if (ePlayer < 0 || ePlayer >= MAX_MAJOR_CIVS)
+		return 0;
+	if (eFlavor < 0 || eFlavor >= GC.getNumFlavorTypes())
+		return 0;
 
 	// We always know our team's flavors
 	if (GetTeam() == GET_PLAYER(ePlayer).getTeam())
@@ -54720,7 +54750,8 @@ void CvDiplomacyAI::DetermineVassalToLiberate()
 /// Do we want to liberate ePlayer's team?
 bool CvDiplomacyAI::IsWantToLiberateVassal(PlayerTypes ePlayer, int& iScoreForLiberate) const
 {
-	if (ePlayer < 0 || ePlayer >= MAX_MAJOR_CIVS) UNREACHABLE();
+	if (ePlayer < 0 || ePlayer >= MAX_MAJOR_CIVS)
+		UNREACHABLE();
 
 	// Can't liberate? Abort!
 	TeamTypes eVassalTeam = GET_PLAYER(ePlayer).getTeam();
@@ -55168,7 +55199,8 @@ void CvDiplomacyAI::DoRevokeVassalageStatement(PlayerTypes ePlayer, DiploStateme
 /// Do we want to become the vassal of ePlayer?
 bool CvDiplomacyAI::IsVassalageAcceptable(PlayerTypes ePlayer, bool bMasterEvaluation)
 {
-	if (ePlayer < 0 || ePlayer >= MAX_MAJOR_CIVS) return false;
+	if (ePlayer < 0 || ePlayer >= MAX_MAJOR_CIVS)
+		return false;
 
 	// Shadow AI does not make decisions for human!
 	if (GetPlayer()->IsAITeammateOfHuman())
@@ -57421,7 +57453,8 @@ void CvDiplomacyAI::DoWeEndedVassalageWithSomeone(TeamTypes eTeam)
 void CvDiplomacyAI::DoLiberatedFromVassalage(TeamTypes eTeam, bool bSkipPopup)
 {
 	ASSERT(eTeam >= 0 && eTeam < MAX_CIV_TEAMS, "Invalid eTeam index");
-	if (eTeam < 0 || eTeam >= MAX_CIV_TEAMS) return;
+	if (eTeam < 0 || eTeam >= MAX_CIV_TEAMS)
+		return;
 
 	// Get players from Master's team
 	vector<PlayerTypes> vMasterTeam = GET_TEAM(eTeam).getPlayers();

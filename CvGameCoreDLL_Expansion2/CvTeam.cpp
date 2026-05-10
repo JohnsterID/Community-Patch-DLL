@@ -4787,7 +4787,8 @@ void CvTeam::EvacuateDiplomatsAtTeam(TeamTypes eIndex)
 //	--------------------------------------------------------------------------------
 bool CvTeam::IsAllowsOpenBordersToTeam(TeamTypes eIndex) const
 {
-	if (eIndex < 0 || eIndex >= MAX_TEAMS) return false;
+	if (eIndex < 0 || eIndex >= MAX_TEAMS)
+		return false;
 
 	// We always have open borders with ourselves
 	if (GetID() == eIndex)
@@ -4808,7 +4809,8 @@ bool CvTeam::IsAllowsOpenBordersToTeam(TeamTypes eIndex) const
 void CvTeam::SetAllowsOpenBordersToTeam(TeamTypes eIndex, bool bNewValue)
 {
 	ASSERT(eIndex >= 0 && eIndex < MAX_TEAMS, "Invalid eIndex index");
-	if (eIndex < 0 || eIndex >= MAX_TEAMS) return;
+	if (eIndex < 0 || eIndex >= MAX_TEAMS)
+		return;
 
 	if (IsAllowsOpenBordersToTeam(eIndex) != bNewValue)
 	{
@@ -9382,7 +9384,8 @@ bool CvTeam::canEndAllVassal()
 // Can we end our vassalage with eTeam?
 bool CvTeam::canEndVassal(TeamTypes eTeam) const
 {
-	if (eTeam == NO_TEAM || eTeam == GetID()) return false;
+	if (eTeam == NO_TEAM || eTeam == GetID())
+		return false;
 	
 	// Can't end a vassalage if we're not the vassal of eTeam.
 	if (!IsVassal(eTeam))
@@ -9888,8 +9891,10 @@ void CvTeam::DoBecomeVassal(TeamTypes eTeam, bool bVoluntary, PlayerTypes eOrigi
 		PlayerTypes eLoopPlayer = (PlayerTypes) iPlayerLoop;
 		if (GET_PLAYER(eLoopPlayer).isAlive())
 		{
-			if(GET_PLAYER(eLoopPlayer).getTeam() == GetID()) aVassalTeam.push_back(eLoopPlayer);
-			if(GET_PLAYER(eLoopPlayer).getTeam() == eTeam) aMasterTeam.push_back(eLoopPlayer);
+			if(GET_PLAYER(eLoopPlayer).getTeam() == GetID())
+				aVassalTeam.push_back(eLoopPlayer);
+			if(GET_PLAYER(eLoopPlayer).getTeam() == eTeam)
+				aMasterTeam.push_back(eLoopPlayer);
 		}
 	}
 

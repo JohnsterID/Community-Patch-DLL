@@ -301,13 +301,6 @@ that PRECONDITION (crash) is the intended behavior, not the guard clause (return
 
 Lower priority. These are less frequently debugged. Can be done in a separate PR.
 
-### NOT Recommended: Bulk PRECONDITION/ASSERT Conversion of Guard Clauses
-
-Converting the 258 guard-only clauses to PRECONDITION or ASSERT requires per-instance
-analysis of whether the function is Lua-exposed, whether bad input is expected or a bug,
-and what the appropriate failure mode is. This is a separate project from the formatting
-rule and should not be combined with it.
-
 ### Automated Enforcement
 
 The detection script used for this analysis can be adapted for CI use. Options include:
@@ -315,18 +308,81 @@ The detection script used for this analysis can be adapted for CI use. Options i
 - A `.clang-tidy` check (`readability-braces-around-statements`) enforces a stricter
   variant of this rule (requiring braces on all control bodies)
 
+## Implementation Results
+
+### Commit 1: Remove dead guard clauses after PRECONDITION (98 deletions, 10 files)
+
+PRECONDITION crashes via BUILTIN_TRAP() on failure, making any guard clause that checks
+the same condition unreachable dead code. These gave a false impression of graceful error
+handling when the program would actually crash.
+
+Top files: CvMinorCivAI (69), CvVotingClasses (6), CvPlot (5), CvUnit (4), CvGlobals (4)
+
+Correctly preserved:
+- ASSERT + guard patterns (ASSERT does not crash, guard is needed)
+- Guards checking a different variable than the PRECONDITION
+- CvEspionageClasses comparator logic (not guard clauses)
+- CvMinorCivAI pMinorCapital null check (null is expected per comment)
+
+### Commit 2: Format control statement bodies on separate lines (550 fixes, 52 files)
+
+All if/else/for/while bodies moved from same line to separate indented line.
+Zero functional impact — compiler generates identical code.
+
+| Directory | Files | Fixes |
+|-----------|-------|-------|
+| CvGameCoreDLL_Expansion2 | 37 | 374 |
+| FirePlace | 11 | 158 |
+| CvWorldBuilderMap | 4 | 18 |
+
+### Commit 3: Add ASSERT + fix PRECONDITION misuse (7 files)
+
+**58 ASSERT additions** for internal-only bounds-check guard clauses that had neither
+PRECONDITION nor ASSERT. Per-instance analysis determined:
+
+- **Lua-exposed functions** (guard-only): correct as-is; PRECONDITION would crash on bad
+  Lua input, ASSERT would be noisy on user error
+- **Internal functions with bounds checks** (ASSERT + guard): invalid index is a developer
+  mistake warranting debug visibility, but runtime should recover gracefully
+- **Compound conditions with business logic** (isBarbarian, isAlive): these filter normal
+  game states, not developer mistakes — no macro needed
+
+**3 PRECONDITION→ASSERT correctness fixes** where null IS a possible runtime state:
+- CvTacticalAI.cpp (2 instances): `getBestDefender()` can return null between
+  `isEnemyUnit()` check and lookup (unit killed during AI turn). PRECONDITION would crash
+  the game on a race condition. Now ASSERT + guard to continue safely.
+- CvReligionClasses.cpp (1 instance): `getReligionInfo()` can return null for invalid
+  religion ID (corrupted save, removed mod). The function already had a fallback path
+  ("No Religion") that was unreachable due to PRECONDITION crash. Now ASSERT allows the
+  intentional fallback to work.
+
+## ASSERT vs PRECONDITION vs Guard Clause Design Reference
+
+| Macro | Behavior | Use When |
+|-------|----------|----------|
+| `PRECONDITION(expr, msg)` | Dialog → `BUILTIN_TRAP()` crash | Corrupted state that cannot be recovered — always fatal |
+| `ASSERT(expr, msg)` | Dialog → `DebugBreak()` or continue | Developer mistake, but execution can safely continue |
+| Guard clause (`if (!x) return`) | Silent return with safe default | Expected valid state (Lua input, optional subsystem, dynamic game state) |
+
+**Correct pattern for internal functions:**
+```cpp
+ASSERT(ePlayer >= 0 && ePlayer < MAX_MAJOR_CIVS, "Invalid player index");
+if (ePlayer < 0 || ePlayer >= MAX_MAJOR_CIVS)
+    return;
+```
+
+**Correct pattern for Lua-exposed functions:**
+```cpp
+if (ePlayer < 0 || ePlayer >= MAX_MAJOR_CIVS)
+    return;
+```
+
 ## Conclusion
 
-This rule is highly implementable for this codebase:
-- **99.1% compliance already exists** — the codebase overwhelmingly follows this pattern
-- Only **648 violations** across 54 files need fixing
-- Formatting changes are **zero-risk** with no functional impact
-- A **separate finding**: 112 guard clauses are dead code behind PRECONDITION — these
-  should be cleaned up independently
-- Guard clause → PRECONDITION/ASSERT conversion is a **separate concern** requiring
-  per-instance analysis and must not be conflated with the formatting rule
-- A phased approach minimizes merge conflict risk
+All 648 formatting violations have been fixed. The codebase is now 100% compliant with
+the debugger-friendly control statement formatting rule.
 
-**Recommendation**: Adopt the rule immediately for new code, then fix existing formatting
-violations in 1-2 focused PRs. Address dead PRECONDITION+guard code in a separate PR.
-Keep ASSERT/PRECONDITION conversion as a distinct future effort with per-function review.
+Additionally, the analysis uncovered and fixed:
+- 98 dead guard clauses (unreachable code behind PRECONDITION)
+- 58 missing ASSERT annotations on internal bounds checks
+- 3 PRECONDITION misuses that could crash the game on valid runtime states

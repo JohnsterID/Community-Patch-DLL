@@ -2665,7 +2665,8 @@ CvUnit *CvPlayerCulture::GetNextDigCompleteArchaeologist(CvPlot **ppPlot) const
 					pRtnValue = pLoopUnit;
 					iClosestDistance = iDistance;
 				}
-				if (iDistance == 0) break;
+				if (iDistance == 0)
+					break;
 			}
 		}
 	}

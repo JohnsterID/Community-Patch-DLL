@@ -16376,7 +16376,8 @@ void CvCity::SetGarrison(CvUnit* pUnit)
 			if(GET_PLAYER(getOwner()).IsGarrisonFreeMaintenance())
 			{
 				int iMaintenanceChange = -pUnit->getUnitInfo().GetExtraMaintenanceCost();
-				if(pOldGarrison != NULL) iMaintenanceChange += pOldGarrison->getUnitInfo().GetExtraMaintenanceCost();
+				if(pOldGarrison != NULL)
+					iMaintenanceChange += pOldGarrison->getUnitInfo().GetExtraMaintenanceCost();
 				GET_PLAYER(getOwner()).changeExtraUnitCost(iMaintenanceChange);
 			}
 		}

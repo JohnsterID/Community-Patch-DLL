@@ -3160,7 +3160,8 @@ bool CvPlot::canBuild(BuildTypes eBuild, PlayerTypes ePlayer, bool bTestVisible,
 							if (toolTipSink && !toolTipSink->empty())
 								(*toolTipSink) += "[NEWLINE]";
 							GC.getGame().BuildCannotPerformActionHelpText(toolTipSink, "TXT_KEY_BUILD_BLOCKED_OUTSIDE_TERRITORY", GC.getImprovementInfo(eImprovement)->GetDescription());
-							if (toolTipSink == NULL) return false;
+							if (toolTipSink == NULL)
+								return false;
 							bPlotCanBuild = false;
 						}
 					}
@@ -3175,7 +3176,8 @@ bool CvPlot::canBuild(BuildTypes eBuild, PlayerTypes ePlayer, bool bTestVisible,
 								if (toolTipSink && !toolTipSink->empty())
 									(*toolTipSink) += "[NEWLINE]";
 								GC.getGame().BuildCannotPerformActionHelpText(toolTipSink, "TXT_KEY_BUILD_BLOCKED_NOT_IN_ADJACENT_TERRITORY", GC.getImprovementInfo(eImprovement)->GetDescription());
-								if (toolTipSink == NULL) return false;
+								if (toolTipSink == NULL)
+									return false;
 								bPlotCanBuild = false;
 							}
 						}
@@ -3192,7 +3194,8 @@ bool CvPlot::canBuild(BuildTypes eBuild, PlayerTypes ePlayer, bool bTestVisible,
 								if (toolTipSink && !toolTipSink->empty())
 									(*toolTipSink) += "[NEWLINE]";
 								GC.getGame().BuildCannotPerformActionHelpText(toolTipSink, "TXT_KEY_BUILD_BLOCKED_NOT_IN_ADJACENT_TERRITORY", GC.getImprovementInfo(eImprovement)->GetDescription());
-								if (toolTipSink == NULL) return false;
+								if (toolTipSink == NULL)
+									return false;
 								bPlotCanBuild = false;
 							}
 						}
@@ -3221,7 +3224,8 @@ bool CvPlot::canBuild(BuildTypes eBuild, PlayerTypes ePlayer, bool bTestVisible,
 							if (toolTipSink && !toolTipSink->empty())
 								(*toolTipSink) += "[NEWLINE]";
 							GC.getGame().BuildCannotPerformActionHelpText(toolTipSink, "TXT_KEY_BUILD_BLOCKED_NOT_IN_CITY_STATE_TERRITORY", GC.getImprovementInfo(eImprovement)->GetDescription());
-							if (toolTipSink == NULL) return false;
+							if (toolTipSink == NULL)
+								return false;
 							bPlotCanBuild = false;
 						}
 					}
@@ -3230,7 +3234,8 @@ bool CvPlot::canBuild(BuildTypes eBuild, PlayerTypes ePlayer, bool bTestVisible,
 						if (toolTipSink && !toolTipSink->empty())
 							(*toolTipSink) += "[NEWLINE]";
 						GC.getGame().BuildCannotPerformActionHelpText(toolTipSink, "TXT_KEY_BUILD_BLOCKED_OUTSIDE_TERRITORY", GC.getImprovementInfo(eImprovement)->GetDescription());
-						if (toolTipSink == NULL) return false;
+						if (toolTipSink == NULL)
+							return false;
 						bPlotCanBuild = false;
 					}
 				}
@@ -3805,7 +3810,8 @@ int CvPlot::getUnitPower(PlayerTypes eOwner) const
 		pLoopUnit = GetPlayerUnit(*pUnitNode);
 		pUnitNode = nextUnitNode(pUnitNode);
 
-		if(!pLoopUnit) continue;
+		if(!pLoopUnit)
+			continue;
 
 		if((eOwner == NO_PLAYER) || (pLoopUnit->getOwner() == eOwner))
 		{
@@ -7214,7 +7220,8 @@ void CvPlot::setPlotType(PlotTypes eNewValue, bool bRecalculate, bool bRebuildGr
 	int iAreaCount = 0;
 	int iI = 0;
 
-	if (eNewValue <= NO_PLOT || eNewValue >= NUM_PLOT_TYPES) return;
+	if (eNewValue <= NO_PLOT || eNewValue >= NUM_PLOT_TYPES)
+		return;
 
 	if(getPlotType() != eNewValue)
 	{
@@ -7457,7 +7464,8 @@ void CvPlot::setTerrainType(TerrainTypes eNewValue, bool bRecalculate, bool bReb
 {
 	bool bUpdateSight = false;
 
-	if (eNewValue <= NO_TERRAIN || eNewValue >= NUM_TERRAIN_TYPES) return;
+	if (eNewValue <= NO_TERRAIN || eNewValue >= NUM_TERRAIN_TYPES)
+		return;
 
 	TerrainTypes eOldValue = getTerrainType();
 
@@ -7757,8 +7765,10 @@ ResourceTypes CvPlot::getNonObsoleteResourceType(TeamTypes eTeam) const
 //	--------------------------------------------------------------------------------
 void CvPlot::setResourceType(ResourceTypes eNewValue, int iResourceNum, bool bForMinorCivPlot)
 {
-	if (eNewValue < NO_RESOURCE) return;
-	if (eNewValue > NO_RESOURCE && GC.getResourceInfo(eNewValue) == NULL) return;
+	if (eNewValue < NO_RESOURCE)
+		return;
+	if (eNewValue > NO_RESOURCE && GC.getResourceInfo(eNewValue) == NULL)
+		return;
 
 	ResourceTypes eOldValue = (ResourceTypes)m_eResourceType;
 	if(eOldValue != eNewValue)
@@ -8156,8 +8166,10 @@ void CvPlot::setImprovementType(ImprovementTypes eNewValue, PlayerTypes eBuilder
 	int iI = 0;
 	ImprovementTypes eOldImprovement = getImprovementType();
 
-	if (eNewValue < NO_IMPROVEMENT) return;
-	if (eNewValue > NO_IMPROVEMENT && GC.getImprovementInfo(eNewValue) == NULL) return;
+	if (eNewValue < NO_IMPROVEMENT)
+		return;
+	if (eNewValue > NO_IMPROVEMENT && GC.getImprovementInfo(eNewValue) == NULL)
+		return;
 
 	// Clear the pillage state if the improvement was replaced by any means
 	bool bPillageStateChanged = IsImprovementPillaged();
@@ -9333,8 +9345,10 @@ void CvPlot::setRouteType(RouteTypes eNewValue, PlayerTypes eBuilder)
 	RouteTypes eOldRoute = getRouteType();
 	int iI = 0;
 
-	if (eNewValue < NO_ROUTE) return;
-	if (eNewValue > NO_ROUTE && GC.getRouteInfo(eNewValue) == NULL) return;
+	if (eNewValue < NO_ROUTE)
+		return;
+	if (eNewValue > NO_ROUTE && GC.getRouteInfo(eNewValue) == NULL)
+		return;
 
 	if(eOldRoute != eNewValue || IsRoutePillaged())
 	{
@@ -12496,8 +12510,10 @@ bool CvPlot::setRevealedImprovementType(TeamTypes eTeam, ImprovementTypes eNewVa
 	PRECONDITION(eTeam >= 0, "eTeam is expected to be non-negative (invalid Index)");
 	PRECONDITION(eTeam < MAX_TEAMS, "eTeam is expected to be within maximum bounds (invalid Index)");
 
-	if (eNewValue < NO_IMPROVEMENT) return false;
-	if (eNewValue > NO_IMPROVEMENT && GC.getImprovementInfo(eNewValue) == NULL) return false;
+	if (eNewValue < NO_IMPROVEMENT)
+		return false;
+	if (eNewValue > NO_IMPROVEMENT && GC.getImprovementInfo(eNewValue) == NULL)
+		return false;
 
 	ImprovementTypes eOldImprovementType = getRevealedImprovementType(eTeam);
 	if(eOldImprovementType != eNewValue)
@@ -12552,8 +12568,10 @@ bool CvPlot::setRevealedRouteType(TeamTypes eTeam, RouteTypes eNewValue)
 	PRECONDITION(eTeam >= 0, "eTeam is expected to be non-negative (invalid Index)");
 	PRECONDITION(eTeam < MAX_TEAMS, "eTeam is expected to be within maximum bounds (invalid Index)");
 
-	if (eNewValue < NO_ROUTE) return false;
-	if (eNewValue > NO_ROUTE && GC.getRouteInfo(eNewValue) == NULL) return false;
+	if (eNewValue < NO_ROUTE)
+		return false;
+	if (eNewValue > NO_ROUTE && GC.getRouteInfo(eNewValue) == NULL)
+		return false;
 
 	if(getRevealedRouteType(eTeam, false) != eNewValue)
 	{

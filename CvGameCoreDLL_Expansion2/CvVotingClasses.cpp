@@ -835,9 +835,11 @@ int CvVoterDecision::GetVotesCastByPlayer(PlayerTypes ePlayer)
 int CvVoterDecision::GetPercentContributionToOutcome(PlayerTypes eVoter, int iChoice, bool bChangeHost, int& iPercentOfPlayerVotes)
 {
 	ASSERT(eVoter >= 0 && eVoter < MAX_MAJOR_CIVS, "Invalid eVoter index");
-	if (eVoter < 0 || eVoter >= MAX_MAJOR_CIVS) return 0;
+	if (eVoter < 0 || eVoter >= MAX_MAJOR_CIVS)
+		return 0;
 	CvLeague* pLeague = GC.getGame().GetGameLeagues()->GetActiveLeague();
-	if (!pLeague) return 0;
+	if (!pLeague)
+		return 0;
 
 	// If the vote was a tie, treat people who voted NAY as supporting the outcome
 	if (iChoice == LeagueHelpers::CHOICE_NONE)
@@ -879,9 +881,11 @@ int CvVoterDecision::GetPercentContributionToOutcome(PlayerTypes eVoter, int iCh
 int CvVoterDecision::GetPercentContributionAgainstOutcome(PlayerTypes eVoter, int iChoice, int& iPercentOfPlayerVotes)
 {
 	ASSERT(eVoter >= 0 && eVoter < MAX_MAJOR_CIVS, "Invalid eVoter index");
-	if (eVoter < 0 || eVoter >= MAX_MAJOR_CIVS) return 0;
+	if (eVoter < 0 || eVoter >= MAX_MAJOR_CIVS)
+		return 0;
 	CvLeague* pLeague = GC.getGame().GetGameLeagues()->GetActiveLeague();
-	if (!pLeague) return 0;
+	if (!pLeague)
+		return 0;
 
 	// If the vote was a tie, treat people who voted NAY as supporting the outcome
 	if (iChoice == LeagueHelpers::CHOICE_NONE)
@@ -1314,11 +1318,13 @@ void CvActiveResolution::DoEffects(PlayerTypes ePlayer)
 {
 	CvPlayer* pPlayer = &GET_PLAYER(ePlayer);
 	ASSERT(pPlayer != NULL, "Player is null when doing effects of an active resolution.");
-	if (pPlayer == NULL) return;
+	if (pPlayer == NULL)
+		return;
 
 	CvLeague* pLeague = GC.getGame().GetGameLeagues()->GetLeague(GetLeague());
 	ASSERT(pLeague != NULL, "League is null when doing effects of an active resolution.");
-	if (pLeague == NULL) return;
+	if (pLeague == NULL)
+		return;
 
 	// == Proposer Choices ==
 	ResolutionDecisionTypes eProposerDecision = GetProposerDecision()->GetType();
@@ -1732,11 +1738,13 @@ void CvActiveResolution::RemoveEffects(PlayerTypes ePlayer)
 {
 	CvPlayer* pPlayer = &GET_PLAYER(ePlayer);
 	ASSERT(pPlayer != NULL, "Player is null when doing effects of an active resolution.");
-	if (pPlayer == NULL) return;
+	if (pPlayer == NULL)
+		return;
 
 	CvLeague* pLeague = GC.getGame().GetGameLeagues()->GetLeague(GetLeague());
 	ASSERT(pLeague != NULL, "League is null when doing effects of an active resolution.");
-	if (pLeague == NULL) return;
+	if (pLeague == NULL)
+		return;
 
 	// == Proposer Choices ==
 	ResolutionDecisionTypes eProposerDecision = GetProposerDecision()->GetType();
@@ -2681,7 +2689,8 @@ bool CvLeague::CanProposeEnactAnyChoice(ResolutionTypes eResolution, PlayerTypes
 
 	CvResolutionEntry* pInfo = GC.getResolutionInfo(eResolution);
 	ASSERT(pInfo, "Resolution info is null.");
-	if (!pInfo) return false;
+	if (!pInfo)
+		return false;
 
 	std::vector<int> vValidChoices = GetChoicesForDecision(pInfo->GetProposerDecision(), eProposer);
 	if (vValidChoices.empty())
@@ -2715,7 +2724,8 @@ bool CvLeague::CanProposeEnact(ResolutionTypes eResolution, PlayerTypes ePropose
 
 	CvResolutionEntry* pInfo = GC.getResolutionInfo(eResolution);
 	ASSERT(pInfo, "Resolution info is null.");
-	if (!pInfo) return false;
+	if (!pInfo)
+		return false;
 
 	bool bValid = true;
 	
@@ -4014,10 +4024,12 @@ int CvLeague::GetCoreVotesForMember(PlayerTypes ePlayer)
 		PRECONDITION(eGoverningSpecialSession != NO_LEAGUE_SPECIAL_SESSION);
 		CvLeagueSpecialSessionEntry* pInfo = GC.getLeagueSpecialSessionInfo(eGoverningSpecialSession);
 		ASSERT(pInfo != NULL);
-		if (pInfo == NULL) return /*1*/ GD_INT_GET(LEAGUE_MEMBER_VOTES_BASE);
+		if (pInfo == NULL)
+			return /*1*/ GD_INT_GET(LEAGUE_MEMBER_VOTES_BASE);
 		Member* pMember = GetMember(ePlayer);
 		ASSERT(pMember != NULL);
-		if (pMember == NULL) return /*1*/ GD_INT_GET(LEAGUE_MEMBER_VOTES_BASE);
+		if (pMember == NULL)
+			return /*1*/ GD_INT_GET(LEAGUE_MEMBER_VOTES_BASE);
 
 		iVotes += pInfo->GetCivDelegates();
 	}
@@ -4057,9 +4069,11 @@ int CvLeague::CalculateStartingVotesForMember(PlayerTypes ePlayer, bool bFakeUN,
 	}
 
 	// This should never be invalid
-	if (eGoverningSpecialSession == NO_LEAGUE_SPECIAL_SESSION) return /*1*/ GD_INT_GET(LEAGUE_MEMBER_VOTES_BASE);
+	if (eGoverningSpecialSession == NO_LEAGUE_SPECIAL_SESSION)
+		return /*1*/ GD_INT_GET(LEAGUE_MEMBER_VOTES_BASE);
 	pInfo = GC.getLeagueSpecialSessionInfo(eGoverningSpecialSession);
-	if (pInfo == NULL) return /*1*/ GD_INT_GET(LEAGUE_MEMBER_VOTES_BASE);
+	if (pInfo == NULL)
+		return /*1*/ GD_INT_GET(LEAGUE_MEMBER_VOTES_BASE);
 
 	// Retrieve the delegate count if the UN was currently active
 	CvLeagueSpecialSessionEntry* pUNInfo = NULL;
@@ -5049,7 +5063,8 @@ float CvLeague::GetContributionTierThreshold(ContributionTier eTier, LeagueProje
 	float fThreshold = 0.0f;
 	Project* pProject = GetProject(eLeagueProject);
 	ASSERT(pProject, "Could not find league project.");
-	if (!pProject) return 0.0f;
+	if (!pProject)
+		return 0.0f;
 
 	switch (eTier)
 	{
@@ -5124,7 +5139,8 @@ bool CvLeague::IsTradeEmbargoed(PlayerTypes eTrader, PlayerTypes eRecipient)
 
 bool CvLeague::IsPlayerEmbargoed(PlayerTypes ePlayer)
 {
-	if (ePlayer < 0 || ePlayer >= MAX_CIV_PLAYERS) return false;
+	if (ePlayer < 0 || ePlayer >= MAX_CIV_PLAYERS)
+		return false;
 	bool bMinor = GET_PLAYER(ePlayer).isMinorCiv();
 
 	for (ActiveResolutionList::iterator it = m_vActiveResolutions.begin(); it != m_vActiveResolutions.end(); ++it) {
@@ -8566,7 +8582,8 @@ void CvLeague::NotifySessionDone()
 void CvLeague::NotifyProposalResult(CvEnactProposal* pProposal)
 {
 	ASSERT(pProposal != NULL);
-	if (pProposal == NULL) return;
+	if (pProposal == NULL)
+		return;
 
 	int iDecision = -1;
 
@@ -8680,7 +8697,8 @@ void CvLeague::NotifyProposalResult(CvEnactProposal* pProposal)
 void CvLeague::NotifyProposalResult(CvRepealProposal* pProposal)
 {
 	ASSERT(pProposal != NULL);
-	if (pProposal == NULL) return;
+	if (pProposal == NULL)
+		return;
 
 	Localization::String sSummaryTemp = Localization::Lookup("TXT_KEY_NOTIFICATION_LEAGUE_VOTING_RESULT_FAIL_SUMMARY");
 	Localization::String sMessageTemp = Localization::Lookup("TXT_KEY_NOTIFICATION_LEAGUE_VOTING_RESULT_REPEAL_FAIL");
@@ -8901,7 +8919,8 @@ void CvLeague::DoProjectRewards(LeagueProjectTypes eLeagueProject)
 {
 	CvLeagueProjectEntry* pProjectInfo = GC.getLeagueProjectInfo(eLeagueProject);
 	ASSERT(pProjectInfo);
-	if (!pProjectInfo) return;
+	if (!pProjectInfo)
+		return;
 
 	int iTopTierRecipients = 0;
 	for (MemberList::iterator it = m_vMembers.begin(); it != m_vMembers.end(); ++it)
@@ -9104,7 +9123,8 @@ void CvLeague::UpdateName()
 void CvLeague::LogProposalResolved(CvEnactProposal* pProposal)
 {
 	ASSERT(pProposal != NULL);
-	if (!(pProposal != NULL)) return;
+	if (!(pProposal != NULL))
+		return;
 	CvString sMessage = "";
 
 	sMessage += ",Congress";
@@ -9147,7 +9167,8 @@ void CvLeague::LogProposalResolved(CvEnactProposal* pProposal)
 void CvLeague::LogProposalResolved(CvRepealProposal* pProposal)
 {
 	ASSERT(pProposal != NULL);
-	if (!(pProposal != NULL)) return;
+	if (!(pProposal != NULL))
+		return;
 	CvString sMessage = "";
 
 	sMessage += ",Congress";
@@ -11844,10 +11865,12 @@ void CvLeagueAI::FindBestVoteChoices(CvEnactProposal* pProposal, VoteConsiderati
 	int iMaxChoicesToConsider = 1;
 
 	ASSERT(GC.getGame().GetGameLeagues()->GetNumActiveLeagues() > 0);
-	if (GC.getGame().GetGameLeagues()->GetNumActiveLeagues() <= 0) return;
+	if (GC.getGame().GetGameLeagues()->GetNumActiveLeagues() <= 0)
+		return;
 	CvLeague* pLeague = GC.getGame().GetGameLeagues()->GetActiveLeague();
 	ASSERT(pLeague != NULL);
-	if (pLeague == NULL) return;
+	if (pLeague == NULL)
+		return;
 
 	switch (pProposal->GetVoterDecision()->GetType())
 	{
@@ -11898,10 +11921,12 @@ void CvLeagueAI::FindBestVoteChoices(CvRepealProposal* pProposal, VoteConsiderat
 	int iMaxChoicesToConsider = 1;
 
 	ASSERT(GC.getGame().GetGameLeagues()->GetNumActiveLeagues() > 0);
-	if (!(GC.getGame().GetGameLeagues()->GetNumActiveLeagues() > 0)) return;
+	if (!(GC.getGame().GetGameLeagues()->GetNumActiveLeagues() > 0))
+		return;
 	CvLeague* pLeague = GC.getGame().GetGameLeagues()->GetActiveLeague();
 	ASSERT(pLeague != NULL);
-	if (!(pLeague != NULL)) return;
+	if (!(pLeague != NULL))
+		return;
 
 	switch (pProposal->GetRepealDecision()->GetType())
 	{
@@ -11942,12 +11967,15 @@ void CvLeagueAI::FindBestVoteChoices(CvRepealProposal* pProposal, VoteConsiderat
 int CvLeagueAI::ScoreVoteChoice(CvEnactProposal* pProposal, int iChoice, bool bConsiderGlobal, bool bProposingToEnact)
 {
 	ASSERT(pProposal != NULL);
-	if (!(pProposal != NULL)) return 0;
+	if (!(pProposal != NULL))
+		return 0;
 	ASSERT(GC.getGame().GetGameLeagues()->GetNumActiveLeagues() > 0);
-	if (!(GC.getGame().GetGameLeagues()->GetNumActiveLeagues() > 0)) return 0;
+	if (!(GC.getGame().GetGameLeagues()->GetNumActiveLeagues() > 0))
+		return 0;
 	CvLeague* pLeague = GC.getGame().GetGameLeagues()->GetActiveLeague();
 	ASSERT(pLeague != NULL);
-	if (!(pLeague != NULL)) return 0;
+	if (!(pLeague != NULL))
+		return 0;
 
 	int iScore = 0;
 
@@ -11979,12 +12007,15 @@ int CvLeagueAI::ScoreVoteChoice(CvEnactProposal* pProposal, int iChoice, bool bC
 int CvLeagueAI::ScoreVoteChoice(CvRepealProposal* pProposal, int iChoice, bool bConsiderGlobal)
 {
 	ASSERT(pProposal != NULL);
-	if (!(pProposal != NULL)) return 0;
+	if (!(pProposal != NULL))
+		return 0;
 	ASSERT(GC.getGame().GetGameLeagues()->GetNumActiveLeagues() > 0);
-	if (!(GC.getGame().GetGameLeagues()->GetNumActiveLeagues() > 0)) return 0;
+	if (!(GC.getGame().GetGameLeagues()->GetNumActiveLeagues() > 0))
+		return 0;
 	CvLeague* pLeague = GC.getGame().GetGameLeagues()->GetActiveLeague();
 	ASSERT(pLeague != NULL);
-	if (!(pLeague != NULL)) return 0;
+	if (!(pLeague != NULL))
+		return 0;
 
 	int iScore = 0;
 
@@ -12008,7 +12039,8 @@ int CvLeagueAI::ScoreVoteChoice(CvRepealProposal* pProposal, int iChoice, bool b
 // Score a particular choice on a particular proposal which is a decision between Yes and No
 int CvLeagueAI::ScoreVoteChoiceYesNo(CvProposal* pProposal, int iChoice, bool bEnact, bool bConsiderGlobal, bool bForSelf, bool bProposingToEnact)
 {
-	if (pProposal == NULL) return 0;
+	if (pProposal == NULL)
+		return 0;
 
 	// How much do we like this choice for this proposal?  Positive is like, negative is dislike.
 	// Evaluate as if we are voting Yes to Enact the proposal.  Post-processing below to fit actual situation.
@@ -13843,14 +13875,17 @@ int CvLeagueAI::ScoreVoteChoiceYesNo(CvProposal* pProposal, int iChoice, bool bE
 int CvLeagueAI::ScoreVoteChoicePlayer(CvProposal* pProposal, int iChoice, bool bEnact)
 {
 	ASSERT(pProposal != NULL);
-	if (!(pProposal != NULL)) return 0;
+	if (!(pProposal != NULL))
+		return 0;
 	ASSERT(bEnact, "Unexpected case when evaluating vote choices for AI.");
-	if (!bEnact) return 0;
+	if (!bEnact)
+		return 0;
 	PlayerTypes eChoicePlayer = (PlayerTypes) iChoice;
 	PRECONDITION(eChoicePlayer != NO_PLAYER);
 	CvLeague* pLeague = GC.getGame().GetGameLeagues()->GetActiveLeague();
 	ASSERT(pLeague != NULL);
-	if (!(pLeague != NULL)) return 0;
+	if (!(pLeague != NULL))
+		return 0;
 
 	PlayerTypes ePlayer = GetPlayer()->GetID();
 
@@ -14281,7 +14316,8 @@ void CvLeagueAI::LogProposalConsidered(ProposalConsideration* pProposal, int iCh
 void CvLeagueAI::LogVoteChoiceConsidered(CvEnactProposal* pProposal, int iChoice, int iScore)
 {
 	ASSERT(pProposal != NULL);
-	if (!(pProposal != NULL)) return;
+	if (!(pProposal != NULL))
+		return;
 	CvString sMessage = "";
 
 	sMessage += ",";
@@ -14314,7 +14350,8 @@ void CvLeagueAI::LogVoteChoiceConsidered(CvEnactProposal* pProposal, int iChoice
 void CvLeagueAI::LogVoteChoiceConsidered(CvRepealProposal* pProposal, int iChoice, int iScore)
 {
 	ASSERT(pProposal != NULL);
-	if (!(pProposal != NULL)) return;
+	if (!(pProposal != NULL))
+		return;
 	CvString sMessage = "";
 
 	sMessage += ",";
@@ -14347,7 +14384,8 @@ void CvLeagueAI::LogVoteChoiceConsidered(CvRepealProposal* pProposal, int iChoic
 void CvLeagueAI::LogVoteChoiceCommitted(CvEnactProposal* pProposal, int iChoice, int iVotes)
 {
 	ASSERT(pProposal != NULL);
-	if (!(pProposal != NULL)) return;
+	if (!(pProposal != NULL))
+		return;
 	CvString sMessage = "";
 
 	sMessage += ",";
@@ -14380,7 +14418,8 @@ void CvLeagueAI::LogVoteChoiceCommitted(CvEnactProposal* pProposal, int iChoice,
 void CvLeagueAI::LogVoteChoiceCommitted(CvRepealProposal* pProposal, int iChoice, int iVotes)
 {
 	ASSERT(pProposal != NULL);
-	if (!(pProposal != NULL)) return;
+	if (!(pProposal != NULL))
+		return;
 	CvString sMessage = "";
 
 	sMessage += ",";
