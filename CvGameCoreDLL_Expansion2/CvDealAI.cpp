@@ -1698,7 +1698,6 @@ vector<int> CvDealAI::GetStrategicResourceItemList(ResourceTypes eResource, int 
 
 	// are there any buildings we can potentially construct using this resource?
 	vector<BuildingTypes> vBuildingsWithResourceRequirement;
-	vector<int> vMutuallyExclusiveGroupsAlreadyConsidered;
 	for (int iI = 0; iI < GC.getNumBuildingClassInfos(); iI++)
 	{
 		const BuildingClassTypes eBuildingClass = static_cast<BuildingClassTypes>(iI);

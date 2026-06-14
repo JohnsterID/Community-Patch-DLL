@@ -954,7 +954,7 @@ bool GetGameOption(const char* szOptionName, int& iValue)
 
 bool GetGameOption(GameOptionTypes eOption, int& iValue)
 {
-	if((uint)eOption >= 0 && (uint)eOption < (uint)NUM_GAMEOPTION_TYPES)
+	if((uint)eOption < (uint)NUM_GAMEOPTION_TYPES)
 	{
 		iValue = s_EnumBasedGameOptions[(size_t)eOption];
 		return true;

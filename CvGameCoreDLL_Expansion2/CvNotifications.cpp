@@ -1482,11 +1482,9 @@ bool CvNotifications::IsNotificationRedundant(Notification& notification)
 			}
 			return false;
 		}
-		break;
 
 	default:
 		return false;
-		break;
 	}
 }
 

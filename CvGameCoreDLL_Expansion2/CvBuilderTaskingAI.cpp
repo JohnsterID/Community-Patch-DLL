@@ -1844,7 +1844,6 @@ vector<OptionWithScore<BuilderDirective>> CvBuilderTaskingAI::GetRouteDirectives
 
 	map<CvPlot*, pair<int, int>> plotValues;
 	map<CvPlot*, RouteTypes> plotBestRouteType;
-	map<CvPlot*, PlannedRoute> plotShortestRoute;
 	map<CvPlot*, int> plotShortestRouteBuildTime;
 	map<CvPlot*, RoutePurpose> plotPurposes;
 	// Loop through all the best routes and give their respective plots the best value out of all possible paths

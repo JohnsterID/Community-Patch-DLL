@@ -1143,7 +1143,7 @@ Firaxis::Array< int, NUM_YIELD_TYPES > CvPolicyAI::WeightPolicyAttributes(CvPlay
 		yield[i] = 0;
 	}
 
-	if (yield.size() <= 0)
+	if (yield.size() == 0)
 		return yield;
 
 	if (pPlayer->getCapitalCity() == NULL)

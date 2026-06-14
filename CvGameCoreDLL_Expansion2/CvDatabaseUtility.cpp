@@ -111,7 +111,7 @@ bool CvDatabaseUtility::Initialize2DArray(int**& ppArray, const char* szTable1Na
 //------------------------------------------------------------------------------
 void CvDatabaseUtility::Initialize2DArray(int**& ppArray, const size_t iCount1, const size_t iCount2, int iDefault /*= 0*/)
 {
-	if(iCount1 <= 0 || iCount2 <= 0)
+	if(iCount1 == 0 || iCount2 == 0)
 	{
 		ASSERT(false, "Cannot initialize array to 0 size.");
 		return;

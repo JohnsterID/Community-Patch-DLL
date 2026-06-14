@@ -3936,7 +3936,7 @@ int ArmyCheckTerritory(CvPlot* pToPlot, const CvPlayer& kPlayer, PlayerTypes eTa
 
 	//do not go through other people's cities
 	if (finder->HasValidDestination() && pToPlot->isCity())
-		return pToPlot->getTeam() == kPlayer.getTeam() || finder->IsPathDest(pToPlot->getX(),pToPlot->getY());
+		return finder->IsPathDest(pToPlot->getX(),pToPlot->getY());
 
 	CvTeam& plotTeam = GET_TEAM(pToPlot->getTeam());
 	if (plotTeam.isAtWar(kPlayer.getTeam()))

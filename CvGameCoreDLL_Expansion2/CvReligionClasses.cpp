@@ -2059,7 +2059,7 @@ std::vector<BeliefTypes> CvGameReligions::GetAvailablePantheonBeliefs(PlayerType
 		}
 	}
 	//zero? uh oh.
-	if (availableBeliefs.size() <= 0)
+	if (availableBeliefs.size() == 0)
 	{
 		for (int iI = 0; iI < iNumBeleifs; iI++)
 		{
@@ -5825,7 +5825,7 @@ void CvUnitReligion::Init()
 
 int CvUnitReligion::GetMaxSpreads(const CvUnit* pUnit) const
 {
-	if (!pUnit || m_iStrength <= 0) //no strength, no spread!
+	if (!pUnit || m_iStrength == 0) //no strength, no spread!
 		return 0;
 
 	//missionary spreads can be buffed but not prophets

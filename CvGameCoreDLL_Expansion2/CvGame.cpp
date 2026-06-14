@@ -1832,6 +1832,7 @@ void CvGame::updateScore(bool bForce)
 			}
 		}
 
+		ASSERT(eBestPlayer != NO_PLAYER, "All players scored already");
 		abPlayerScored[eBestPlayer] = true;
 
 		setRankPlayer(iI, eBestPlayer);
@@ -1873,6 +1874,7 @@ void CvGame::updateScore(bool bForce)
 			}
 		}
 
+		ASSERT(eBestTeam != NO_TEAM, "All teams scored already");
 		abTeamScored[eBestTeam] = true;
 
 		setRankTeam(iI, eBestTeam);
@@ -8733,7 +8735,7 @@ UnitTypes CvGame::GetRandomUniqueUnitType(bool bIncludeCivsInGame, bool bInclude
 			veUnitRankings.push_back( OptionWithScore<UnitTypes>(eLoopUnit, iRandom));
 		}
 		// we didn't find any candidates! try again with all UUs
-		if (veUnitRankings.size() <= 0)
+		if (veUnitRankings.size() == 0)
 			bIncludeCivsInGame = true;
 		else
 			break;

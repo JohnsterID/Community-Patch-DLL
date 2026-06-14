@@ -219,7 +219,6 @@ void ReadDataArray(FDataStream& kStream, TData* paArray, int iArraySize)
 {
 	uint uiNumEntries;
 	FStringFixedBuffer(sTemp, 256);
-	int iType;
 
 	kStream >> uiNumEntries;
 
@@ -419,7 +418,6 @@ template<typename TType>
 void ReadTypeArray(FDataStream& kStream, std::vector<TType>& aArray)
 {
 	uint uiNumEntries;
-	int iType;
 
 	kStream >> uiNumEntries;
 

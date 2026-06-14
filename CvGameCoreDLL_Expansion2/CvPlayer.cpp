@@ -27851,7 +27851,7 @@ void CvPlayer::doInstantGWAM(GreatPersonTypes eGreatPerson, const CvString& strN
 			CvNotifications* pNotification = GetNotifications();
 			if (pNotification)
 			{
-				Localization::String strMessage = "";
+				Localization::String strMessage;
 				if (bConquest)
 				{
 					strMessage = Localization::Lookup("TXT_KEY_TOURISM_EVENT_GWAM_BONUS_CONQUEST");
@@ -27869,7 +27869,7 @@ void CvPlayer::doInstantGWAM(GreatPersonTypes eGreatPerson, const CvString& strN
 					strMessage << strName.c_str();
 				}
 
-				Localization::String strSummary = "";
+				Localization::String strSummary;
 				if (bConquest)
 					strSummary = Localization::Lookup("TXT_KEY_TOURISM_EVENT_GWAM_BONUS_CONQUEST_S");
 				else

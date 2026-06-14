@@ -1385,7 +1385,7 @@ void CvPlayerEspionage::ProcessSpy(uint uiSpyIndex)
 bool CvPlayerEspionage::DoStealTechnology(CvCity* pPlayerCity, PlayerTypes eTargetPlayer)
 {
 	PlayerTypes eDefendingPlayer = pPlayerCity->getOwner();
-	if (m_aaPlayerStealableTechList[eTargetPlayer].size() <= 0)
+	if (m_aaPlayerStealableTechList[eTargetPlayer].size() == 0)
 		return false;
 
 	TeamTypes eTeam = m_pPlayer->getTeam();
@@ -2697,14 +2697,11 @@ bool CvPlayerEspionage::CanMoveSpyTo(CvCity* pCity, uint uiSpyIndex, bool bAsDip
 		return false;
 	}
 
-	if (uiSpyIndex >= 0)
+	CvCity* pCurrentCity = GetCityWithSpy(uiSpyIndex);
+	if (pCurrentCity != NULL)
 	{
-		CvCity* pCurrentCity = GetCityWithSpy(uiSpyIndex);
-		if (pCurrentCity != NULL)
-		{
-			if (pCurrentCity->GetCityEspionage()->GetPendingEvents(m_pPlayer->GetID()) > 0)
-				return false;
-		}
+		if (pCurrentCity->GetCityEspionage()->GetPendingEvents(m_pPlayer->GetID()) > 0)
+			return false;
 	}
 
 	// spies that are assigned as diplomats to vassals can't be moved anywhere

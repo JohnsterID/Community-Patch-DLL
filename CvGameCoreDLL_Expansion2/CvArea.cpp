@@ -579,7 +579,6 @@ void CvArea::setTotalFoundValue(int iNewValue)
 {
 	//avoid overflow
 	m_iTotalFoundValue = min(INT_MAX/2,max(0,iNewValue));
-	ASSERT(m_iTotalFoundValue >= 0);
 }
 
 //	--------------------------------------------------------------------------------

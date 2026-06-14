@@ -28905,7 +28905,6 @@ int CvCity::GetBuyPlotScore(int& iBestX, int& iBestY)
 	VALIDATE_OBJECT();
 	int iBestScore = -1;
 
-	vector<CvPlot*> validChoices;
 	for (int iI = 0; iI < GetNumWorkablePlots(); iI++)
 	{
 		CvPlot* pLoopPlot = GetCityCitizens()->GetCityPlotFromIndex(iI);

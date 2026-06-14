@@ -6733,7 +6733,6 @@ bool CvHomelandAI::FindTestArchaeologistPlotPrimer(CvUnit *pUnit)
 		return false;
 	}
 
-	CvHomelandTarget newTarget;
 	TeamTypes eTeam = m_pPlayer->getTeam();
 	CvMap& theMap = GC.getMap();
 	int iNumPlots = theMap.numPlots();

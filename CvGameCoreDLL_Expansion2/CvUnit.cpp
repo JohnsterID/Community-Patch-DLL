@@ -664,7 +664,7 @@ void CvUnit::initWithNameOffset(int iID, UnitTypes eUnit, int iNameOffset, UnitA
 			}
 		}
 		//If still no valid GPs, do the old random method.
-		if (vfPossibleUnits.size() <= 0)
+		if (vfPossibleUnits.size() == 0)
 		{
 			for (iI = 0; iI < iNumNames; iI++)
 			{
@@ -9494,7 +9494,7 @@ bool CvUnit::plunderTradeRoute()
 	CvPlayerTrade* pTrade = GET_PLAYER(m_eOwner).GetTrade();
 	aiTradeUnitsAtPlot = pTrade->GetOpposingTradeUnitsAtPlot(pPlot, false);
 	ASSERT(aiTradeUnitsAtPlot.size() > 0, "aiTradeUnitsAtPlot is empty. Earlier check should have verified that this can't be the case");
-	if (aiTradeUnitsAtPlot.size() <= 0)
+	if (aiTradeUnitsAtPlot.size() == 0)
 	{
 		return false;
 	}
@@ -13823,7 +13823,7 @@ void CvUnit::promote(PromotionTypes ePromotion, int iLeaderUnitId)
 		{
 			kPlayer.doInstantYield(INSTANT_YIELD_TYPE_LEVEL_UP, false, NO_GREATPERSON, NO_BUILDING, (getLevel() - 1), false, NO_PLAYER, NULL, false, getOriginCity(), getDomainType()==DOMAIN_SEA, true, false, NO_YIELD, this);
 		}
-		else if (getOriginCity() == NULL)
+		else
 		{
 			CvCity* pCapital = kPlayer.getCapitalCity();
 			if (pCapital)
