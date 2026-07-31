@@ -722,6 +722,44 @@ static void ensureSymInit()
     InterlockedExchange(&g_dbghelpState, 2);
 }
 
+// ---- Eager initialisation at DLL load ----
+// Symbol-engine setup is expensive: dbghelp load, SymInitialize, module
+// registration, and eager PDB materialisation (no SYMOPT_DEFERRED_LOADS)
+// for a huge instrumented Debug image. Lazy initialisation defers that
+// bill to the FIRST finding — but under address space exhaustion the
+// first finding IS the crash (operator new returning null), so >100 MB
+// of symbol-engine commit landed in the crash second and starved the
+// minidump writer's emergency reserve (field data 2026-07-30).
+// Pre-pay at DLL load instead, when memory is plentiful. This also makes
+// ubsan.log T+0 coincide with DLL load, matching how findings are
+// correlated against net_message_debug.log timestamps.
+//
+// A background thread is required: the static initialiser below runs
+// under the loader lock, where LoadLibrary(dbghelp.dll) may deadlock.
+// A thread created during DLL initialisation only begins executing after
+// the loader releases the lock, so the thread body is safe. Races with
+// an early first finding are handled by the interlocked guards inside
+// ubsan_ensure_log/ensureSymInit (either side initialises, the other waits).
+static DWORD WINAPI ubsanPrewarmThread(void*)
+{
+    ubsan_ensure_log();
+    ensureSymInit();
+    return 0;
+}
+
+namespace {
+struct UbsanPrewarm
+{
+    UbsanPrewarm()
+    {
+        HANDLE hThread = CreateThread(NULL, 0, ubsanPrewarmThread, NULL, 0, NULL);
+        if (hThread)
+            CloseHandle(hThread);
+    }
+};
+UbsanPrewarm g_ubsanPrewarm;
+}
+
 // ---- Local variable enumeration ----
 // Approach (from debuginfo.com LocalsByAddr + StackWalker):
 //   1. RtlCaptureContext + StackWalk64 to get per-frame EBP (unavailable from
