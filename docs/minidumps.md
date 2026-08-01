@@ -164,12 +164,13 @@ Largest free block (Sub2G): 1024 KB  ** likely 32-bit address-space exhaustion (
 **Useful options:**
 - `--dll` / `--pdb` — explicit pair (e.g. a local `clang-output/Release` build); mismatches against the dump produce warnings instead of silently wrong symbols
 - `--rva 0xA57CF0` — symbolize additional addresses (repeatable)
+- `--image <CivilizationV_DX11.exe>` — provide additional module images on disk to filter their stack-scan entries down to verified call return addresses (repeatable)
 - `--json` — machine-readable output for further scripting
 - `--module` — analyze a module other than `CvGameCore_Expansion2.dll`
 
 **Notes:**
-- `crashes.log` "Location (in file)" is a *file offset*, not an RVA; the tool converts it using the DLL's `.text` raw-to-virtual delta (typically `+0xC00`) and reports the true RVA.
-- The stack listing is a conservative return-address *scan* (32-bit x86 has no unwind info), so treat entries as candidates, not a verified call chain.
+- `crashes.log` "Location (in file)" is a *file offset*, not an RVA; the tool converts it using the DLL's `.text` raw-to-virtual delta (typically `+0xC00`) and reports the true RVA. (`???+0xfffffXXX` entries mean EIP was outside every module — e.g. a call through a NULL pointer — and have no meaningful RVA.)
+- The stack listing is a conservative return-address *scan* (32-bit x86 has no unwind info), so treat entries as candidates, not a verified call chain. For the target DLL (and any `--image` module) candidates are additionally verified to land in an executable section directly after a call instruction, which removes most false positives — pointers into data sections that merely happen to fall inside a module's address range.
 - A largest-free-block figure below a few MB flags 32-bit address-space exhaustion — see such crashes as OOM, not as bugs at the faulting instruction.
 
 ### Using Visual Studio

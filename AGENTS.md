@@ -100,5 +100,26 @@ python3 scripts/analyze_minidump.py CvMiniDump_*.dmp \
   RVA via the DLL's .text raw->virtual delta (typically +0xC00).
 - Largest-free-block < a few MB in crashes.log = 32-bit address-space
   exhaustion (OOM class).
-- Validated against issue #13254 dump: crash RVA 0xA57CF0 ->
-  `std::vector<CvTacticalPlot>::_Ufill` (CvTacticalAI.h:855 inlined chain).
+- Stack-scan candidates for the target DLL (and any `--image` module, e.g.
+  the game exe from `/workspace/project/Sid Meier's Civilization V/`) are
+  verified as call return addresses (executable section + preceding call
+  insn); this removes most false positives (data pointers into module ranges).
+- crashes.log `???+0xfffffXXX` entries = EIP outside every module (call
+  through NULL/garbage pointer); no RVA fixup applies.
+- EXE address cross-reference (verified 2026-08-01): Windows exes have PE
+  ImageBase 0x400000, so exe+RVA -> sub_(0x400000+RVA) in
+  CivilizationV*.exe.c. The Civ5XP ELF loads at 0x08048000 (NOT 0x400000 --
+  the note in minidump-pdb-plan.txt is wrong on this); Civ5XP.c function
+  addresses are absolute ELF vaddrs. Match Windows sub_XXXXXX to Civ5XP.c
+  named functions by structural idiom search (shared strings are ambiguous:
+  same SQL appears in multiple functions). Confirmed pairing: the EXE event
+  dispatch loop sub_420F40 (DX9) / sub_6A5970 (DX11) =
+  GameCoreEventDispatcher<GameCoreEventQueue<EventStream>,DispatchData>::
+  DispatchEvents (Civ5XP 0x86EF766); status.txt Session-2 ret addr
+  exe+0x20F75 verified in exe bytes as directly after FF D0 (call eax).
+- Validated against issue #13254 dump (crash RVA 0xA57CF0 ->
+  `std::vector<CvTacticalPlot>::_Ufill`, CvTacticalAI.h:855 inlined chain)
+  and issue #13262 dump (EIP=0 execute-DEP AV during save load; raw scan had
+  546 bogus CvGameCore hits, call-site verification leaves ~40; exe frames
+  all data refs -> crash is in EXE-side dispatch before reaching our DLL,
+  same class as the 11:32 Session-2 load crash in status.txt).

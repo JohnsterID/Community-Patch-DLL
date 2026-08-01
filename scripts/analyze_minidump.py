@@ -29,6 +29,9 @@ Usage:
                       is a FILE OFFSET; true RVA = offset + .text raw/virtual
                       delta, typically +0xC00).
   --rva HEX           Symbolize extra RVAs (repeatable) in the target module.
+  --image FILE        Extra module image on disk (e.g. the game exe) used to
+                      verify stack-scan candidates as real call return
+                      addresses (repeatable; must match the dump's module).
   --max-frames N      Stack-scan frame limit (default 40).
   --json              Machine-readable output.
 
@@ -474,8 +477,14 @@ def llvm_symbolize(symbolizer, dll, rvas):
 # Stack scanning (no unwind info on x86; conservative return-address scan)
 # ---------------------------------------------------------------------------
 
-def scan_stack(dump, thread, from_addr, max_frames):
-    """Scan thread stack upward from from_addr for module return addresses."""
+def scan_stack(dump, thread, from_addr, max_frames, checkers=None):
+    """Scan thread stack upward from from_addr for module return addresses.
+
+    checkers maps a lowercase module name to a callable(rva) -> bool that
+    validates candidates (e.g. "lands in an executable section and is
+    preceded by a call instruction", built from the module's file on disk).
+    Modules without a checker are reported unfiltered.
+    """
     stack = dump.thread_stack(thread)
     start = thread["stack_start"]
     frames = []
@@ -484,16 +493,61 @@ def scan_stack(dump, thread, from_addr, max_frames):
     for k in range(begin, len(stack) - 3, 4):
         v = struct.unpack_from("<I", stack, k)[0]
         m = dump.module_for(v)
-        if m:
-            frames.append({
-                "stack_addr": start + k,
-                "value": v,
-                "module": m["name"],
-                "rva": v - m["base"],
-            })
-            if len(frames) >= max_frames:
-                break
+        if not m:
+            continue
+        check = (checkers or {}).get(m["name"].lower())
+        if check and not check(v - m["base"]):
+            continue
+        frames.append({
+            "stack_addr": start + k,
+            "value": v,
+            "module": m["name"],
+            "rva": v - m["base"],
+        })
+        if len(frames) >= max_frames:
+            break
     return frames
+
+
+IMAGE_SCN_MEM_EXECUTE = 0x20000000
+
+
+def make_return_address_checker(dll_path):
+    """Candidate return addresses must land in an executable section and be
+    preceded by a plausible x86 call instruction (E8 rel32, or the FF /2
+    indirect forms). Only possible for modules whose file we have on disk."""
+    with open(dll_path, "rb") as f:
+        data = f.read()
+    exec_secs = []
+    peh = struct.unpack_from("<I", data, 0x3C)[0]
+    nsec = struct.unpack_from("<H", data, peh + 6)[0]
+    optsize = struct.unpack_from("<H", data, peh + 20)[0]
+    for i in range(nsec):
+        s = peh + 24 + optsize + 40 * i
+        chars = struct.unpack_from("<I", data, s + 36)[0]
+        if chars & IMAGE_SCN_MEM_EXECUTE:
+            vsize, va, rawsize, rawptr = struct.unpack_from("<IIII", data,
+                                                            s + 8)
+            exec_secs.append((va, min(vsize, rawsize), rawptr))
+
+    def check(rva):
+        for va, size, rawptr in exec_secs:
+            if va <= rva < va + size:
+                off = rva - va + rawptr
+                if off < 7:
+                    return False
+                b = data[off - 7:off]
+                # call rel32 (E8) / call r/m32 (FF /2: 2-7 byte encodings)
+                if b[2] == 0xE8:
+                    return True
+                for ln in (2, 3, 4, 5, 6, 7):
+                    i = 7 - ln
+                    if b[i] == 0xFF and (b[i + 1] >> 3) & 7 == 2:
+                        return True
+                return False
+        return False
+
+    return check
 
 
 # ---------------------------------------------------------------------------
@@ -563,6 +617,10 @@ def main():
                                         "(default: $LLVM_PATH, then $PATH)")
     ap.add_argument("--rva", action="append", default=[],
                     help="extra RVA(s) to symbolize (hex)")
+    ap.add_argument("--image", action="append", default=[],
+                    help="additional module image on disk (e.g. the game "
+                         "exe) used to verify stack-scan candidates as real "
+                         "call return addresses (repeatable)")
     ap.add_argument("--module", default="CvGameCore_Expansion2.dll",
                     help="target module name (default: %(default)s)")
     ap.add_argument("--max-frames", type=int, default=40)
@@ -647,11 +705,15 @@ def main():
                                   os.path.basename(args.dump))
         if entry:
             report["crashes_log"] = entry
-            if pe and "file_offset" in entry:
+            # The file-offset -> RVA fixup only makes sense when the log
+            # entry points into the module we have a DLL for; "???" entries
+            # (EIP outside any module, e.g. a call to NULL) wrap around 0.
+            if pe and entry.get("module", "").lower() == args.module.lower() \
+                    and "file_offset" in entry:
                 delta = text_offset_delta(pe)
                 if delta is not None:
-                    entry["true_rva"] = "0x%X" % (entry["file_offset"]
-                                                  + delta)
+                    entry["true_rva"] = "0x%X" % (
+                        (entry["file_offset"] + delta) & 0xFFFFFFFF)
                     entry["note"] = (
                         "'Location (in file)' is a file offset; +0x%X "
                         "(.text raw->virtual) = true RVA" % delta)
@@ -669,7 +731,32 @@ def main():
                        if t["tid"] == exc["tid"]), None)
         if thread and thread["stack_size"]:
             esp = exc["registers"].get("esp", thread["stack_start"])
-            stack_frames = scan_stack(dump, thread, esp, args.max_frames)
+            checkers = {}
+            if dll:
+                try:
+                    checkers[args.module.lower()] = \
+                        make_return_address_checker(dll)
+                except Exception:
+                    pass
+            for img in args.image:
+                name = os.path.basename(img).lower()
+                mod = next((m for m in dump.modules
+                            if m["name"].lower() == name), None)
+                info = pe_info(img)
+                if not mod or not info:
+                    sys.stderr.write("warning: --image %s: no matching "
+                                     "module in dump or not a PE file\n"
+                                     % img)
+                    continue
+                if info["timestamp"] != mod["timestamp"] \
+                        or info["size_of_image"] != mod["size"]:
+                    sys.stderr.write(
+                        "warning: --image %s does not match the module in "
+                        "the dump (timestamp/SizeOfImage); skipping\n" % img)
+                    continue
+                checkers[name] = make_return_address_checker(img)
+            stack_frames = scan_stack(dump, thread, esp, args.max_frames,
+                                      checkers)
             for f in stack_frames:
                 if f["module"].lower() == args.module.lower():
                     rvas.append(f["rva"])
