@@ -9,6 +9,7 @@ A minidump (crash dump) is a diagnostic file that captures the state of the game
 - [Filename Format](#filename-format)
 - [Version String Format](#version-string-format)
 - [Analyzing Minidumps](#analyzing-minidumps)
+  - [Using analyze_minidump.py (Linux/cross-platform)](#using-analyze_minidumppy-linuxcross-platform)
   - [Using Visual Studio](#using-visual-studio)
   - [Using WinDbg](#using-windbg)
 - [Submitting Minidumps](#submitting-minidumps)
@@ -122,6 +123,54 @@ This allows developers to immediately know:
 4. **WinDbg output** - Visible when analyzing the dump with `!analyze -v`
 
 ## Analyzing Minidumps
+
+### Using analyze_minidump.py (Linux/cross-platform)
+
+`scripts/analyze_minidump.py` analyzes crash dumps without any Windows tooling. It parses the dump (including Wine-generated dumps that strict parsers reject), auto-selects the matching DLL/PDB pair from an extracted `Release_Debug.zip`, symbolizes the faulting address (with file:line and inlined frames when `llvm-symbolizer` is available), scans the crashed thread's stack for return-address candidates, and cross-checks `crashes.log`.
+
+**Requirements:** Python 3 only. For file:line symbolization, LLVM >= 19 (`llvm-symbolizer` found via `--llvm-path`, `$LLVM_PATH/bin`, or `$PATH`); without it, a built-in pure-Python PDB reader still resolves function names.
+
+**Typical workflow:**
+
+```bash
+# 1. Get the official symbols for the release the user was running
+#    (version is embedded in the dump filename, e.g. 5.4.1):
+wget https://github.com/LoneGazebo/Community-Patch-DLL/releases/download/Release-5.4.1/Release_Debug.zip
+python3 -m zipfile -e Release_Debug.zip symbols/
+
+# 2. Analyze (auto-matches Standard vs 43 Civ, Debug vs Release by
+#    PE timestamp + SizeOfImage, then verifies the RSDS GUID):
+python3 scripts/analyze_minidump.py CvMiniDump_*.dmp \
+    --symbols symbols/ --crashes-log crashes.log
+```
+
+**Example output:**
+
+```
+-- Exception --
+0xC0000005 (Access Violation) in thread 0x360
+Faulting address: 0xFCEC7CF0  =  CvGameCore_Expansion2.dll+0xA57CF0
+Access violation: write of address 0x1528
+
+-- Crash location --
+CvTacticalPlot::CvTacticalPlot [...CvTacticalAI.h:855:0] <- inlined in
+std::vector<CvTacticalPlot>::_Ufill [...VC\INCLUDE\vector:1254:0]
+
+-- crashes.log cross-check --
+Location (in file): CvGameCore_Expansion2.dll+0xa570f0  ->  true RVA 0xA57CF0
+Largest free block (Sub2G): 1024 KB  ** likely 32-bit address-space exhaustion (OOM) **
+```
+
+**Useful options:**
+- `--dll` / `--pdb` — explicit pair (e.g. a local `clang-output/Release` build); mismatches against the dump produce warnings instead of silently wrong symbols
+- `--rva 0xA57CF0` — symbolize additional addresses (repeatable)
+- `--json` — machine-readable output for further scripting
+- `--module` — analyze a module other than `CvGameCore_Expansion2.dll`
+
+**Notes:**
+- `crashes.log` "Location (in file)" is a *file offset*, not an RVA; the tool converts it using the DLL's `.text` raw-to-virtual delta (typically `+0xC00`) and reports the true RVA.
+- The stack listing is a conservative return-address *scan* (32-bit x86 has no unwind info), so treat entries as candidates, not a verified call chain.
+- A largest-free-block figure below a few MB flags 32-bit address-space exhaustion — see such crashes as OOM, not as bugs at the faulting instruction.
 
 ### Using Visual Studio
 
