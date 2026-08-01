@@ -76,3 +76,29 @@ Warnings are **identical** between Debug and Release (1,104 total). All are pre-
 
 ### False Positives in `grep "error:"`
 Lines containing `error:` in the logs are **not actual errors** -- they are `>>>` reference lines inside `lld-link: warning:` messages, showing which destructor sites reference the undefined sized `operator delete`. Both builds link successfully.
+
+---
+
+## Minidump Analysis (scripts/analyze_minidump.py)
+
+Cross-platform crash-dump analyzer; full usage in `docs/minidumps.md`.
+```bash
+python3 scripts/analyze_minidump.py CvMiniDump_*.dmp \
+    --symbols <extracted Release_Debug.zip dir> --crashes-log crashes.log
+```
+- Handles Wine-generated dumps (nonstandard 0xfff0 stream breaks the python
+  `minidump` lib; this tool walks the header/directory manually).
+- Auto-pairs dump module -> DLL by PE timestamp + SizeOfImage, DLL -> PDB by
+  RSDS GUID+age (Standard vs 43 Civ DLLs differ only in timestamp).
+- Symbolization backends: `llvm-symbolizer` (LLVM >= 19; file:line + inlined
+  frames from PDB) with pure-Python PDB reader fallback (MSF/DBI walk,
+  S_GPROC32/S_LPROC32 + publics; slower, but zero dependencies).
+  Symbolizer found via `--llvm-path`, `$LLVM_PATH/bin`, then `$PATH`.
+  A big LLVM tarball may exist at `/workspace/project/LLVM-*-Linux-X64.tar.xz`;
+  extracting just `bin/llvm-symbolizer` is enough (~10 MB vs ~2 GB).
+- crashes.log "Location (in file)" is a FILE OFFSET; the tool converts to true
+  RVA via the DLL's .text raw->virtual delta (typically +0xC00).
+- Largest-free-block < a few MB in crashes.log = 32-bit address-space
+  exhaustion (OOM class).
+- Validated against issue #13254 dump: crash RVA 0xA57CF0 ->
+  `std::vector<CvTacticalPlot>::_Ufill` (CvTacticalAI.h:855 inlined chain).
