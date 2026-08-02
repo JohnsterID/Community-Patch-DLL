@@ -21,7 +21,7 @@
 #include <TlHelp32.h>   // CreateToolhelp32Snapshot, Module32First/Next (module map)
 
 // Disable all sanitizer instrumentation for every function in this file
-#pragma clang attribute push(__attribute__((no_sanitize("undefined", "unsigned-integer-overflow", "implicit-conversion"))), apply_to = function)
+#pragma clang attribute push(__attribute__((no_sanitize("undefined", "unsigned-integer-overflow", "implicit-conversion", "float-divide-by-zero", "local-bounds", "nullability"))), apply_to = function)
 
 // ============================================================================
 // Dynamic dbghelp.dll loading — mirror of CvGlobals.cpp LoadBestDbgHelp()
@@ -1596,6 +1596,27 @@ __declspec(dllexport) void __ubsan_handle_mul_overflow_abort(OverflowData* data,
     if (ubsan_report_overflow(data, "*", data->loc, data->type, lhs, rhs)) __debugbreak();
 }
 
+// Zero test that understands the ValueHandle encoding for the operand type.
+// Integers <= 32 bits and floats are inline in the handle; 64-bit integers
+// and doubles are passed by pointer on 32-bit builds.  For floats, +0.0 and
+// -0.0 have different bit patterns but both divide to inf/NaN, so compare
+// the decoded value, not the raw handle.
+static bool isZeroValue(const TypeDescriptor* type, ValueHandle value)
+{
+    if (!type) return value == 0;
+    if (type->isFloat()) {
+        if (type->getFloatBitWidth() <= 32) {
+            union { unsigned int i; float f; } u;
+            u.i = (unsigned int)value;
+            return u.f == 0.0f;
+        }
+        return *(double*)value == 0.0;
+    }
+    if (type->isInteger() && type->getIntBitWidth() > 32)
+        return *(unsigned long long*)value == 0;
+    return value == 0;
+}
+
 static bool impl_divrem_overflow(OverflowData* data, ValueHandle lhs, ValueHandle rhs)
 {
     if (isDuplicate(data)) return false;
@@ -1603,10 +1624,14 @@ static bool impl_divrem_overflow(OverflowData* data, ValueHandle lhs, ValueHandl
     formatValue(lhsStr, sizeof(lhsStr), data->type, lhs);
     formatValue(rhsStr, sizeof(rhsStr), data->type, rhs);
     char buffer[2048];
-    if (rhs == 0) {
+    if (isZeroValue(data->type, rhs)) {
+        const bool isFloat = data->type && data->type->isFloat();
         sprintf_s(buffer, sizeof(buffer),
-            "\n*** UBSAN: division by zero ***\n    %s / 0 is undefined\n    at %s:%u:%u\n",
-            lhsStr, data->loc.filename, data->loc.line, data->loc.column);
+            "\n*** UBSAN: %sdivision by zero ***\n    %s / %s %s\n    at %s:%u:%u\n",
+            isFloat ? "floating-point " : "",
+            lhsStr, rhsStr,
+            isFloat ? "produces inf/NaN" : "is undefined",
+            data->loc.filename, data->loc.line, data->loc.column);
     } else {
         sprintf_s(buffer, sizeof(buffer),
             "\n*** UBSAN: division overflow ***\n    %s / %s cannot be represented in type %s\n    at %s:%u:%u\n",
@@ -1985,23 +2010,31 @@ __declspec(dllexport) void __ubsan_handle_implicit_conversion_abort(ImplicitConv
 }
 
 // ---- Local out-of-bounds (-fsanitize=local-bounds, added Dec 2024) ----
-// No data struct or source location -- the compiler inserts this as a trap
-// at the point of the violation.  We can only report a generic message.
+// No data struct or source location -- the compiler emits a bare call at the
+// point of the violation.  Deduplicate on the return address (unique per
+// violation site, like the static data pointers used by the other checks)
+// and report it; the stack trace appended by ubsan_output symbolizes it to
+// function/file/line.
+
+static bool impl_local_out_of_bounds(void* site)
+{
+    if (isDuplicate(site)) return false;
+    char buffer[256];
+    sprintf_s(buffer, sizeof(buffer),
+        "\n*** UBSAN: local array out of bounds ***\n    at call site 0x%p (see stack trace for location)\n",
+        site);
+    ubsan_output(buffer);
+    return true;
+}
 
 __declspec(dllexport) void __ubsan_handle_local_out_of_bounds()
 {
-    static volatile LONG s_reported = 0;
-    if (InterlockedCompareExchange(&s_reported, 1, 0) != 0) return;
-    ubsan_output("\n*** UBSAN: local array out of bounds (no source location available) ***\n");
-    ubsan_break();
+    if (impl_local_out_of_bounds(_ReturnAddress())) ubsan_break();
 }
 
 __declspec(dllexport) void __ubsan_handle_local_out_of_bounds_abort()
 {
-    static volatile LONG s_reported = 0;
-    if (InterlockedCompareExchange(&s_reported, 1, 0) != 0) return;
-    ubsan_output("\n*** UBSAN: local array out of bounds (no source location available) ***\n");
-    __debugbreak();
+    if (impl_local_out_of_bounds(_ReturnAddress())) __debugbreak();
 }
 
 // ---- Nullability annotations (C _Nonnull; same layout as nonnull_*) ----

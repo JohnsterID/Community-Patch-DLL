@@ -337,6 +337,12 @@ def build_cl_config_args(config: Config) -> list[str]:
         args.append('-fsanitize=implicit-signed-integer-truncation')    # lossy signed narrowing (int32 -> int8 losing high bits)
         args.append('-fsanitize=implicit-unsigned-integer-truncation')  # lossy unsigned narrowing (uint32 -> uint8)
         args.append('-fsanitize=implicit-integer-sign-change')          # sign-confused assignments (large uint -> int)
+        args.append('-fsanitize=implicit-bitfield-conversion')          # lossy bitfield stores (int -> N-bit field losing high bits)
+        args.append('-fsanitize=float-divide-by-zero')                  # IEEE-defined but almost always a logic bug (inf/NaN propagation)
+        args.append('-fsanitize=nullability')                           # _Nonnull annotation violations (arg/assign/return)
+        args.append('-fsanitize=local-bounds')                          # stack-array OOB via LLVM IR bounds check -- closest DLL-only substitute for ASAN stack checking
+        args.append('-fno-sanitize-trap=local-bounds')                  # call __ubsan_handle_local_out_of_bounds instead of a ud2 trap
+        args.append('-fsanitize-recover=local-bounds')                  # log and continue like the other checks
         args.append('-fno-sanitize=enum')  # all Civ5 enums are "open" (database-driven values)
         args.append(f'-fsanitize-ignorelist={os.path.join(PROJECT_DIR, "ubsan.ignore")}')
     return args
