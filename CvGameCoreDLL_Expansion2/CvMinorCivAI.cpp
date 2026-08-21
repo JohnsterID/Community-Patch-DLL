@@ -17373,19 +17373,26 @@ bool CvMinorCivInfo::CacheResults(Database::Results& kResults, CvDatabaseUtility
 			);
 		}
 
-		pResults->Bind(1, strMinorCivTraitType.c_str());
-
-		while (pResults->Step())
+		// PrepareResults returns NULL if the SQL fails (e.g. the table is
+		// missing from a partially-loaded/mismatched database). Skip the
+		// block instead of dereferencing NULL; the bonus maps stay empty.
+		ASSERT(pResults);
+		if (pResults)
 		{
-			const EraTypes eEra = (EraTypes)pResults->GetInt(0);
-			const YieldTypes eYield = (YieldTypes)pResults->GetInt(1);
-			const int iValue = pResults->GetInt(2);
+			pResults->Bind(1, strMinorCivTraitType.c_str());
 
-			m_miFriendYieldBonuses[eYield][eEra] += iValue;
-			m_pbHasFriendByYield[eYield] = true;
+			while (pResults->Step())
+			{
+				const EraTypes eEra = (EraTypes)pResults->GetInt(0);
+				const YieldTypes eYield = (YieldTypes)pResults->GetInt(1);
+				const int iValue = pResults->GetInt(2);
+
+				m_miFriendYieldBonuses[eYield][eEra] += iValue;
+				m_pbHasFriendByYield[eYield] = true;
+			}
+
+			pResults->Reset();
 		}
-
-		pResults->Reset();
 
 		// Trim memory
 		std::map<YieldTypes, std::map<EraTypes, int>>(m_miFriendYieldBonuses).swap(m_miFriendYieldBonuses);
@@ -17408,21 +17415,28 @@ bool CvMinorCivInfo::CacheResults(Database::Results& kResults, CvDatabaseUtility
 			);
 		}
 	
-		pResults->Bind(1, strMinorCivTraitType.c_str());
-	
-		while (pResults->Step())
+		// PrepareResults returns NULL if the SQL fails (e.g. the table is
+		// missing from a partially-loaded/mismatched database). Skip the
+		// block instead of dereferencing NULL; the bonus maps stay empty.
+		ASSERT(pResults);
+		if (pResults)
 		{
-			const EraTypes eEra = (EraTypes)pResults->GetInt(0);
-			const YieldTypes eYield = (YieldTypes)pResults->GetInt(1);
-			const int iValue = pResults->GetInt(2);
-			const bool bCapitalOnly = pResults->GetBool(3);
-	
-			m_miFriendCityYieldBonuses[eYield][std::make_pair(eEra, bCapitalOnly)] += iValue;
-			m_pbHasFriendCityByYield[eYield] = true;
+			pResults->Bind(1, strMinorCivTraitType.c_str());
+
+			while (pResults->Step())
+			{
+				const EraTypes eEra = (EraTypes)pResults->GetInt(0);
+				const YieldTypes eYield = (YieldTypes)pResults->GetInt(1);
+				const int iValue = pResults->GetInt(2);
+				const bool bCapitalOnly = pResults->GetBool(3);
+
+				m_miFriendCityYieldBonuses[eYield][std::make_pair(eEra, bCapitalOnly)] += iValue;
+				m_pbHasFriendCityByYield[eYield] = true;
+			}
+
+			pResults->Reset();
 		}
-	
-		pResults->Reset();
-	
+
 		// Trim memory
 		std::map<YieldTypes, std::map<std::pair<EraTypes, bool>, int>>(m_miFriendCityYieldBonuses).swap(m_miFriendCityYieldBonuses);
 	}
@@ -17444,19 +17458,26 @@ bool CvMinorCivInfo::CacheResults(Database::Results& kResults, CvDatabaseUtility
 			);
 		}
 
-		pResults->Bind(1, strMinorCivTraitType.c_str());
-
-		while (pResults->Step())
+		// PrepareResults returns NULL if the SQL fails (e.g. the table is
+		// missing from a partially-loaded/mismatched database). Skip the
+		// block instead of dereferencing NULL; the bonus maps stay empty.
+		ASSERT(pResults);
+		if (pResults)
 		{
-			const EraTypes eEra = (EraTypes)pResults->GetInt(0);
-			const YieldTypes eYield = (YieldTypes)pResults->GetInt(1);
-			const int iValue = pResults->GetInt(2);
+			pResults->Bind(1, strMinorCivTraitType.c_str());
 
-			m_miAllyYieldBonuses[eYield][eEra] += iValue;
-			m_pbHasAllyByYield[eYield] = true;
+			while (pResults->Step())
+			{
+				const EraTypes eEra = (EraTypes)pResults->GetInt(0);
+				const YieldTypes eYield = (YieldTypes)pResults->GetInt(1);
+				const int iValue = pResults->GetInt(2);
+
+				m_miAllyYieldBonuses[eYield][eEra] += iValue;
+				m_pbHasAllyByYield[eYield] = true;
+			}
+
+			pResults->Reset();
 		}
-
-		pResults->Reset();
 
 		// Trim memory
 		std::map<YieldTypes, std::map<EraTypes, int>>(m_miAllyYieldBonuses).swap(m_miAllyYieldBonuses);
@@ -17479,21 +17500,28 @@ bool CvMinorCivInfo::CacheResults(Database::Results& kResults, CvDatabaseUtility
 			);
 		}
 	
-		pResults->Bind(1, strMinorCivTraitType.c_str());
-	
-		while (pResults->Step())
+		// PrepareResults returns NULL if the SQL fails (e.g. the table is
+		// missing from a partially-loaded/mismatched database). Skip the
+		// block instead of dereferencing NULL; the bonus maps stay empty.
+		ASSERT(pResults);
+		if (pResults)
 		{
-			const EraTypes eEra = (EraTypes)pResults->GetInt(0);
-			const YieldTypes eYield = (YieldTypes)pResults->GetInt(1);
-			const int iValue = pResults->GetInt(2);
-			const bool bCapitalOnly = pResults->GetBool(3);
-	
-			m_miAllyCityYieldBonuses[eYield][std::make_pair(eEra, bCapitalOnly)] += iValue;
-			m_pbHasAllyCityByYield[eYield] = true;
+			pResults->Bind(1, strMinorCivTraitType.c_str());
+
+			while (pResults->Step())
+			{
+				const EraTypes eEra = (EraTypes)pResults->GetInt(0);
+				const YieldTypes eYield = (YieldTypes)pResults->GetInt(1);
+				const int iValue = pResults->GetInt(2);
+				const bool bCapitalOnly = pResults->GetBool(3);
+
+				m_miAllyCityYieldBonuses[eYield][std::make_pair(eEra, bCapitalOnly)] += iValue;
+				m_pbHasAllyCityByYield[eYield] = true;
+			}
+
+			pResults->Reset();
 		}
-	
-		pResults->Reset();
-	
+
 		// Trim memory
 		std::map<YieldTypes, std::map<std::pair<EraTypes, bool>, int>>(m_miAllyCityYieldBonuses).swap(m_miAllyCityYieldBonuses);
 	}
@@ -17523,27 +17551,35 @@ bool CvMinorCivInfo::CacheResults(Database::Results& kResults, CvDatabaseUtility
 			);
 		}
 
-		pResults->Bind(1, strMinorCivTraitType.c_str());
-
-		while (pResults->Step())
+		// PrepareResults returns NULL if the SQL fails (e.g. the table is
+		// missing from a partially-loaded/mismatched database). Skip the
+		// block instead of dereferencing NULL; m_pppiQuestWeights was
+		// already zero-initialized above by InitializeArray.
+		ASSERT(pResults);
+		if (pResults)
 		{
-			const int personality_idx = pResults->GetInt(0);
-			PRECONDITION(personality_idx > -1);
+			pResults->Bind(1, strMinorCivTraitType.c_str());
 
-			const int era_idx = pResults->GetInt(1);
-			PRECONDITION(era_idx > -1);
+			while (pResults->Step())
+			{
+				const int personality_idx = pResults->GetInt(0);
+				PRECONDITION(personality_idx > -1);
 
-			const int quest_idx = pResults->GetInt(2);
-			PRECONDITION(quest_idx > -1);
+				const int era_idx = pResults->GetInt(1);
+				PRECONDITION(era_idx > -1);
 
-			const int iWeight = pResults->GetInt(3);
+				const int quest_idx = pResults->GetInt(2);
+				PRECONDITION(quest_idx > -1);
 
-			// Manually index the array
-			const int index = personality_idx * iNumEras * iNumQuests + era_idx * iNumQuests + quest_idx;
-			m_pppiQuestWeights[index] = max(iWeight, 0);
+				const int iWeight = pResults->GetInt(3);
+
+				// Manually index the array
+				const int index = personality_idx * iNumEras * iNumQuests + era_idx * iNumQuests + quest_idx;
+				m_pppiQuestWeights[index] = max(iWeight, 0);
+			}
+
+			pResults->Reset();
 		}
-
-		pResults->Reset();
 	}
 
 	//City Names
@@ -17557,14 +17593,21 @@ bool CvMinorCivInfo::CacheResults(Database::Results& kResults, CvDatabaseUtility
 			pResults = kUtility.PrepareResults(strKey, "select CityName from MinorCivilization_CityNames where MinorCivType = ?");
 		}
 
-		pResults->Bind(1, szType, -1, false);
-
-		while (pResults->Step())
+		// PrepareResults returns NULL if the SQL fails (e.g. the table is
+		// missing from a partially-loaded/mismatched database). Skip the
+		// block instead of dereferencing NULL; m_vCityNames stays empty.
+		ASSERT(pResults);
+		if (pResults)
 		{
-			m_vCityNames.push_back(pResults->GetText(0));
-		}
+			pResults->Bind(1, szType, -1, false);
 
-		pResults->Reset();
+			while (pResults->Step())
+			{
+				m_vCityNames.push_back(pResults->GetText(0));
+			}
+
+			pResults->Reset();
+		}
 	}
 
 	return true;
