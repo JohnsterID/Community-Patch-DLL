@@ -8448,6 +8448,11 @@ void CvGame::doTurn()
 
 	LogTurnScores();
 
+	// 32-bit address-space exhaustion is the dominant late-game crash cause and
+	// usually surfaces far from the allocation that actually failed; log the
+	// per-turn trend so post-mortem analysis can attribute it. Observation only.
+	LogMemoryPressure();
+
 	m_kGameDeals.DoTurn();
 
 	for(int iI = 0; iI < MAX_TEAMS; iI++)

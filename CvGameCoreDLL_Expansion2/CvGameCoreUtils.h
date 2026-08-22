@@ -25,6 +25,12 @@ const char* GetLastMiniDumpPath();
 
 void SetPreconditionFired();
 
+// Turn-boundary address-space diagnostic. 32-bit VA exhaustion is the dominant
+// late-game crash cause and usually manifests far from the allocation that
+// actually failed, so log the per-turn trend for post-mortem attribution.
+// Observation only (no gameplay/determinism impact); Win32-only, no-op elsewhere.
+void LogMemoryPressure();
+
 inline int sqrti(int input)
 {
 	return int(sqrt((float)abs(input)));

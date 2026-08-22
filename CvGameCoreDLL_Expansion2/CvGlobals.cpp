@@ -2205,13 +2205,14 @@ static bool LoadBestDbgHelp()
 	return true;
 }
 
-#ifdef VPDEBUG
 // Probe for address space exhaustion: can the process still satisfy a
 // modest contiguous allocation? Under exhaustion the full-detail dump
 // types are hopeless (dbghelp needs large working buffers), so the
 // probe decides whether to even attempt them. 24 MB approximates
 // dbghelp's peak transient need for a full-memory dump of a ~4 GB
-// process; MEM_RESERVE costs address space only.
+// process; MEM_RESERVE costs address space only. Shared with the
+// turn-boundary diagnostic (LogMemoryPressure), which is why it is not
+// gated to VPDEBUG - the diagnostic runs in Release too.
 static bool IsAddressSpaceExhausted()
 {
 	void* pProbe = VirtualAlloc(NULL, 24 * 1024 * 1024, MEM_RESERVE, PAGE_READWRITE);
@@ -2222,7 +2223,6 @@ static bool IsAddressSpaceExhausted()
 	}
 	return true;
 }
-#endif // VPDEBUG
 
 void CreateMiniDump(EXCEPTION_POINTERS* pep)
 {
@@ -2777,6 +2777,115 @@ LONG WINAPI CustomFilter(EXCEPTION_POINTERS* ExceptionInfo)
 		MessageBoxA(NULL, szMessage, "Game Crash", MB_OK | MB_ICONERROR | MB_SYSTEMMODAL);
 
 	return EXCEPTION_EXECUTE_HANDLER;
+}
+
+// Largest contiguous free block below 2 GB, in bytes. This is the number that
+// actually decides whether a big contiguous allocation (a fat vector grow, a
+// texture) can still succeed - "available virtual" can be plentiful while
+// fragmentation leaves no single block large enough. Only called when we are
+// already near the ceiling, so the full VirtualQuery walk cost is acceptable.
+static size_t LargestFreeBlockSub2G()
+{
+	SYSTEM_INFO si;
+	GetSystemInfo(&si);
+	byte* currentAddress = (byte*)si.lpMinimumApplicationAddress;
+	byte* maxAddress = (byte*)si.lpMaximumApplicationAddress;
+	size_t largest = 0;
+	while (currentAddress < maxAddress)
+	{
+		MEMORY_BASIC_INFORMATION mInfo = {};
+		if (VirtualQuery(currentAddress, &mInfo, sizeof(mInfo)) == 0)
+			break;
+
+		bool below2GB = currentAddress < (byte*)0x80000000;
+		if (below2GB && currentAddress + mInfo.RegionSize >= (byte*)0x80000000)
+			mInfo.RegionSize = (byte*)0x80000000 - currentAddress;
+
+		if (mInfo.State == MEM_FREE && below2GB && mInfo.RegionSize > largest)
+			largest = mInfo.RegionSize;
+
+		if (mInfo.RegionSize == 0)
+			break;
+		currentAddress += mInfo.RegionSize;
+	}
+	return largest;
+}
+
+// Turn-boundary address-space diagnostic (see CvGameCoreUtils.h). Tiered so the
+// common case is nearly free: a single GlobalMemoryStatusEx every turn, the
+// 24 MB reserve probe only when available virtual is low, and the full
+// VirtualQuery walk only when the probe fails or availability drops sharply.
+// The natural caller is CvGame::doTurn (once per turn, invisible next to a
+// multi-second late-game turn). Observation only - logs to MemoryPressure.csv,
+// no gameplay or determinism impact.
+void LogMemoryPressure()
+{
+	if (!GC.getLogging())
+		return;
+
+	MEMORYSTATUSEX ms;
+	ms.dwLength = sizeof(ms);
+	if (!GlobalMemoryStatusEx(&ms))
+		return;
+
+	// per-call trend of available virtual address space
+	static DWORDLONG s_ullLastAvailVirtual = 0;
+	static bool s_bHavePrev = false;
+	const DWORDLONG ullAvail = ms.ullAvailVirtual;
+	const long long llDeltaMB = s_bHavePrev
+		? ((long long)ullAvail - (long long)s_ullLastAvailVirtual) / (1024 * 1024)
+		: 0;
+	s_ullLastAvailVirtual = ullAvail;
+	s_bHavePrev = true;
+
+	const unsigned uAvailMB = (unsigned)(ullAvail / (1024 * 1024));
+
+	// tier 2: only probe when availability is low enough to matter (~384 MB).
+	// reuse the same 24 MB contiguous-reserve probe the crash handler uses to
+	// decide dump detail (IsAddressSpaceExhausted) - one definition, so both
+	// paths agree on what "exhausted" means.
+	const unsigned kProbeThresholdMB = 384;
+	bool bProbeRun = false;
+	bool bProbeFailed = false;
+	if (uAvailMB < kProbeThresholdMB)
+	{
+		bProbeRun = true;
+		bProbeFailed = IsAddressSpaceExhausted();
+	}
+
+	// tier 3: the expensive fragmentation walk only when the probe failed or
+	// availability dropped sharply this turn (a big allocation just landed).
+	const long long kSpikeDropMB = 128;
+	size_t largestFreeSub2G = 0;
+	bool bWalkRun = false;
+	if (bProbeFailed || llDeltaMB <= -kSpikeDropMB)
+	{
+		bWalkRun = true;
+		largestFreeSub2G = LargestFreeBlockSub2G();
+	}
+
+	FILogFile* pLog = LOGFILEMGR.GetLog("MemoryPressure.csv", FILogFile::kDontTimeStamp);
+	if (!pLog)
+		return;
+
+	static bool s_bHeader = true;
+	if (s_bHeader)
+	{
+		s_bHeader = false;
+		pLog->Msg("Turn, AvailVirtualMB, DeltaMB, ProbeRun, ProbeFailed, WalkRun, LargestFreeSub2G_KB");
+	}
+
+	const int iTurn = GC.getGame().getElapsedGameTurns();
+	pLog->Msg("%d, %u, %lld, %d, %d, %d, %u",
+		iTurn, uAvailMB, llDeltaMB,
+		bProbeRun ? 1 : 0, bProbeFailed ? 1 : 0, bWalkRun ? 1 : 0,
+		(unsigned)(largestFreeSub2G >> 10));
+}
+#else // WIN32
+// The diagnostic uses Win32 VirtualQuery / GlobalMemoryStatusEx; keep the
+// CvGame::doTurn call site clean on non-Win32 builds with a no-op.
+void LogMemoryPressure()
+{
 }
 #endif // WIN32
 
