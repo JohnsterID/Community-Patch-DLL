@@ -8452,6 +8452,9 @@ void CvGame::doTurn()
 	// usually surfaces far from the allocation that actually failed; log the
 	// per-turn trend so post-mortem analysis can attribute it. Observation only.
 	LogMemoryPressure();
+	// Companion: per-turn size of the main growth suspects (live objects and the
+	// tactical-sim pools/caches) so the drain above can be pinned to a subsystem.
+	LogMemoryAttribution();
 
 	m_kGameDeals.DoTurn();
 

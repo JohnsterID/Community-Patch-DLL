@@ -22,6 +22,7 @@
 #include "CvDiplomacyAI.h"
 #include "CvEconomicAI.h"
 #include "CvMilitaryAI.h"
+#include "CvTacticalAI.h"
 #include "CvCitySpecializationAI.h"
 #include "CvGrandStrategyAI.h"
 #include "CvMinorCivAI.h"
@@ -2892,6 +2893,54 @@ void LogMemoryPressure()
 {
 }
 #endif // WIN32
+
+// Companion to LogMemoryPressure (see CvGameCoreUtils.h). Where LogMemoryPressure
+// records how fast the address space is draining, this records the size of the
+// main growth suspects so the drain can be attributed to a subsystem. It reads
+// container sizes only (no Win32 APIs), so it is not gated on WIN32 and runs on
+// every build - useful for reproducing attribution on the Linux build too.
+// Observation only - writes MemoryAttribution.csv, no gameplay/determinism impact.
+void LogMemoryAttribution()
+{
+	if (!GC.getLogging())
+		return;
+
+	// live game-object quantity: the "many objects late-game" hypothesis
+	int iUnits = 0;
+	int iCities = 0;
+	for (int iPlayer = 0; iPlayer < MAX_PLAYERS; iPlayer++)
+	{
+		const CvPlayer& kPlayer = GET_PLAYER((PlayerTypes)iPlayer);
+		if (kPlayer.isAlive())
+		{
+			iUnits += kPlayer.getNumUnits();
+			iCities += kPlayer.getNumCities();
+		}
+	}
+
+	// tactical-simulation pools and caches: AGENTS.md's prime suspect
+	STacticalMemoryStats tact;
+	GetTacticalMemoryStats(tact);
+
+	FILogFile* pLog = LOGFILEMGR.GetLog("MemoryAttribution.csv", FILogFile::kDontTimeStamp);
+	if (!pLog)
+		return;
+
+	static bool s_bHeader = true;
+	if (s_bHeader)
+	{
+		s_bHeader = false;
+		pLog->Msg("Turn, LiveUnits, LiveCities, TactPosInUse, TactPosLimit, SupportPosInUse, "
+			"AssignInUse, AttackCache, DangerCache, ReachCache, RangeAtkCache, DistTgtCache");
+	}
+
+	const int iTurn = GC.getGame().getElapsedGameTurns();
+	pLog->Msg("%d, %d, %d, %d, %d, %d, %d, %u, %u, %u, %u, %u",
+		iTurn, iUnits, iCities,
+		tact.iPosInUse, tact.iPosLimit, tact.iSupportInUse, tact.iAssignInUse,
+		(unsigned)tact.uAttackCache, (unsigned)tact.uDangerCache,
+		(unsigned)tact.uReachCache, (unsigned)tact.uRangeAtkCache, (unsigned)tact.uDistTgtCache);
+}
 
 //
 // allocate

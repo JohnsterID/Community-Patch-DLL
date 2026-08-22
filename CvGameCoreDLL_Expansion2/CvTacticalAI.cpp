@@ -68,6 +68,22 @@ unsigned long giEquivalentPos = 0, giDifferentPos = 0;
 unsigned long giValidEndPos = 0, giInvalidEndPos = 0;
 int gCheckedPositions = 0;
 
+//Report the current tactical-simulation memory footprint for the turn-boundary
+//attribution diagnostic. Reads the file-scope pools/caches only - observation,
+//no gameplay or determinism impact.
+void GetTacticalMemoryStats(STacticalMemoryStats& stats)
+{
+	stats.iPosInUse = gTactPosStorage.getSize();
+	stats.iPosLimit = gTactPosStorage.getSizeLimit();
+	stats.iSupportInUse = gSupportPosStorage.getSize();
+	stats.iAssignInUse = gAssignmentStorage.getSize();
+	stats.uAttackCache = gTactPosStorage.getAttackCache().size();
+	stats.uDangerCache = gTactPosStorage.getDangerCache().size();
+	stats.uReachCache = gReachablePlotsLookup.size();
+	stats.uRangeAtkCache = gRangeAttackPlotsLookup.size();
+	stats.uDistTgtCache = gDistanceToTargetPlots.size();
+}
+
 void CheckDebugTrigger(int iUnitID)
 {
 	if (iUnitID == gCurrentUnitToTrack)

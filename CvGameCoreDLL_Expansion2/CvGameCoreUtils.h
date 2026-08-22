@@ -31,6 +31,13 @@ void SetPreconditionFired();
 // Observation only (no gameplay/determinism impact); Win32-only, no-op elsewhere.
 void LogMemoryPressure();
 
+// Companion attribution diagnostic to LogMemoryPressure: records the per-turn
+// size of the main growth suspects (live units/cities and the tactical-sim
+// pools/caches) so the ~MB/turn drain in MemoryPressure.csv can be attributed
+// to a subsystem. Container sizes only, so it is portable (runs on all builds).
+// Observation only (no gameplay/determinism impact).
+void LogMemoryAttribution();
+
 inline int sqrti(int input)
 {
 	return int(sqrt((float)abs(input)));

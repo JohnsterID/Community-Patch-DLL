@@ -1064,6 +1064,7 @@ public:
 	void clear();
 	void storeDanger(int iDefenderId, int iDefenderPlot, int iPrevDamage, const SUnitIDValueContainer& unitDamageDealt, int iDanger);
 	bool findDanger(int iDefenderId, int iDefenderPlot, int iPrevDamage, const SUnitIDValueContainer& unitDamageDealt, int& iDanger) const;
+	size_t size() const { return dangerStats.size(); } //observation only (memory diagnostic)
 protected:
 	//key is defender id, plot, previous damage and a hash of unit damage dealt
 	std::tr1::unordered_map<DefendKey, int, DefendKeyHash> dangerStats;
@@ -1074,6 +1075,7 @@ public:
 	void clear();
 	void storeAttack(int iAttackerId, int iAttackerPlot, int iDefenderId, int iGarrisonId, int iPrevSelfDamage, int iPrevUnitDamage, int iPrevCityDamage, int iUnitDamageDealt, int iCityDamageDealt, int iDamageTaken);
 	bool findAttack(int iAttackerId, int iAttackerPlot, int iDefenderId, int iGarrisonId, int iPrevSelfDamage, int iPrevUnitDamage, int iPrevCityDamage, int& iUnitDamageDealt, int& iCityDamageDealt, int& iDamageTaken) const;
+	size_t size() const { return attackStats.size(); } //observation only (memory diagnostic)
 protected:
 	//key is attacker id
 	std::tr1::unordered_map<AttackKey, vector<int>, AttackKeyHash> attackStats;
@@ -1542,6 +1544,26 @@ private:
 	const CvTactAssignmentStorage& operator=(const CvTactAssignmentStorage& rhs);
 };
 
+//Snapshot of the global tactical-simulation memory pools and caches for the
+//turn-boundary attribution diagnostic (see LogMemoryAttribution in CvGlobals).
+//In-use counts and cache/lookup entry counts only - observation, no gameplay
+//or determinism impact. The pools themselves are fixed-size (their arrays are
+//allocated once); the caches and reach/attack lookups are the growable parts.
+struct STacticalMemoryStats
+{
+	int iPosInUse;        //tactical positions consumed in the last sim
+	int iPosLimit;        //tactical position pool capacity (fixed)
+	int iSupportInUse;    //support positions consumed in the last sim
+	int iAssignInUse;     //assignments consumed in the last sim
+	size_t uAttackCache;  //attack-result cache entries
+	size_t uDangerCache;  //danger-result cache entries
+	size_t uReachCache;   //cached reachable-plot sets
+	size_t uRangeAtkCache;//cached ranged-attack plot sets
+	size_t uDistTgtCache;  //cached distance-to-target domains
+};
+
+//Fills the snapshot from the file-scope tactical globals in CvTacticalAI.cpp.
+void GetTacticalMemoryStats(STacticalMemoryStats& stats);
 
 namespace TacticalAIHelpers
 {
