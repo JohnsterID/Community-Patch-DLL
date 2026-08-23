@@ -2816,6 +2816,67 @@ static size_t LargestFreeBlockSub2G()
 	return largest;
 }
 
+// Fire an OUT-OF-PROCESS full-memory dump via Sysinternals ProcDump while the
+// process is still alive and address space is only starting to run low. The
+// in-process MiniDumpWriteDump path degrades to a heap-less dump under 32-bit
+// exhaustion (its dbghelp buffers fail to allocate - see IsAddressSpaceExhausted
+// above), so it cannot capture the heap needed for a fragmentation/size histogram.
+// ProcDump runs in its own address space and does not suffer that limit.
+//
+// This is opt-in by presence: it does nothing unless the user has dropped
+// procdump.exe next to CivilizationV.exe. It runs at most once per session,
+// asynchronously (never blocks the turn). Observation only.
+static void TryLaunchProcDump(unsigned uAvailMB)
+{
+	static bool s_bLaunched = false;
+	if (s_bLaunched)
+		return;
+
+	// Locate procdump next to the game exe. Absent -> silently do nothing.
+	char szExe[MAX_PATH] = {0};
+	if (GetModuleFileNameA(NULL, szExe, MAX_PATH) == 0)
+		return;
+	char* pSlash = strrchr(szExe, '\\');
+	if (!pSlash)
+		return;
+	*(pSlash + 1) = '\0';
+
+	char szProcDump[MAX_PATH];
+	_snprintf_s(szProcDump, _countof(szProcDump), _TRUNCATE, "%sprocdump.exe", szExe);
+	if (GetFileAttributesA(szProcDump) == INVALID_FILE_ATTRIBUTES)
+	{
+		_snprintf_s(szProcDump, _countof(szProcDump), _TRUNCATE, "%sprocdump64.exe", szExe);
+		if (GetFileAttributesA(szProcDump) == INVALID_FILE_ATTRIBUTES)
+			return; // not installed
+	}
+
+	// Mark launched before spawning so a failure does not retry every turn.
+	s_bLaunched = true;
+
+	// -accepteula: never block on the first-run EULA dialog.
+	// -ma: full memory (heap) - this is the whole point.
+	// Output beside the in-process dumps (crashlogs\ under the working dir).
+	char szCmd[MAX_PATH * 2];
+	_snprintf_s(szCmd, _countof(szCmd), _TRUNCATE,
+		"\"%s\" -accepteula -ma %u crashlogs\\CvProcDump_avail%uMB.dmp",
+		szProcDump, (unsigned)GetCurrentProcessId(), uAvailMB);
+
+	STARTUPINFOA si;
+	PROCESS_INFORMATION pi;
+	memset(&si, 0, sizeof(si));
+	si.cb = sizeof(si);
+	memset(&pi, 0, sizeof(pi));
+
+	if (CreateProcessA(NULL, szCmd, NULL, NULL, FALSE,
+		CREATE_NO_WINDOW, NULL, NULL, &si, &pi))
+	{
+		// Do not wait - let ProcDump attach and write while the game continues.
+		CloseHandle(pi.hThread);
+		CloseHandle(pi.hProcess);
+		OutputDebugString(_T("ProcDump launched for out-of-process heap dump\n"));
+	}
+}
+
 // Turn-boundary address-space diagnostic (see CvGameCoreUtils.h). Tiered so the
 // common case is nearly free: a single GlobalMemoryStatusEx every turn, the
 // 24 MB reserve probe only when available virtual is low, and the full
@@ -2856,6 +2917,14 @@ void LogMemoryPressure()
 	{
 		bProbeRun = true;
 		bProbeFailed = IsAddressSpaceExhausted();
+
+		// Capture a full out-of-process heap dump the first time the 24 MB
+		// contiguous reserve fails: address space is fragmenting but the process
+		// is still alive, so ProcDump (separate address space) can still attach
+		// and snapshot the heap. Later, once the largest free block is sub-MB,
+		// no dumper can succeed. No-op unless procdump.exe is present.
+		if (bProbeFailed)
+			TryLaunchProcDump(uAvailMB);
 	}
 
 	// tier 3: the expensive fragmentation walk only when the probe failed or
@@ -2905,9 +2974,15 @@ void LogMemoryAttribution()
 	if (!GC.getLogging())
 		return;
 
-	// live game-object quantity: the "many objects late-game" hypothesis
+	// live game-object quantity: the "many objects late-game" hypothesis.
+	// Also sum the heap bytes held by unit STL containers (capacity, not size):
+	// LiveUnits correlates with the address-space drain, but counts alone cannot
+	// close the memory budget - bytes can. UnitVecAllocs is the number of distinct
+	// small allocations those units hold, which is what fragments the 32-bit heap.
 	int iUnits = 0;
 	int iCities = 0;
+	size_t uUnitContainerBytes = 0;
+	int iUnitContainerAllocs = 0;
 	for (int iPlayer = 0; iPlayer < MAX_PLAYERS; iPlayer++)
 	{
 		const CvPlayer& kPlayer = GET_PLAYER((PlayerTypes)iPlayer);
@@ -2915,6 +2990,14 @@ void LogMemoryAttribution()
 		{
 			iUnits += kPlayer.getNumUnits();
 			iCities += kPlayer.getNumCities();
+
+			int iIter = 0;
+			for (const CvUnit* pUnit = kPlayer.firstUnit(&iIter); pUnit; pUnit = kPlayer.nextUnit(&iIter))
+			{
+				int iAllocs = 0;
+				uUnitContainerBytes += pUnit->GetHeapFootprintBytes(iAllocs);
+				iUnitContainerAllocs += iAllocs;
+			}
 		}
 	}
 
@@ -2931,15 +3014,17 @@ void LogMemoryAttribution()
 	{
 		s_bHeader = false;
 		pLog->Msg("Turn, LiveUnits, LiveCities, TactPosInUse, TactPosLimit, SupportPosInUse, "
-			"AssignInUse, AttackCache, DangerCache, ReachCache, RangeAtkCache, DistTgtCache");
+			"AssignInUse, AttackCache, DangerCache, ReachCache, RangeAtkCache, DistTgtCache, "
+			"UnitVecBytesKB, UnitVecAllocs");
 	}
 
 	const int iTurn = GC.getGame().getElapsedGameTurns();
-	pLog->Msg("%d, %d, %d, %d, %d, %d, %d, %u, %u, %u, %u, %u",
+	pLog->Msg("%d, %d, %d, %d, %d, %d, %d, %u, %u, %u, %u, %u, %u, %d",
 		iTurn, iUnits, iCities,
 		tact.iPosInUse, tact.iPosLimit, tact.iSupportInUse, tact.iAssignInUse,
 		(unsigned)tact.uAttackCache, (unsigned)tact.uDangerCache,
-		(unsigned)tact.uReachCache, (unsigned)tact.uRangeAtkCache, (unsigned)tact.uDistTgtCache);
+		(unsigned)tact.uReachCache, (unsigned)tact.uRangeAtkCache, (unsigned)tact.uDistTgtCache,
+		(unsigned)(uUnitContainerBytes >> 10), iUnitContainerAllocs);
 }
 
 //

@@ -25585,6 +25585,71 @@ bool CvUnit::isDelayedDeathExported() const
 	return m_bDeathDelay;
 }
 
+#if defined(MOD_DEBUG_MINIDUMP)
+//	--------------------------------------------------------------------------------
+size_t CvUnit::GetHeapFootprintBytes(int& iNonEmptyAllocs) const
+{
+	// A std::vector holds one heap block sized capacity()*sizeof(T); a std::map/set
+	// holds one node per element. We approximate a node as element bytes plus three
+	// pointers (RB-tree links/colour), which is the right order of magnitude for the
+	// VS2008/Dinkumware allocator and enough to attribute the fragmentation budget.
+	// capacity() (not size()) is used because the allocated block is what fragments
+	// the 32-bit heap, and it survives until the unit is destroyed.
+	size_t uBytes = 0;
+	int iAllocs = 0;
+
+	#define VP_VEC_FOOTPRINT(vec) \
+		if ((vec).capacity() > 0) { uBytes += (vec).capacity() * sizeof((vec)[0]); ++iAllocs; }
+
+	VP_VEC_FOOTPRINT(m_extraDomainModifiers);
+	VP_VEC_FOOTPRINT(m_extraDomainAttacks);
+	VP_VEC_FOOTPRINT(m_extraDomainDefenses);
+	VP_VEC_FOOTPRINT(m_YieldModifier);
+	VP_VEC_FOOTPRINT(m_YieldChange);
+	VP_VEC_FOOTPRINT(m_aiYieldFromCombatExperienceTimes100);
+	VP_VEC_FOOTPRINT(m_iGarrisonYieldChange);
+	VP_VEC_FOOTPRINT(m_iFortificationYieldChange);
+	VP_VEC_FOOTPRINT(m_aiNumTimesAttackedThisTurn);
+	VP_VEC_FOOTPRINT(m_yieldFromScoutingTimes100);
+	VP_VEC_FOOTPRINT(m_piYieldFromAncientRuins);
+	VP_VEC_FOOTPRINT(m_piYieldFromTRPlunder);
+	VP_VEC_FOOTPRINT(m_yieldFromKills);
+	VP_VEC_FOOTPRINT(m_yieldFromBarbarianKills);
+	VP_VEC_FOOTPRINT(m_extraUnitCombatModifier);
+	VP_VEC_FOOTPRINT(m_extraUnitCombatModifierAttack);
+	VP_VEC_FOOTPRINT(m_extraUnitCombatModifierDefense);
+	VP_VEC_FOOTPRINT(m_unitClassModifier);
+	VP_VEC_FOOTPRINT(m_iCombatModPerAdjacentUnitCombatModifier);
+	VP_VEC_FOOTPRINT(m_iCombatModPerAdjacentUnitCombatAttackMod);
+	VP_VEC_FOOTPRINT(m_iCombatModPerAdjacentUnitCombatDefenseMod);
+	VP_VEC_FOOTPRINT(m_unitMoveLocs);
+	VP_VEC_FOOTPRINT(m_vsPlaguesToInflict);
+
+	#undef VP_VEC_FOOTPRINT
+
+	// std::vector<bool> is a bit-packed specialisation: capacity() counts bits.
+	if (m_abPromotionEverObtained.capacity() > 0)
+	{
+		uBytes += (m_abPromotionEverObtained.capacity() + 7) / 8;
+		++iAllocs;
+	}
+
+	// node-based containers: one allocation per element.
+	const size_t uPromoNode = sizeof(PromotionTypes) + sizeof(int) + 3 * sizeof(void*);
+	const size_t uSetNode = sizeof(PromotionTypes) + 3 * sizeof(void*);
+	const size_t uPillageNode = sizeof(int) + sizeof(std::pair<int, int>) + 3 * sizeof(void*);
+	if (!m_PromotionDuration.empty()) { uBytes += m_PromotionDuration.size() * uPromoNode; ++iAllocs; }
+	if (!m_TurnPromotionGained.empty()) { uBytes += m_TurnPromotionGained.size() * uPromoNode; ++iAllocs; }
+	if (!m_sePromotionsWithSameAttackBonus.empty()) { uBytes += m_sePromotionsWithSameAttackBonus.size() * uSetNode; ++iAllocs; }
+	if (!m_seBlockedPromotions.empty()) { uBytes += m_seBlockedPromotions.size() * uSetNode; ++iAllocs; }
+	if (!m_seConditionalPromotions.empty()) { uBytes += m_seConditionalPromotions.size() * uSetNode; ++iAllocs; }
+	if (!m_yieldFromPillage.empty()) { uBytes += m_yieldFromPillage.size() * uPillageNode; ++iAllocs; }
+
+	iNonEmptyAllocs = iAllocs;
+	return uBytes;
+}
+#endif
+
 
 //	--------------------------------------------------------------------------------
 void CvUnit::startDelayedDeath()

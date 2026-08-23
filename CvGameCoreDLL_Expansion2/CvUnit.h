@@ -1806,6 +1806,14 @@ public:
 
 	bool isDelayedDeath(bool bCheckOnMap = true) const;
 	bool isDelayedDeathExported() const;
+
+#if defined(MOD_DEBUG_MINIDUMP)
+	// Observation-only memory diagnostic: sum of heap bytes held by this unit's
+	// STL container members (vector capacity + map/set node estimate). Read-only,
+	// no serialized state touched. Used by LogMemoryAttribution to close the
+	// late-game 32-bit address-space budget (fragmentation attribution).
+	size_t GetHeapFootprintBytes(int& iNonEmptyAllocs) const;
+#endif
 	void startDelayedDeath();
 	bool doDelayedDeath();
 
