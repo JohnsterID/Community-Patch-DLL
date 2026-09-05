@@ -31,9 +31,20 @@ Usage:
   --rva HEX           Symbolize extra RVAs (repeatable) in the target module.
   --image FILE        Extra module image on disk (e.g. the game exe) used to
                       verify stack-scan candidates as real call return
-                      addresses (repeatable; must match the dump's module).
+                      addresses and to translate crashes.log file offsets
+                      for that module (repeatable).
   --max-frames N      Stack-scan frame limit (default 40).
   --json              Machine-readable output.
+
+Additional automatic analysis:
+  * WINE/Proton detection from the dump's module list (wined3d.dll etc.).
+  * crashes.log "???+0xfffffXXX" entries decoded as a wrapped NULL/garbage
+    EIP (call through a bad function pointer).
+  * 0xE06D7363 MSVC C++ exceptions: the thrown type is recovered from the
+    ThrowInfo chain when the pages were captured in the dump.
+  * Empty/truncated dumps are reported as MiniDumpWriteDump failures
+    (typically OOM during capture) instead of a generic parse error.
+  * Warns when the matched crashes.log entry is for a different dump file.
 
 Exit codes: 0 ok, 1 bad input, 2 dump parsed but no symbols found.
 """
@@ -49,8 +60,12 @@ import sys
 MINIDUMP_SIGNATURE = 0x504D444D  # 'MDMP'
 STREAM_THREAD_LIST = 3
 STREAM_MODULE_LIST = 4
+STREAM_MEMORY_LIST = 5
 STREAM_EXCEPTION = 6
 STREAM_SYSTEM_INFO = 7
+
+MSVC_CXX_EXCEPTION = 0xE06D7363
+MSVC_CXX_MAGIC = 0x19930520
 
 EXCEPTION_NAMES = {
     0xC0000005: "Access Violation",
@@ -82,8 +97,13 @@ class Minidump(object):
         with open(path, "rb") as f:
             self.data = f.read()
         d = self.data
+        if len(d) == 0:
+            fail("%s: empty dump -- MiniDumpWriteDump itself failed, "
+                 "usually because the process was out of memory (see the "
+                 "matching crashes.log memory markers)" % path)
         if len(d) < 32:
-            fail("%s: too small to be a minidump" % path)
+            fail("%s: too small to be a minidump (truncated write -- "
+                 "likely OOM during dump capture)" % path)
         sig, _ver, nstreams, dirrva = struct.unpack_from("<IIII", d, 0)
         if sig != MINIDUMP_SIGNATURE:
             fail("%s: bad signature 0x%08x (not MDMP)" % (path, sig))
@@ -95,6 +115,7 @@ class Minidump(object):
                 self.streams.setdefault(stype, (size, rva))
         self.modules = self._parse_modules()
         self.threads = self._parse_threads()
+        self.memory_ranges = self._parse_memory_list()
         self.exception = self._parse_exception()
         self.system_info = self._parse_system_info()
 
@@ -150,6 +171,48 @@ class Minidump(object):
                 "stack_rva": stack_rva,
             })
         return threads
+
+    def _parse_memory_list(self):
+        """MINIDUMP_MEMORY_LIST: captured VA ranges (thread stacks + extras).
+        Enables read_va() for arbitrary captured addresses, e.g. C++
+        exception object internals."""
+        s = self._stream(STREAM_MEMORY_LIST)
+        if not s:
+            return []
+        n = struct.unpack_from("<I", s, 0)[0]
+        ranges = []
+        for i in range(n):
+            start, size, rva = struct.unpack_from("<QII", s, 4 + 16 * i)
+            ranges.append((start, size, rva))
+        return ranges
+
+    def read_va(self, addr, size):
+        """Read bytes at a virtual address if captured in the dump."""
+        for start, rsize, rva in self.memory_ranges:
+            if start <= addr and addr + size <= start + rsize:
+                off = rva + (addr - start)
+                return self.data[off:off + size]
+        return None
+
+    def read_u32(self, addr):
+        b = self.read_va(addr, 4)
+        return struct.unpack("<I", b)[0] if b else None
+
+    def read_cstring(self, addr, maxlen=256):
+        b = self.read_va(addr, maxlen)
+        if not b:
+            # retry with whatever tail of the range is available
+            for n in (128, 64, 32, 16):
+                b = self.read_va(addr, n)
+                if b:
+                    break
+        if not b:
+            return None
+        s = b.split(b"\0")[0]
+        try:
+            return s.decode("ascii")
+        except UnicodeDecodeError:
+            return None
 
     def _parse_exception(self):
         s = self._stream(STREAM_EXCEPTION)
@@ -551,6 +614,53 @@ def make_return_address_checker(dll_path):
 
 
 # ---------------------------------------------------------------------------
+# MSVC C++ exception (0xE06D7363) decoding
+# ---------------------------------------------------------------------------
+
+def decode_msvc_exception(dump, exc):
+    """Decode the thrown C++ type from an MSVC 0xE06D7363 exception.
+
+    x86 exception parameters: [magic 0x19930520, pObject, pThrowInfo].
+    Follows ThrowInfo -> CatchableTypeArray -> CatchableType ->
+    TypeDescriptor to recover the mangled type name (all VAs; only works
+    if those pages were captured in the dump's memory list)."""
+    params = exc.get("params") or []
+    if exc.get("code") != MSVC_CXX_EXCEPTION or len(params) < 3:
+        return None
+    out = {"magic": "0x%X" % params[0], "object": "0x%X" % params[1],
+           "throw_info": "0x%X" % params[2]}
+    if params[0] != MSVC_CXX_MAGIC:
+        out["note"] = "unexpected magic (not a standard MSVC throw)"
+        return out
+    ti = params[2]
+    cta = dump.read_u32(ti + 12)          # pCatchableTypeArray
+    if cta is None:
+        out["note"] = "ThrowInfo memory not captured in dump"
+        return out
+    ncat = dump.read_u32(cta)
+    types = []
+    for i in range(min(ncat or 0, 8)):
+        ct = dump.read_u32(cta + 4 + 4 * i)   # pCatchableType
+        if not ct:
+            continue
+        td = dump.read_u32(ct + 4)            # pType (TypeDescriptor)
+        if not td:
+            continue
+        name = dump.read_cstring(td + 8)      # mangled name after vftable+spare
+        if name:
+            types.append(name)
+    if types:
+        out["types"] = types
+        # ".?AVCvException@@" -> "CvException" (best-effort demangle)
+        m = re.match(r"\.\?A[VU](\w+)@", types[0])
+        if m:
+            out["thrown_type"] = m.group(1)
+    else:
+        out["note"] = "type descriptors not captured in dump"
+    return out
+
+
+# ---------------------------------------------------------------------------
 # crashes.log parsing
 # ---------------------------------------------------------------------------
 
@@ -573,6 +683,17 @@ def parse_crashes_log(path, dump_name):
     if m:
         out["module"] = m.group(1)
         out["file_offset"] = int(m.group(2), 16)
+        # "???+0xfffffXXX" = EIP outside any module (e.g. call through a
+        # NULL/garbage function pointer); the unsigned file-offset
+        # subtraction wrapped around 0.  eip = offset - 0x100000000 + 0xC00.
+        if out["module"] == "???" and out["file_offset"] >= 0xFFFF0000:
+            out["wrapped_eip"] = (out["file_offset"] + 0xC00) & 0xFFFFFFFF
+    m = re.search(r"Minidump: (\S+)", chosen)
+    if m:
+        out["minidump_name"] = m.group(1)
+    m = re.search(r"OS Info: (.+)", chosen)
+    if m:
+        out["os_info"] = m.group(1).strip()
     m = re.search(r"DLL-Version: (.+)", chosen)
     if m:
         out["dll_version"] = m.group(1).strip()
@@ -631,8 +752,15 @@ def main():
         fail("dump not found: %s" % args.dump)
 
     dump = Minidump(args.dump)
+    wine_modules = sorted(
+        m["name"] for m in dump.modules
+        if m["name"].lower() in ("wined3d.dll", "winex11.drv",
+                                 "winevulkan.dll", "winegstreamer.dll",
+                                 "winemac.drv", "winewayland.drv",
+                                 "lsteamclient.dll"))
     report = {"dump": os.path.basename(args.dump),
-              "modules": len(dump.modules), "threads": len(dump.threads)}
+              "modules": len(dump.modules), "threads": len(dump.threads),
+              "wine": bool(wine_modules), "wine_modules": wine_modules}
 
     target_mod = None
     for m in dump.modules:
@@ -661,6 +789,9 @@ def main():
             report["exception"]["access"] = "%s of address 0x%X" % (
                 AV_KIND.get(exc["params"][0], "op %d" % exc["params"][0]),
                 exc["params"][1])
+        cxx = decode_msvc_exception(dump, exc)
+        if cxx:
+            report["exception"]["cxx"] = cxx
 
     # Symbols: explicit pair or auto-match against a search directory.
     dll = args.dll
@@ -705,12 +836,27 @@ def main():
                                   os.path.basename(args.dump))
         if entry:
             report["crashes_log"] = entry
-            # The file-offset -> RVA fixup only makes sense when the log
-            # entry points into the module we have a DLL for; "???" entries
-            # (EIP outside any module, e.g. a call to NULL) wrap around 0.
-            if pe and entry.get("module", "").lower() == args.module.lower() \
-                    and "file_offset" in entry:
-                delta = text_offset_delta(pe)
+            if entry.get("minidump_name") and \
+                    entry["minidump_name"] != os.path.basename(args.dump):
+                entry["note_mismatch"] = (
+                    "crashes.log entry is for %s, not this dump"
+                    % entry["minidump_name"])
+            # File-offset -> RVA fixup for any module image we have on disk
+            # (the target DLL or an --image exe). "???" entries (EIP outside
+            # any module, e.g. a call to NULL) wrap around 0 and carry the
+            # raw eip instead.
+            log_mod = entry.get("module", "").lower()
+            fix_pe = None
+            if pe and log_mod == args.module.lower():
+                fix_pe = pe
+            else:
+                for img in args.image:
+                    if os.path.basename(img).lower() == log_mod:
+                        fix_pe = pe_info(img)
+                        break
+            if fix_pe and "file_offset" in entry \
+                    and "wrapped_eip" not in entry:
+                delta = text_offset_delta(fix_pe)
                 if delta is not None:
                     entry["true_rva"] = "0x%X" % (
                         (entry["file_offset"] + delta) & 0xFFFFFFFF)
@@ -814,9 +960,11 @@ def print_report(report, dump, target_mod):
     print("Minidump crash report: %s" % report["dump"])
     print("=" * width)
     if dump.system_info:
-        print("OS: %s   modules: %d   threads: %d" % (
+        print("OS: %s   modules: %d   threads: %d%s" % (
             dump.system_info.get("os", "?"),
-            report["modules"], report["threads"]))
+            report["modules"], report["threads"],
+            "   ** WINE/Proton (%s) **" % ", ".join(report["wine_modules"])
+            if report.get("wine") else ""))
     if target_mod:
         print("Target module: %s  base=0x%X size=0x%X timestamp=0x%08X" % (
             target_mod["name"], target_mod["base"], target_mod["size"],
@@ -838,6 +986,16 @@ def print_report(report, dump, target_mod):
                      "ebp", "esp", "eip", "eflags"]
             print("Registers: " + "  ".join(
                 "%s=%s" % (r, regs[r]) for r in order if r in regs))
+        cxx = exc.get("cxx")
+        if cxx:
+            print("C++ exception: object=%s throw_info=%s" % (
+                cxx["object"], cxx["throw_info"]))
+            if cxx.get("thrown_type"):
+                print("Thrown type: %s" % cxx["thrown_type"])
+            elif cxx.get("types"):
+                print("Thrown type (mangled): %s" % cxx["types"][0])
+            if cxx.get("note"):
+                print("(%s)" % cxx["note"])
     else:
         print("\n(no exception stream -- not a crash dump?)")
     sym = report.get("symbols", {})
@@ -854,6 +1012,10 @@ def print_report(report, dump, target_mod):
     cl = report.get("crashes_log")
     if cl:
         print("\n-- crashes.log cross-check --")
+        if "note_mismatch" in cl:
+            print("WARNING: %s" % cl["note_mismatch"])
+        if "os_info" in cl:
+            print("OS Info: %s" % cl["os_info"])
         if "dll_version" in cl:
             print("DLL-Version: %s" % cl["dll_version"])
         if "file_offset" in cl:
@@ -861,6 +1023,9 @@ def print_report(report, dump, target_mod):
                                                     cl["file_offset"])
             if "true_rva" in cl:
                 line += "  ->  true RVA %s" % cl["true_rva"]
+            if "wrapped_eip" in cl:
+                line += ("  ->  eip=0x%X (outside any module; call through "
+                         "NULL/garbage function pointer)" % cl["wrapped_eip"])
             print(line)
             if "note" in cl:
                 print("(%s)" % cl["note"])
