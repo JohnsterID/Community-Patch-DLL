@@ -63,6 +63,8 @@ STREAM_MODULE_LIST = 4
 STREAM_MEMORY_LIST = 5
 STREAM_EXCEPTION = 6
 STREAM_SYSTEM_INFO = 7
+STREAM_SYSTEM_MEMORY_INFO = 21   # MINIDUMP_SYSTEM_MEMORY_INFO_1
+STREAM_PROCESS_VM_COUNTERS = 22  # MINIDUMP_PROCESS_VM_COUNTERS_2
 
 MSVC_CXX_EXCEPTION = 0xE06D7363
 MSVC_CXX_MAGIC = 0x19930520
@@ -118,6 +120,8 @@ class Minidump(object):
         self.memory_ranges = self._parse_memory_list()
         self.exception = self._parse_exception()
         self.system_info = self._parse_system_info()
+        self.system_memory = self._parse_system_memory_info()
+        self.vm_counters = self._parse_process_vm_counters()
 
     def _stream(self, stype):
         if stype not in self.streams:
@@ -244,6 +248,70 @@ class Minidump(object):
         arch = struct.unpack_from("<H", s, 0)[0]
         major, minor, build = struct.unpack_from("<III", s, 8)
         return {"arch": arch, "os": "%d.%d build %d" % (major, minor, build)}
+
+    def _parse_system_memory_info(self):
+        """System commit/RAM state at crash time (stream 21, Win8.1+).
+
+        Rules out (or confirms) system commit-limit exhaustion, which the
+        VA-only crashes.log markers cannot distinguish from VA exhaustion
+        (proven necessary by issue #13262).
+        """
+        s = self._stream(STREAM_SYSTEM_MEMORY_INFO)
+        # header (USHORT Revision, USHORT Flags) + SYSTEM_BASIC_INFORMATION
+        # (64) + SYSTEM_FILECACHE_INFORMATION (48) + the 4 leading ULONG64s
+        # of SYSTEM_BASIC_PERFORMANCE_INFORMATION
+        if not s or len(s) < 4 + 112 + 32:
+            return {}
+        rev = struct.unpack_from("<H", s, 0)[0]
+        if rev < 1:
+            return {}
+        page = struct.unpack_from("<I", s, 4 + 4)[0]
+        phys_pages = struct.unpack_from("<I", s, 4 + 8)[0]
+        avail, committed, limit, peak = struct.unpack_from("<4Q", s, 4 + 112)
+        # content sanity (stream ids can be nonstandard; never trust blindly)
+        if page not in (4096, 8192) or not (0 < committed <= limit < 2 ** 40):
+            return {}
+        return {
+            "page_size": page,
+            "phys_mb": phys_pages * page // 2 ** 20,
+            "commit_available_mb": (limit - committed) * page // 2 ** 20,
+            "commit_used_mb": committed * page // 2 ** 20,
+            "commit_limit_mb": limit * page // 2 ** 20,
+            "commit_peak_mb": peak * page // 2 ** 20,
+            "phys_avail_mb": avail * page // 2 ** 20,
+        }
+
+    def _parse_process_vm_counters(self):
+        """Crashed process VM counters (stream 22, Win10+)."""
+        s = self._stream(STREAM_PROCESS_VM_COUNTERS)
+        if not s or len(s) < 8:
+            return {}
+        rev, flags = struct.unpack_from("<HH", s, 0)
+        # MINIDUMP_PROCESS_VM_COUNTERS_2: USHORT Revision, Flags;
+        # ULONG PageFaultCount; then ULONG64 fields whose PRESENCE depends
+        # on Flags (KAPI_FLAG bits): 0x1 basic 8 fields, 0x2 VirtualSize
+        # pair, 0x4 PrivateUsage, 0x8 EX2 pair (+ 0x10 job fields).
+        if rev < 2 or not (flags & 0x1):
+            return {}
+        names = ["peak_ws_mb", "ws_mb", None, None, None, None,
+                 "pagefile_mb", "peak_pagefile_mb"]
+        if flags & 0x2:
+            names += ["peak_virtual_mb", "virtual_mb"]
+        if flags & 0x4:
+            names += ["private_mb"]
+        if flags & 0x8:
+            names += ["private_ws_mb", "shared_commit_mb"]
+        if len(s) < 8 + 8 * len(names):
+            return {}
+        vals = struct.unpack_from("<%dQ" % len(names), s, 8)
+        out = {}
+        for n, v in zip(names, vals):
+            if n:
+                out[n] = v // 2 ** 20
+        # content sanity: a 32-bit process commits < 4 GB
+        if not (0 < out.get("pagefile_mb", 0) < 4096):
+            return {}
+        return out
 
     def module_for(self, addr):
         for m in self.modules:
@@ -704,6 +772,11 @@ def parse_crashes_log(path, dump_name):
                   chosen, re.S)
     if m:
         out["largest_free_sub2g_k"] = int(m.group(1))
+    m = re.search(r"Largest free block.*?Total: 0x([0-9a-fA-F]+) / (\d+)",
+                  chosen, re.S)
+    if m:
+        out["largest_free_total_base"] = int(m.group(1), 16)
+        out["largest_free_total_k"] = int(m.group(2))
     m = re.search(r"committed\(k\).*?\nSub2G: (\d+) / (\d+) / (\d+)", chosen)
     if m:
         out["sub2g_committed_k"] = int(m.group(1))
@@ -830,6 +903,11 @@ def main():
             pdb = cand
     report["symbols"] = {"dll": dll, "pdb": pdb,
                          "guid": pe["guid"] if pe else None}
+
+    if dump.system_memory:
+        report["system_memory"] = dump.system_memory
+    if dump.vm_counters:
+        report["vm_counters"] = dump.vm_counters
 
     if args.crashes_log:
         entry = parse_crashes_log(args.crashes_log,
@@ -1030,10 +1108,46 @@ def print_report(report, dump, target_mod):
             if "note" in cl:
                 print("(%s)" % cl["note"])
         if "largest_free_sub2g_k" in cl:
-            print("Largest free block (Sub2G): %d KB%s" % (
-                cl["largest_free_sub2g_k"],
-                "  ** likely 32-bit address-space exhaustion (OOM) **"
-                if cl["largest_free_sub2g_k"] < 4096 else ""))
+            # Distinguish Sub2G pressure from full-VA exhaustion: an LAA
+            # process can have GBs free above 2 GB while Sub2G-bound
+            # (non-LAA-safe) allocations still fail (issue #13262).
+            sub2g = cl["largest_free_sub2g_k"]
+            total = cl.get("largest_free_total_k")
+            verdict = ""
+            if sub2g < 4096:
+                if total is not None and total >= 262144:
+                    verdict = ("  ** likely Sub2G (below-2GB) exhaustion; "
+                               "%d MB still free above 2GB **"
+                               % (total // 1024))
+                else:
+                    verdict = ("  ** likely 32-bit address-space "
+                               "exhaustion (OOM) **")
+            print("Largest free block (Sub2G): %d KB%s" % (sub2g, verdict))
+            if total is not None:
+                base = cl.get("largest_free_total_base", 0)
+                print("Largest free block (Total): %d KB at 0x%08X%s" % (
+                    total, base,
+                    "  (above 2GB line)" if base >= 0x80000000 else ""))
+    sysmem = report.get("system_memory")
+    if sysmem:
+        print("\n-- System memory at crash (dump stream 21) --")
+        print("RAM: %d MB (%d MB available)   System commit: "
+              "%d / %d MB used (%d MB available)%s" % (
+                  sysmem["phys_mb"], sysmem["phys_avail_mb"],
+                  sysmem["commit_used_mb"], sysmem["commit_limit_mb"],
+                  sysmem["commit_available_mb"],
+                  "  ** SYSTEM COMMIT NEARLY EXHAUSTED **"
+                  if sysmem["commit_available_mb"] < 512 else ""))
+    vmc = report.get("vm_counters")
+    if vmc:
+        print("\n-- Process VM counters at crash (dump stream 22) --")
+        parts = ["WorkingSet: %d MB" % vmc["ws_mb"],
+                 "Commit (PagefileUsage): %d MB" % vmc["pagefile_mb"]]
+        if "private_mb" in vmc:
+            parts.append("Private: %d MB" % vmc["private_mb"])
+        if "virtual_mb" in vmc:
+            parts.append("VirtualSize: %d MB" % vmc["virtual_mb"])
+        print("   ".join(parts))
     extra = report.get("extra_rvas", {})
     if extra:
         print("\n-- Extra RVAs --")
