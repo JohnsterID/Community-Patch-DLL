@@ -11,7 +11,7 @@ This build system enables **cross-compilation** of the Windows-targeted Communit
 ### What This Is
 
 - **Platform:** Linux (development) -> Windows (target)
-- **Compiler:** Clang/LLVM 21.1.8
+- **Compiler:** Clang/LLVM (clang 16+ recommended; auto-detected from PATH or LLVM_PATH)
 - **Target:** i686-pc-windows-msvc (32-bit Windows)
 - **Output:** PE32 Windows DLL (`CvGameCore_Expansion2.dll`)
 - **SDK:** Windows SDK 7.0A + VC9 (VS2008)
@@ -35,7 +35,7 @@ Clang is a **true cross-compiler** that can target any platform from any platfor
 |                    Linux Build Environment                   |
 |                                                              |
 |  +----------------------------------------------------+    |
-|  | Clang/LLVM 21.1.8                                   |    |
+|  | Clang/LLVM (PATH or LLVM_PATH)                      |    |
 |  | - Cross-compiler (i686-pc-windows-msvc target)      |    |
 |  | - LLD linker (Windows PE32 format)                  |    |
 |  +----------------------------------------------------+    |
@@ -115,22 +115,28 @@ Clang is a **true cross-compiler** that can target any platform from any platfor
 
 ## Prerequisites
 
-### 1. LLVM 21.1.8
+### 1. LLVM Toolchain (clang + lld-link)
 
-Download and extract LLVM:
+The build script auto-detects `clang` and `lld-link` from `PATH`, so distro
+packages are the easiest option:
+
+```bash
+sudo apt-get install clang lld     # Debian/Ubuntu (clang 16+ recommended)
+```
+
+Alternatively, download and extract an official LLVM release and point the
+script at it:
 
 ```bash
 cd /tmp
 wget https://github.com/llvm/llvm-project/releases/download/llvmorg-21.1.8/LLVM-21.1.8-Linux-X64.tar.xz
 tar -xf LLVM-21.1.8-Linux-X64.tar.xz
+export LLVM_PATH=/tmp/LLVM-21.1.8-Linux-X64
 ```
 
-**Default location:** `/tmp/LLVM-21.1.8-Linux-X64`
-
-**Custom location:** Set environment variable:
-```bash
-export LLVM_PATH=/your/custom/path/to/llvm
-```
+If `LLVM_PATH` is set it takes precedence; otherwise `PATH` is searched. The
+script prints the resolved toolchain version at startup and fails with
+instructions if neither is available.
 
 ### 2. Dependencies Folder Structure
 
@@ -146,6 +152,24 @@ Community-Patch-DLL/
 ```
 
 **Note:** These files must be obtained from a legal Windows SDK 7.0A and Visual Studio 2008 installation. They are not included in this repository.
+
+**Bootstrap without a Windows installation:** the official Windows SDK 7.0 ISO
+contains everything needed and can be extracted on Linux/macOS with
+[`extract-vc9.sh` from vc9-toolset](https://github.com/JohnsterID/vc9-toolset)
+(requires `p7zip-full` and `msitools`):
+
+```bash
+./extract-vc9.sh /path/to/vc9sp1
+cd Community-Patch-DLL && mkdir -p Dependencies
+ln -s /path/to/vc9sp1/WinSDK/Include Dependencies/v7.0a_include
+ln -s /path/to/vc9sp1/WinSDK/Lib     Dependencies/v7.0a_lib
+ln -s /path/to/vc9sp1/VC/include     Dependencies/vc9_include
+ln -s /path/to/vc9sp1/VC/lib         Dependencies/vc9_lib
+```
+
+Directory symlinks are fine; `fix_header_case_issues.py` follows them. The
+build script verifies these directories at startup and prints these
+instructions if they are missing.
 
 ### 3. Python Dependencies
 
@@ -359,15 +383,15 @@ WINDEF.H -> WinDef.h
 
 ### Issue: "LLVM not found"
 
-**Symptom:** Build fails with "clang: command not found"
+**Symptom:** Build fails with "ERROR: clang and/or lld-link not found"
 
 **Solution:**
 ```bash
-# Check LLVM location
-ls /tmp/LLVM-21.1.8-Linux-X64/bin/clang
+# Install from your distro
+sudo apt-get install clang lld
 
-# If different location, set environment variable
-export LLVM_PATH=/your/path/to/llvm
+# Or point at an extracted LLVM release
+export LLVM_PATH=/your/path/to/llvm   # must contain bin/clang and bin/lld-link
 ```
 
 ### Issue: "Dependencies not found"
