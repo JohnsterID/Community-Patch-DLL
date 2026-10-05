@@ -78,9 +78,11 @@ import json
 import mmap
 import os
 import re
+import shutil
 import struct
 import subprocess
 import sys
+import tempfile
 
 MINIDUMP_SIGNATURE = 0x504D444D  # 'MDMP'
 STREAM_THREAD_LIST = 3
@@ -810,10 +812,29 @@ def find_llvm_symbolizer(explicit_path):
     return None
 
 
-def llvm_symbolize(symbolizer, dll, rvas):
-    """Symbolize RVAs; returns {rva: [(func, file:line), ...]} incl. inlines."""
+def llvm_symbolize(symbolizer, dll, rvas, pdb=None, pdb_name=None):
+    """Symbolize RVAs; returns {rva: [(func, file:line), ...]} incl. inlines.
+
+    llvm-symbolizer only takes the DLL: it loads the PDB named by the DLL's
+    RSDS record from the DLL's directory, else from the RSDS absolute path,
+    without checking the GUID -- a stale build at that path gives silently
+    wrong symbols. When the matched PDB is not that file, stage both in a
+    temporary directory under the names it looks for."""
     if not rvas:
         return {}
+    want = os.path.join(os.path.dirname(os.path.abspath(dll)),
+                        os.path.basename((pdb_name or "").replace("\\", "/")))
+    if pdb and pdb_name and os.path.normcase(os.path.abspath(pdb)) != \
+            os.path.normcase(want):
+        with tempfile.TemporaryDirectory() as tmp:
+            staged = os.path.join(tmp, os.path.basename(dll))
+            for src, dst in ((dll, staged),
+                             (pdb, os.path.join(tmp, os.path.basename(want)))):
+                try:
+                    os.link(src, dst)
+                except OSError:
+                    shutil.copyfile(src, dst)
+            return llvm_symbolize(symbolizer, staged, rvas)
     inp = "".join("0x%X\n" % r for r in rvas)
     proc = subprocess.run(
         [symbolizer, "--obj=%s" % dll, "--relative-address",
@@ -1581,11 +1602,18 @@ def main():
                                         target_mod["timestamp"],
                                         target_mod["size"]))
     if dll and not pdb and pe and pe["pdb_name"]:
-        cand = os.path.join(
-            os.path.dirname(dll),
-            os.path.basename(pe["pdb_name"].replace("\\", "/")))
-        if os.path.isfile(cand):
-            pdb = cand
+        # beside the DLL, then the build path recorded in it -- only with a
+        # matching GUID (a stale build there gives silently wrong symbols)
+        for cand in (os.path.join(os.path.dirname(dll), os.path.basename(
+                         pe["pdb_name"].replace("\\", "/"))),
+                     pe["pdb_name"]):
+            if os.path.isfile(cand) and pdb_guid(cand) == (pe["guid"],
+                                                          pe["age"]):
+                pdb = cand
+                break
+        if not pdb:
+            sys.stderr.write("warning: no PDB matching %s's GUID found; "
+                             "pass --pdb or --symbols\n" % dll)
     report["symbols"] = {"dll": dll, "pdb": pdb,
                          "guid": pe["guid"] if pe else None}
 
@@ -1700,11 +1728,12 @@ def main():
 
     symmap = {}
     backend = None
-    if dll and rvas:
+    if dll and pdb and rvas:
         symbolizer = find_llvm_symbolizer(args.llvm_path)
         if symbolizer:
             backend = "llvm-symbolizer (%s)" % symbolizer
-            symmap = llvm_symbolize(symbolizer, dll, sorted(set(rvas)))
+            symmap = llvm_symbolize(symbolizer, dll, sorted(set(rvas)),
+                                    pdb, pe["pdb_name"] if pe else None)
     if not symmap and pdb_syms is not None and rvas:
         backend = "built-in PDB reader"
         for r in sorted(set(rvas)):
