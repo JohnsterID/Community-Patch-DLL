@@ -4,8 +4,20 @@ Minidump crash analyzer for CvGameCore_Expansion2.dll.
 
 Parses CvMiniDump_*.dmp files (including Wine-generated dumps that break the
 python `minidump` library with a nonstandard 0xfff0 stream), pairs the crash
-with the matching DLL/PDB, symbolizes the faulting address and stack, and
-prints a full crash report.
+with the matching DLL/PDB, symbolizes the faulting address, unwinds the
+crashed thread's stack, and prints a full crash report.
+
+Stack unwinding (x86): the PDB's FrameData ("New FPO") records -- emitted by
+clang-cl+lld and MSVC for every function, including /Oy (frame pointer
+omitted) Release code -- give exact frames through the DLL, the same data
+dbghelp/WinDbg and Breakpad use. Frames in modules without a PDB (the game
+EXE, drivers, system DLLs) fall back to the EBP chain, then a stack scan.
+Every frame is labelled with how it was found (context / cfi /
+frame_pointer / call_to_null / scan), and guessed frames are checked
+against the call instruction that precedes them -- including whether that
+call leads into the function below, which rejects stale return addresses.
+An eip=0 crash (call through a NULL function pointer) is resolved through
+the return address the call left at [esp].
 
 Symbolization backends (best available wins):
   1. llvm-symbolizer (LLVM >= 19; reads PDB natively, gives file:line and
@@ -29,11 +41,18 @@ Usage:
                       is a FILE OFFSET; true RVA = offset + .text raw/virtual
                       delta, typically +0xC00).
   --rva HEX           Symbolize extra RVAs (repeatable) in the target module.
-  --image FILE        Extra module image on disk (e.g. the game exe) used to
-                      verify stack-scan candidates as real call return
-                      addresses and to translate crashes.log file offsets
-                      for that module (repeatable).
-  --max-frames N      Stack-scan frame limit (default 40).
+  --image FILE        Extra module image on disk, e.g. the exact
+                      CivilizationV.exe / _DX11 / _Tablet the user ran
+                      (repeatable). Optional: it lets guessed frames in
+                      that module be verified against its code (Release
+                      dumps do not contain module code; full-memory Debug
+                      dumps do, and are verified from the dump), prints
+                      IDA addresses for them, and translates crashes.log
+                      file offsets for that module. The report warns when
+                      frames could not be verified.
+  --max-frames N      Unwind frame limit (default 64).
+  --raw-scan          Also list every call-site-verified module address
+                      above esp (diagnostic; includes stale frames).
   --json              Machine-readable output.
 
 Additional automatic analysis:
@@ -45,12 +64,18 @@ Additional automatic analysis:
   * Empty/truncated dumps are reported as MiniDumpWriteDump failures
     (typically OOM during capture) instead of a generic parse error.
   * Warns when the matched crashes.log entry is for a different dump file.
+  * Full-memory (Debug) dumps: memory-mapped and read through the Memory64
+    list, so multi-GB dumps work and heap/code can be read at any address.
+  * 32-bit addresses above 2 GB, which dbghelp stores sign-extended, are
+    normalized (large-address-aware stacks and heaps live up there).
 
 Exit codes: 0 ok, 1 bad input, 2 dump parsed but no symbols found.
 """
 
 import argparse
+import bisect
 import json
+import mmap
 import os
 import re
 import struct
@@ -63,6 +88,7 @@ STREAM_MODULE_LIST = 4
 STREAM_MEMORY_LIST = 5
 STREAM_EXCEPTION = 6
 STREAM_SYSTEM_INFO = 7
+STREAM_MEMORY64_LIST = 9         # full-memory (Debug) dumps
 STREAM_SYSTEM_MEMORY_INFO = 21   # MINIDUMP_SYSTEM_MEMORY_INFO_1
 STREAM_PROCESS_VM_COUNTERS = 22  # MINIDUMP_PROCESS_VM_COUNTERS_2
 
@@ -88,6 +114,15 @@ def fail(msg):
     sys.exit(1)
 
 
+def parse_x86_context(ctx):
+    """Integer registers of an x86 CONTEXT (they start at offset 0x9C)."""
+    if len(ctx) < 0x9C + 48:
+        return {}
+    names = ["edi", "esi", "ebx", "edx", "ecx", "eax",
+             "ebp", "eip", "cs", "eflags", "esp", "ss"]
+    return dict(zip(names, struct.unpack_from("<12I", ctx, 0x9C)))
+
+
 # ---------------------------------------------------------------------------
 # Minidump parsing (manual struct walk; Wine dumps have a nonstandard 0xfff0
 # stream that trips strict parsers, so never validate stream types).
@@ -96,16 +131,18 @@ def fail(msg):
 class Minidump(object):
     def __init__(self, path):
         self.path = path
-        with open(path, "rb") as f:
-            self.data = f.read()
-        d = self.data
-        if len(d) == 0:
+        size = os.path.getsize(path)
+        if size == 0:
             fail("%s: empty dump -- MiniDumpWriteDump itself failed, "
                  "usually because the process was out of memory (see the "
                  "matching crashes.log memory markers)" % path)
-        if len(d) < 32:
+        if size < 32:
             fail("%s: too small to be a minidump (truncated write -- "
                  "likely OOM during dump capture)" % path)
+        # Debug full-memory dumps run to several GB: map, don't read.
+        with open(path, "rb") as f:
+            self.data = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
+        d = self.data
         sig, _ver, nstreams, dirrva = struct.unpack_from("<IIII", d, 0)
         if sig != MINIDUMP_SIGNATURE:
             fail("%s: bad signature 0x%08x (not MDMP)" % (path, sig))
@@ -115,11 +152,18 @@ class Minidump(object):
             stype, size, rva = struct.unpack_from("<III", d, dirrva + 12 * i)
             if stype:
                 self.streams.setdefault(stype, (size, rva))
+        self.system_info = self._parse_system_info()
+        # dbghelp sign-extends 32-bit addresses >= 2 GB into the 64-bit
+        # fields (0xAAED8FF4 -> 0xFFFFFFFFAAED8FF4). A large-address-aware
+        # game under memory pressure lives up there, so mask them.
+        self.addr_mask = 0xFFFFFFFF \
+            if self.system_info.get("arch", 0) == 0 else (1 << 64) - 1
         self.modules = self._parse_modules()
         self.threads = self._parse_threads()
         self.memory_ranges = self._parse_memory_list()
+        self.memory64_ranges = self._parse_memory64_list()
+        self._index_memory()
         self.exception = self._parse_exception()
-        self.system_info = self._parse_system_info()
         self.system_memory = self._parse_system_memory_info()
         self.vm_counters = self._parse_process_vm_counters()
 
@@ -148,7 +192,7 @@ class Minidump(object):
                 struct.unpack_from("<QIIII", e, 0)
             name = self._read_minidump_string(name_rva)
             mods.append({
-                "base": base,
+                "base": base & self.addr_mask,
                 "size": size,
                 "timestamp": timestamp,
                 "path": name,
@@ -166,13 +210,19 @@ class Minidump(object):
         for i in range(n):
             e = s[4 + i * 48: 4 + (i + 1) * 48]
             tid = struct.unpack_from("<I", e, 0)[0]
-            stack_start = struct.unpack_from("<Q", e, 24)[0]
-            stack_size, stack_rva = struct.unpack_from("<II", e, 36)
+            # MINIDUMP_THREAD: ThreadId, SuspendCount, PriorityClass,
+            # Priority, Teb(8), then Stack = MINIDUMP_MEMORY_DESCRIPTOR
+            # {StartOfMemoryRange(8) @24, DataSize @32, Rva @36} and
+            # ThreadContext = {DataSize @40, Rva @44}.
+            stack_start, stack_size, stack_rva, ctx_size, ctx_rva = \
+                struct.unpack_from("<QIIII", e, 24)
             threads.append({
                 "tid": tid,
-                "stack_start": stack_start,
+                "stack_start": stack_start & self.addr_mask,
                 "stack_size": stack_size,
                 "stack_rva": stack_rva,
+                "registers": parse_x86_context(
+                    self.data[ctx_rva:ctx_rva + ctx_size]),
             })
         return threads
 
@@ -187,12 +237,45 @@ class Minidump(object):
         ranges = []
         for i in range(n):
             start, size, rva = struct.unpack_from("<QII", s, 4 + 16 * i)
-            ranges.append((start, size, rva))
+            ranges.append((start & self.addr_mask, size, rva))
         return ranges
 
+    def _parse_memory64_list(self):
+        """MINIDUMP_MEMORY64_LIST (full-memory dumps): NumberOfMemoryRanges,
+        BaseRva, then {StartOfMemoryRange, DataSize} pairs whose data is
+        stored back to back from BaseRva."""
+        s = self._stream(STREAM_MEMORY64_LIST)
+        if not s or len(s) < 16:
+            return []
+        n, off = struct.unpack_from("<QQ", s, 0)
+        if 16 + 16 * n > len(s):
+            return []
+        ranges = []
+        for i in range(n):
+            start, size = struct.unpack_from("<QQ", s, 16 + 16 * i)
+            ranges.append((start & self.addr_mask, size, off))
+            off += size
+        return ranges
+
+    def _index_memory(self):
+        # Full-memory dumps leave the thread list's stack Rva at 0 (the
+        # bytes live in the Memory64 list); offset 0 is the header, never
+        # data, so such descriptors are skipped.
+        ranges = [(t["stack_start"], t["stack_size"], t["stack_rva"])
+                  for t in self.threads]
+        ranges += self.memory_ranges + self.memory64_ranges
+        ranges = sorted(r for r in ranges
+                        if r[1] and r[2] and r[2] + r[1] <= len(self.data))
+        self._mem = ranges
+        self._mem_starts = [r[0] for r in ranges]
+
     def read_va(self, addr, size):
-        """Read bytes at a virtual address if captured in the dump."""
-        for start, rsize, rva in self.memory_ranges:
+        """Read bytes at a virtual address if captured in the dump (thread
+        stacks, the memory list, or a full-memory dump's Memory64 list)."""
+        i = bisect.bisect_right(self._mem_starts, addr) - 1
+        # ranges may overlap (stacks also appear in the memory list)
+        for j in range(i, max(i - 8, -1), -1):
+            start, rsize, rva = self._mem[j]
             if start <= addr and addr + size <= start + rsize:
                 off = rva + (addr - start)
                 return self.data[off:off + size]
@@ -224,19 +307,14 @@ class Minidump(object):
             return None
         tid = struct.unpack_from("<I", s, 0)[0]
         code, _flags, _rec, addr, nparams = struct.unpack_from("<IIQQI", s, 8)
-        params = struct.unpack_from("<15Q", s, 8 + 28 + 4)[:nparams]
+        params = [p & self.addr_mask for p in
+                  struct.unpack_from("<15Q", s, 8 + 28 + 4)[:nparams]]
         ctx_size, ctx_rva = struct.unpack_from("<II", s, 160)
-        regs = {}
-        ctx = self.data[ctx_rva:ctx_rva + ctx_size]
-        if len(ctx) >= 0x9C + 48:  # x86 CONTEXT: integer regs at offset 0x9C
-            names = ["edi", "esi", "ebx", "edx", "ecx", "eax",
-                     "ebp", "eip", "cs", "eflags", "esp", "ss"]
-            vals = struct.unpack_from("<12I", ctx, 0x9C)
-            regs = dict(zip(names, vals))
+        regs = parse_x86_context(self.data[ctx_rva:ctx_rva + ctx_size])
         return {
             "tid": tid,
             "code": code,
-            "address": addr,
+            "address": addr & self.addr_mask,
             "params": list(params),
             "registers": regs,
         }
@@ -320,6 +398,9 @@ class Minidump(object):
         return None
 
     def thread_stack(self, thread):
+        if not thread["stack_rva"]:
+            return self.read_va(thread["stack_start"],
+                                thread["stack_size"]) or b""
         return self.data[thread["stack_rva"]:
                          thread["stack_rva"] + thread["stack_size"]]
 
@@ -340,15 +421,10 @@ def pe_info(path):
     nsec = struct.unpack_from("<H", d, pe + 6)[0]
     timestamp = struct.unpack_from("<I", d, pe + 8)[0]
     optsize = struct.unpack_from("<H", d, pe + 20)[0]
+    image_base = struct.unpack_from("<I", d, pe + 24 + 28)[0]
     size_of_image = struct.unpack_from("<I", d, pe + 24 + 56)[0]
     secs_off = pe + 24 + optsize
-    sections = []
-    for i in range(nsec):
-        s = secs_off + 40 * i
-        name = d[s:s + 8].rstrip(b"\0").decode("ascii", errors="replace")
-        vsize, va, rawsize, rawptr = struct.unpack_from("<IIII", d, s + 8)
-        sections.append({"name": name, "va": va, "vsize": vsize,
-                         "rawptr": rawptr, "rawsize": rawsize})
+    sections = parse_section_headers(d, secs_off, nsec)
     # Debug directory -> RSDS record
     ddir_rva, ddir_size = struct.unpack_from("<II", d, pe + 24 + 96 + 6 * 8)
     guid = age = pdb_name = None
@@ -367,8 +443,42 @@ def pe_info(path):
                         .decode(errors="replace")
                 break
     return {"timestamp": timestamp, "size_of_image": size_of_image,
-            "sections": sections, "guid": guid, "age": age,
-            "pdb_name": pdb_name, "path": path}
+            "image_base": image_base, "sections": sections, "guid": guid,
+            "age": age, "pdb_name": pdb_name, "path": path, "data": d}
+
+
+IMAGE_SCN_MEM_EXECUTE = 0x20000000
+
+
+def parse_section_headers(d, secs_off, nsec):
+    sections = []
+    for i in range(nsec):
+        s = secs_off + 40 * i
+        name = d[s:s + 8].rstrip(b"\0").decode("ascii", errors="replace")
+        vsize, va, rawsize, rawptr = struct.unpack_from("<IIII", d, s + 8)
+        chars = struct.unpack_from("<I", d, s + 36)[0]
+        sections.append({"name": name, "va": va, "vsize": vsize,
+                         "rawptr": rawptr, "rawsize": rawsize,
+                         "exec": bool(chars & IMAGE_SCN_MEM_EXECUTE)})
+    return sections
+
+
+def pe_info_from_memory(dump, module):
+    """Section table and ImageBase of a module whose PE headers were
+    captured in the dump (full-memory dumps capture every image)."""
+    hdr = dump.read_va(module["base"], 0x1000)
+    if not hdr or hdr[:2] != b"MZ":
+        return None
+    pe = struct.unpack_from("<I", hdr, 0x3C)[0]
+    if pe + 0x200 > len(hdr) or hdr[pe:pe + 4] != b"PE\0\0":
+        return None
+    nsec = struct.unpack_from("<H", hdr, pe + 6)[0]
+    optsize = struct.unpack_from("<H", hdr, pe + 20)[0]
+    secs_off = pe + 24 + optsize
+    if secs_off + 40 * nsec > len(hdr):
+        return None
+    return {"image_base": struct.unpack_from("<I", hdr, pe + 24 + 28)[0],
+            "sections": parse_section_headers(hdr, secs_off, nsec)}
 
 
 def rva_to_off(sections, rva):
@@ -476,20 +586,32 @@ class PdbSymbols(object):
         dbghdr_sz = struct.unpack_from("<I", dbi, 48)[0]
         ec_sz = struct.unpack_from("<I", dbi, 52)[0]
         symrec_stream = struct.unpack_from("<H", dbi, 20)[0]
-        # Optional debug header: index 5 (uint16) = section header stream
+        # Optional debug header: array of uint16 stream indices --
+        # [0] FPO (old), [5] section headers, [9] NewFPO (FrameData).
         dbgoff = 64 + modinfo_sz + seccon_sz + secmap_sz + srcinfo_sz \
             + tsmap_sz + ec_sz
         dbghdr = dbi[dbgoff:dbgoff + dbghdr_sz]
-        idx_secthdr = struct.unpack_from("<H", dbghdr, 10)[0]
-        sect = self.msf.stream(idx_secthdr)
+
+        def dbg_stream(index):
+            if len(dbghdr) < 2 * index + 2:
+                return None
+            s = struct.unpack_from("<H", dbghdr, 2 * index)[0]
+            return None if s == 0xFFFF else s
+
+        sect = self.msf.stream(dbg_stream(5))
         self.sec_rva = [struct.unpack_from("<I", sect, i * 40 + 12)[0]
                         for i in range(len(sect) // 40)]
+        self._fpo_stream = dbg_stream(0)
+        self._framedata_stream = dbg_stream(9)
+        self._frame_index = None
+        self._names = None
         self.procs = []    # (rva, length, name)
         self.publics = []  # (rva, name)
         self._parse_modules(dbi, modinfo_sz)
         self._parse_publics(self.msf.stream(symrec_stream))
         self.procs.sort()
         self.publics.sort()
+        self._proc_starts = [p[0] for p in self.procs]
 
     def _seg_rva(self, seg, off):
         if 1 <= seg <= len(self.sec_rva):
@@ -543,17 +665,123 @@ class PdbSymbols(object):
                         (rva, name.decode("utf-8", errors="replace")))
             off += 2 + ln
 
-    def symbolize(self, rva):
-        for prva, plen, name in self.procs:
+    def lookup(self, rva):
+        """(name, start_rva, exact) for the function containing rva;
+        exact=False means only the nearest public symbol below it."""
+        i = bisect.bisect_right(self._proc_starts, rva) - 1
+        for j in range(i, max(i - 8, -1), -1):
+            prva, plen, name = self.procs[j]
             if prva <= rva < prva + plen:
-                return "%s+0x%x" % (name, rva - prva)
+                return name, prva, True
         best = None
         for prva, name in self.publics:
             if prva <= rva and (best is None or prva > best[0]):
                 best = (prva, name)
         if best:
-            return "%s+0x%x (nearest public)" % (best[1], rva - best[0])
+            return best[1], best[0], False
         return None
+
+    def symbolize(self, rva, offset_rva=None):
+        """'name+0xoff'. offset_rva lets a caller frame be looked up at
+        ret-1 (inside the call) but displayed at the return address."""
+        hit = self.lookup(rva)
+        if not hit:
+            return None
+        name, start, exact = hit
+        off = (rva if offset_rva is None else offset_rva) - start
+        return "%s+0x%x%s" % (name, off, "" if exact else " (nearest public)")
+
+    # -- x86 unwind data (what dbghelp/WinDbg and Breakpad STACK WIN use) --
+
+    def _names_buffer(self):
+        """The PDB string table (/names), which FrameData program strings
+        index into. Located through the info stream's named-stream map."""
+        info = self.msf.stream(1)
+        off = 28  # Version, Signature, Age, Guid
+        nbuf = struct.unpack_from("<I", info, off)[0]
+        strbuf = info[off + 4:off + 4 + nbuf]
+        off += 4 + nbuf
+        _size, cap = struct.unpack_from("<II", info, off)
+        off += 8
+        nwords = struct.unpack_from("<I", info, off)[0]
+        present = struct.unpack_from("<%dI" % nwords, info, off + 4)
+        off += 4 + 4 * nwords
+        ndeleted = struct.unpack_from("<I", info, off)[0]
+        off += 4 + 4 * ndeleted
+        for i in range(cap):
+            if i // 32 < nwords and (present[i // 32] >> (i % 32)) & 1:
+                key, stream = struct.unpack_from("<II", info, off)
+                off += 8
+                if strbuf[key:strbuf.index(b"\0", key)] == b"/names":
+                    names = self.msf.stream(stream)
+                    sig, _ver, size = struct.unpack_from("<III", names, 0)
+                    if sig != 0xEFFEEFFE:
+                        return None
+                    return names[12:12 + size]
+        return None
+
+    def _load_frame_index(self):
+        recs = []
+        if self._framedata_stream is not None:
+            data = self.msf.stream(self._framedata_stream)
+            start = 4 if len(data) % 32 else 0  # optional RelocPtr header
+            self._names = self._names_buffer()
+            for o in range(start, len(data) - 31, 32):
+                (rva, size, locals_, params, _maxstack, func, prolog,
+                 saved, flags) = struct.unpack_from("<IIIIIIHHI", data, o)
+                recs.append((rva, size, 0, (locals_, params, saved, prolog,
+                                            func, flags)))
+        if self._fpo_stream is not None:
+            data = self.msf.stream(self._fpo_stream)
+            for o in range(0, len(data) - 15, 16):
+                rva, size, locals_dw, params_dw, attr = \
+                    struct.unpack_from("<IIIHH", data, o)
+                # FPO_DATA bitfields: cbProlog:8 cbRegs:3 fHasSEH:1
+                # fUseBP:1 reserved:1 cbFrame:2
+                recs.append((rva, size, 1, (locals_dw * 4, params_dw * 4,
+                                            ((attr >> 8) & 7) * 4,
+                                            attr & 0xFF,
+                                            bool(attr & 0x1000), attr >> 14)))
+        recs.sort()
+        self._frame_index = ([r[0] for r in recs], recs)
+
+    def has_frame_data(self):
+        if self._frame_index is None:
+            self._load_frame_index()
+        return bool(self._frame_index[1])
+
+    def frame_info(self, rva):
+        """Unwind record covering rva: FrameData (with its program string)
+        preferred over old FPO. Per function there is one record per
+        prolog step, each running to the function end, so the record with
+        the greatest start <= rva is the one for this instruction."""
+        if self._frame_index is None:
+            self._load_frame_index()
+        starts, recs = self._frame_index
+        i = bisect.bisect_right(starts, rva) - 1
+        best = None
+        for j in range(i, max(i - 64, -1), -1):
+            start, size, kind, v = recs[j]
+            if start <= rva < start + size and (
+                    best is None or (kind, -start) < (best[2], -best[0])):
+                best = recs[j]
+        if not best:
+            return None
+        start, size, kind, v = best
+        if kind == 0:
+            locals_, params, saved, prolog, func, flags = v
+            prog = None
+            if self._names is not None and func < len(self._names):
+                end = self._names.find(b"\0", func)
+                prog = self._names[func:end].decode("ascii", "replace")
+            return {"type": "framedata", "start": start, "size": size,
+                    "locals": locals_, "params": params, "saved_regs": saved,
+                    "prolog": prolog, "program": prog or None}
+        locals_, params, saved, prolog, uses_bp, frame_type = v
+        return {"type": "fpo", "start": start, "size": size,
+                "locals": locals_, "params": params, "saved_regs": saved,
+                "prolog": prolog, "uses_bp": uses_bp,
+                "frame_type": frame_type, "program": None}
 
 
 # ---------------------------------------------------------------------------
@@ -605,17 +833,512 @@ def llvm_symbolize(symbolizer, dll, rvas):
 
 
 # ---------------------------------------------------------------------------
-# Stack scanning (no unwind info on x86; conservative return-address scan)
+# Call-site verification of return addresses
 # ---------------------------------------------------------------------------
 
-def scan_stack(dump, thread, from_addr, max_frames, checkers=None):
-    """Scan thread stack upward from from_addr for module return addresses.
+def _modrm_operand_len(b, i):
+    """Bytes taken by the ModRM byte at b[i] plus its SIB/displacement."""
+    modrm = b[i]
+    mod, rm = modrm >> 6, modrm & 7
+    n = 1
+    if mod == 3:
+        return n
+    if rm == 4:
+        if i + 1 >= len(b):
+            return -1
+        n += 1
+        if mod == 0 and (b[i + 1] & 7) == 5:
+            n += 4
+    elif mod == 0 and rm == 5:
+        n += 4
+    if mod == 1:
+        n += 1
+    elif mod == 2:
+        n += 4
+    return n
 
-    checkers maps a lowercase module name to a callable(rva) -> bool that
-    validates candidates (e.g. "lands in an executable section and is
-    preceded by a call instruction", built from the module's file on disk).
-    Modules without a checker are reported unfiltered.
+
+class CodeView(object):
+    """One module's code, from its image on disk or from dump memory.
+
+    sections: parsed section headers; read(rva, n) -> bytes or None.
+    Calling it checks a candidate return address: True when rva lies in an
+    executable section directly after a call instruction -- `E8 rel32`
+    whose target is executable code in the same module, or an `FF /2`
+    indirect call whose full encoding (ModRM/SIB/displacement) ends exactly
+    at rva -- False when it does not, None when the bytes are unavailable.
     """
+
+    def __init__(self, sections, read):
+        self.exec_secs = [(s["va"], max(s["vsize"], s["rawsize"]))
+                          for s in sections if s["exec"]]
+        self.read = read
+
+    def in_exec(self, rva):
+        return any(va <= rva < va + size for va, size in self.exec_secs)
+
+    def call_before(self, rva):
+        """("direct", target_rva), ("indirect", None), None (no call
+        instruction ends at rva) or "unknown" (bytes unavailable)."""
+        if not self.in_exec(rva) or rva < 7:
+            return None
+        b = self.read(rva - 7, 7)
+        if not b or len(b) < 7:
+            return "unknown"
+        if b[2] == 0xE8:
+            target = (rva + struct.unpack_from("<i", b, 3)[0]) & 0xFFFFFFFF
+            if self.in_exec(target):
+                target = self.follow_thunk(target)
+                if target is None:
+                    return ("indirect", None)  # import thunk
+                return ("direct", target)
+        for op in range(0, 6):
+            if b[op] == 0xFF and (b[op + 1] >> 3) & 7 == 2 and \
+                    _modrm_operand_len(b, op + 1) == 6 - op:
+                return ("indirect", None)
+        return None
+
+    def follow_thunk(self, rva):
+        """Resolve jump thunks: `jmp rel32` (incremental linking) to the
+        real function; None for an import thunk `jmp [__imp_X]`, whose
+        target lives in another module."""
+        b = self.read(rva, 6)
+        if b and len(b) >= 5 and b[0] == 0xE9:
+            target = (rva + 5 + struct.unpack_from("<i", b, 1)[0]) \
+                & 0xFFFFFFFF
+            if self.in_exec(target):
+                return target
+        if b and len(b) == 6 and b[0] == 0xFF and b[1] == 0x25:
+            return None
+        return rva
+
+    def __call__(self, rva):
+        kind = self.call_before(rva)
+        if kind == "unknown":
+            return None
+        return kind is not None
+
+
+def make_return_address_checker(dll_path):
+    """CodeView backed by a module image on disk."""
+    pe = pe_info(dll_path)
+    data = pe["data"]
+
+    def read(rva, n):
+        off = rva_to_off(pe["sections"], rva)
+        return None if off is None else data[off:off + n]
+
+    return CodeView(pe["sections"], read)
+
+
+def make_memory_code_checker(dump, module):
+    """CodeView backed by the dump itself (full-memory dumps capture every
+    image, so even the game EXE and system DLLs can be verified)."""
+    info = pe_info_from_memory(dump, module)
+    if not info:
+        return None
+    base = module["base"]
+    return CodeView(info["sections"],
+                    lambda rva, n: dump.read_va(base + rva, n))
+
+
+# ---------------------------------------------------------------------------
+# x86 unwinder
+#
+# The PDB's FrameData ("New FPO") records are the x86 unwind information:
+# MSVC and clang-cl+lld emit one per prolog step of every function, each with
+# a postfix program that recovers the caller's $eip/$esp/$ebp (what
+# dbghelp/WinDbg and Breakpad "STACK WIN 4" use). Semantics follow Breakpad
+# and rust-minidump. Each frame records how it was found:
+#   context        registers from the exception record
+#   cfi            PDB FrameData/FPO unwind record (exact)
+#   frame_pointer  EBP chain, return address verified as a call site
+#   call_to_null   eip outside every module: [esp] is the return address
+#                  pushed by the call that jumped there (call-site verified)
+#   scan           first plausible return address above esp (a guess)
+# ---------------------------------------------------------------------------
+
+def eval_frame_program(program, variables, read_u32):
+    """Evaluate a FrameData postfix program; returns the variable map or
+    None. Operators: + - * / % @(align) ^(deref) =(assign)."""
+    stack = []
+
+    def val(x):
+        if isinstance(x, int):
+            return x
+        return variables.get(x)
+
+    tokens = []
+    for t in program.split():
+        # some toolchains emit "=$eip" with no separating space
+        if t.startswith("=") and len(t) > 1:
+            tokens += ["=", t[1:]]
+        else:
+            tokens.append(t)
+    for t in tokens:
+        if t in ("+", "-", "*", "/", "%", "@"):
+            if len(stack) < 2:
+                return None
+            b, a = val(stack.pop()), val(stack.pop())
+            if a is None or b is None:
+                return None
+            if t == "+":
+                r = a + b
+            elif t == "-":
+                r = a - b
+            elif t == "*":
+                r = a * b
+            elif t in ("/", "%"):
+                if b == 0:
+                    return None
+                r = a // b if t == "/" else a % b
+            else:
+                if b == 0 or b & (b - 1):
+                    return None
+                r = a & ~(b - 1)
+            stack.append(r & 0xFFFFFFFF)
+        elif t == "^":
+            if not stack:
+                return None
+            a = val(stack.pop())
+            v = None if a is None else read_u32(a)
+            if v is None:
+                return None
+            stack.append(v)
+        elif t == "=":
+            if len(stack) < 2:
+                return None
+            v, name = stack.pop(), stack.pop()
+            if not isinstance(name, str):
+                return None
+            if v == ".undef":
+                variables.pop(name, None)
+                continue
+            v = val(v)
+            if v is None:
+                return None
+            variables[name] = v
+        elif t[0] in "$." or not re.match(r"^-?\d+$", t):
+            stack.append(t)
+        else:
+            stack.append(int(t) & 0xFFFFFFFF)
+    return variables
+
+
+class Unwinder(object):
+    """Walks one thread's stack from an x86 register context.
+
+    symbols: lowercase module name -> PdbSymbols (frame info + names)
+    checkers: lowercase module name -> code checker (see make_code_checker)
+    """
+
+    CALLEE_SAVED = ("ebp", "ebx", "esi", "edi")
+
+    def __init__(self, dump, thread, symbols, checkers):
+        self.dump = dump
+        self.symbols = symbols
+        self.checkers = checkers
+        self.stack_lo = thread["stack_start"]
+        self.stack_hi = thread["stack_start"] + thread["stack_size"]
+
+    def read_u32(self, addr):
+        if not 0 <= addr <= 0xFFFFFFFC:
+            return None
+        return self.dump.read_u32(addr)
+
+    def return_address_status(self, value):
+        """True (verified call site), None (in a module, code unavailable)
+        or False (not a return address)."""
+        m = self.dump.module_for(value)
+        if not m:
+            return False
+        check = self.checkers.get(m["name"].lower())
+        if check is None:
+            return None
+        return check(value - m["base"])
+
+    def plausible(self, value):
+        return self.return_address_status(value) is not False
+
+    def function_start(self, frame):
+        """VA of the function a frame is executing, from the PDB."""
+        if frame["module"] is None:
+            return None
+        syms = self.symbols.get(frame["module"].lower())
+        if syms is None:
+            return None
+        lookup = frame["rva"] - (0 if frame["trust"] == "context" else 1)
+        hit = syms.lookup(lookup)
+        if not hit or not hit[2]:
+            return None
+        return frame["eip"] - frame["rva"] + hit[1]
+
+    def call_consistency(self, ret, callee):
+        """Does the call that pushed `ret` lead to the callee's function?
+
+        "match" -- a direct call to the callee's function start (PDB)
+        "weak"  -- no PDB for the callee: the direct call lands in the
+                   callee's module at most 128 KB before its eip
+        "mismatch" -- a direct call to somewhere else: `ret` is a stale
+                   return address, unless the callee was reached by a
+                   tail call
+        None    -- cannot tell (indirect call, or no code bytes)
+        """
+        if callee["module"] is None:
+            return None
+        m = self.dump.module_for(ret)
+        code = self.checkers.get(m["name"].lower()) if m else None
+        if code is None:
+            return None
+        kind = code.call_before(ret - m["base"])
+        if not isinstance(kind, tuple) or kind[0] != "direct":
+            return None
+        target = m["base"] + kind[1]
+        start = self.function_start(callee)
+        if start is not None:
+            return "match" if target == start else "mismatch"
+        tm = self.dump.module_for(target)
+        if tm is None or tm["name"] != callee["module"]:
+            return "mismatch"
+        if target <= callee["eip"] < target + 0x20000:
+            return "weak"
+        return "mismatch"
+
+    def _frame(self, regs, trust, info=None, note=None):
+        eip = regs["eip"]
+        m = self.dump.module_for(eip)
+        status = self.return_address_status(eip)
+        return {"regs": regs, "trust": trust, "info": info, "note": note,
+                "eip": eip, "esp": regs["esp"],
+                "module": m["name"] if m else None,
+                "rva": eip - m["base"] if m else None,
+                "verified": status is True,
+                "code_missing": status is None}
+
+    def walk(self, ctx, max_frames=64):
+        regs = {k: ctx[k] for k in ("eip", "esp") + self.CALLEE_SAVED
+                if k in ctx}
+        frames = [self._frame(regs, "context")]
+        while len(frames) < max_frames:
+            callee = frames[-1]
+            caller = None
+            if callee["trust"] == "context" and callee["module"] is None:
+                caller = self._by_call_to_null(callee)
+            if caller is None and callee["module"] is not None:
+                caller = self._by_frame_info(callee, frames)
+            if caller is None:
+                caller = self._by_frame_pointer(callee)
+            if caller is None:
+                caller = self._by_scan(callee)
+            if caller is None or caller["esp"] <= callee["esp"] \
+                    or caller["eip"] == 0 or caller["module"] is None:
+                break
+            # does the call before this return address lead to the callee?
+            caller["link"] = self.call_consistency(caller["eip"], callee)
+            frames.append(caller)
+            if caller["esp"] >= self.stack_hi:
+                break
+        return frames
+
+    def _by_call_to_null(self, callee):
+        """eip outside every module (typically 0: a call through a NULL
+        function pointer or vtable slot). The call pushed its return
+        address, which is still at [esp]."""
+        esp = callee["esp"]
+        ret = self.read_u32(esp)
+        if ret is None or self.return_address_status(ret) is False:
+            return None
+        regs = {"eip": ret, "esp": esp + 4}
+        for r in self.CALLEE_SAVED:
+            if r in callee["regs"]:
+                regs[r] = callee["regs"][r]
+        return self._frame(regs, "call_to_null")
+
+    def _by_frame_info(self, callee, frames):
+        syms = self.symbols.get(callee["module"].lower())
+        if syms is None or not syms.has_frame_data():
+            return None
+        # A return address points after the call; look the caller up
+        # inside the call (ret-1) so a call ending a function resolves to
+        # that function, not the next one.
+        lookup = callee["rva"] - (0 if callee["trust"] == "context" else 1)
+        info = syms.frame_info(lookup)
+        if info is None:
+            return None
+        grand = frames[-2] if len(frames) >= 2 else None
+        grand_params = grand["info"]["params"] \
+            if grand and grand["info"] else 0
+        base = info["locals"] + info["saved_regs"]
+        sizes = [base + grand_params]
+        if grand_params:
+            # clang reserves outgoing-argument space inside the frame
+            # (sub esp, N) instead of pushing, so the grand-callee's
+            # parameters are already counted in cbLocals.
+            sizes.append(base)
+        results = [r for r in (self._eval_frame_info(callee, info, s)
+                               for s in sizes) if r is not None]
+        for r in results:
+            if r["verified"] and \
+                    self.call_consistency(r["eip"], callee) != "mismatch":
+                return r
+        # The record describes the function body after its prolog. At the
+        # faulting instruction esp can differ (epilogue already popped the
+        # saved registers; arguments pushed for a call), and a caller of a
+        # frame without unwind info (call_to_null, EXE) pushed an unknown
+        # number of argument bytes. Then the computed slot holds a stale
+        # value: look nearby for the slot whose call leads to this function.
+        alt = self._consistent_slot(callee, info, callee["esp"],
+                                    callee["esp"] + max(sizes) + 64)
+        if alt is not None:
+            return alt
+        for r in results:
+            if self.plausible(r["eip"]) and \
+                    self.call_consistency(r["eip"], callee) != "mismatch":
+                return r
+        # a mismatching but valid call site may still be right after a
+        # tail call; keep the unwind record's answer
+        if results and results[0]["verified"]:
+            return results[0]
+        return None
+
+    def _consistent_slot(self, callee, info, lo, hi):
+        search = callee["esp"] + info["locals"] + info["saved_regs"]
+        slots = sorted(range(lo & ~3, hi, 4), key=lambda a: abs(a - search))
+        for addr in slots:
+            v = self.read_u32(addr)
+            if v is None or self.return_address_status(v) is not True:
+                continue
+            if self.call_consistency(v, callee) in ("match", "weak"):
+                r = self._eval_frame_info(callee, info, None, search=addr)
+                if r is not None and r["eip"] == v:
+                    r["note"] = "return-address slot corrected"
+                    return r
+        return None
+
+    def _eval_frame_info(self, callee, info, frame_size, search=None):
+        regs = callee["regs"]
+        esp = regs["esp"]
+        if frame_size is None:
+            frame_size = search - esp
+        if info["type"] == "framedata" and info["program"]:
+            prog = info["program"]
+            if search is not None:
+                pass
+            elif "@" in prog:
+                # stack realigned: the return address sits above saved ebp
+                if "ebp" not in regs:
+                    return None
+                search = regs["ebp"] + 4
+            else:
+                search = esp + frame_size
+            variables = {"$" + r: regs[r]
+                         for r in ("esp",) + self.CALLEE_SAVED if r in regs}
+            variables.update({
+                ".cbParams": info["params"],
+                ".cbCalleeParams": max(0, frame_size - info["locals"]
+                                       - info["saved_regs"]),
+                ".cbSavedRegs": info["saved_regs"],
+                ".cbLocals": info["locals"],
+                ".raSearch": search & 0xFFFFFFFF,
+                ".raSearchStart": search & 0xFFFFFFFF,
+            })
+            out = eval_frame_program(prog, variables, self.read_u32)
+            if out is None or "$eip" not in out or "$esp" not in out:
+                return None
+            new = {"eip": out["$eip"], "esp": out["$esp"]}
+            for r in self.CALLEE_SAVED:
+                if "$" + r in out:
+                    new[r] = out["$" + r]
+            return self._frame(new, "cfi", info)
+        # old FPO record (or FrameData without a program string)
+        ra = esp + frame_size
+        eip = self.read_u32(ra)
+        if eip is not None and eip == callee["eip"] \
+                and callee["trust"] == "context":
+            ra += 4  # leftover return address of a FPO system call
+            eip = self.read_u32(ra)
+        if eip is None:
+            return None
+        new = {"eip": eip, "esp": ra + 4}
+        if info.get("uses_bp"):
+            ebp = self.read_u32(esp + (frame_size - info["locals"]
+                                       - info["saved_regs"])
+                                + info["saved_regs"] - 8)
+            if ebp is not None:
+                new["ebp"] = ebp
+        else:
+            for r in ("ebp", "ebx"):
+                if r in regs:
+                    new[r] = regs[r]
+        return self._frame(new, "cfi", info)
+
+    def _by_frame_pointer(self, callee):
+        ebp = callee["regs"].get("ebp")
+        if ebp is None or ebp % 4 or \
+                not callee["esp"] <= ebp < self.stack_hi - 8:
+            return None
+        eip = self.read_u32(ebp + 4)
+        new_ebp = self.read_u32(ebp)
+        if eip is None or new_ebp is None:
+            return None
+        # In FPO code ebp is a general register (or an outer frame's
+        # pointer): accept a link only when its return address is a
+        # verified call site, or -- when the code is unavailable -- the
+        # chain continues sanely; never when the call leads elsewhere.
+        status = self.return_address_status(eip)
+        if status is False or \
+                self.call_consistency(eip, callee) == "mismatch":
+            return None
+        chained = ebp < new_ebp < self.stack_hi or new_ebp == 0
+        if status is None and not chained:
+            return None
+        regs = {"eip": eip, "esp": ebp + 8}
+        if ebp < new_ebp < self.stack_hi:
+            regs["ebp"] = new_ebp
+        return self._frame(regs, "frame_pointer")
+
+    def _by_scan(self, callee):
+        """First return address above esp, preferring (1) verified call
+        sites whose call can lead to the callee, then (2) any candidate
+        not proven to belong to another function, then (3) anything in a
+        module. Each pass skips values left by unrelated earlier calls
+        that the previous pass could rule out."""
+        esp = callee["esp"]
+        words = 160 if callee["trust"] in ("context", "cfi") else 40
+        seen = []
+        for i in range(words):
+            v = self.read_u32(esp + 4 * i)
+            if v is None:
+                break
+            if v == callee["eip"] and callee["trust"] == "context":
+                continue
+            status = self.return_address_status(v)
+            if status is not False:
+                seen.append((i, v, status,
+                             self.call_consistency(v, callee)))
+        passes = (lambda s, c: s is True and c != "mismatch",
+                  lambda s, c: c != "mismatch",
+                  lambda s, c: True)
+        for accept in passes:
+            for i, v, status, cons in seen:
+                if not accept(status, cons):
+                    continue
+                addr = esp + 4 * i
+                regs = {"eip": v, "esp": addr + 4}
+                if i > 0:
+                    bp = self.read_u32(addr - 4)
+                    if bp is not None and addr < bp < self.stack_hi and \
+                            bp - addr <= 128 * 1024:
+                        regs["ebp"] = bp
+                return self._frame(regs, "scan")
+        return None
+
+
+def scan_stack(dump, thread, from_addr, max_frames, checkers=None):
+    """Raw scan: every module address above from_addr that passes the
+    module's call-site check (when one is available). Diagnostic only --
+    stale return addresses left by earlier, deeper calls are reported too;
+    use Unwinder for the call chain."""
     stack = dump.thread_stack(thread)
     start = thread["stack_start"]
     frames = []
@@ -627,7 +1350,7 @@ def scan_stack(dump, thread, from_addr, max_frames, checkers=None):
         if not m:
             continue
         check = (checkers or {}).get(m["name"].lower())
-        if check and not check(v - m["base"]):
+        if check and check(v - m["base"]) is False:
             continue
         frames.append({
             "stack_addr": start + k,
@@ -638,47 +1361,6 @@ def scan_stack(dump, thread, from_addr, max_frames, checkers=None):
         if len(frames) >= max_frames:
             break
     return frames
-
-
-IMAGE_SCN_MEM_EXECUTE = 0x20000000
-
-
-def make_return_address_checker(dll_path):
-    """Candidate return addresses must land in an executable section and be
-    preceded by a plausible x86 call instruction (E8 rel32, or the FF /2
-    indirect forms). Only possible for modules whose file we have on disk."""
-    with open(dll_path, "rb") as f:
-        data = f.read()
-    exec_secs = []
-    peh = struct.unpack_from("<I", data, 0x3C)[0]
-    nsec = struct.unpack_from("<H", data, peh + 6)[0]
-    optsize = struct.unpack_from("<H", data, peh + 20)[0]
-    for i in range(nsec):
-        s = peh + 24 + optsize + 40 * i
-        chars = struct.unpack_from("<I", data, s + 36)[0]
-        if chars & IMAGE_SCN_MEM_EXECUTE:
-            vsize, va, rawsize, rawptr = struct.unpack_from("<IIII", data,
-                                                            s + 8)
-            exec_secs.append((va, min(vsize, rawsize), rawptr))
-
-    def check(rva):
-        for va, size, rawptr in exec_secs:
-            if va <= rva < va + size:
-                off = rva - va + rawptr
-                if off < 7:
-                    return False
-                b = data[off - 7:off]
-                # call rel32 (E8) / call r/m32 (FF /2: 2-7 byte encodings)
-                if b[2] == 0xE8:
-                    return True
-                for ln in (2, 3, 4, 5, 6, 7):
-                    i = 7 - ln
-                    if b[i] == 0xFF and (b[i + 1] >> 3) & 7 == 2:
-                        return True
-                return False
-        return False
-
-    return check
 
 
 # ---------------------------------------------------------------------------
@@ -817,7 +1499,10 @@ def main():
                          "call return addresses (repeatable)")
     ap.add_argument("--module", default="CvGameCore_Expansion2.dll",
                     help="target module name (default: %(default)s)")
-    ap.add_argument("--max-frames", type=int, default=40)
+    ap.add_argument("--max-frames", type=int, default=64)
+    ap.add_argument("--raw-scan", action="store_true",
+                    help="also list every call-site-verified module address "
+                         "above esp (diagnostic; includes stale frames)")
     ap.add_argument("--json", action="store_true")
     args = ap.parse_args()
 
@@ -950,6 +1635,14 @@ def main():
         rvas.append(int(r, 16))
 
     stack_frames = []
+    raw_scan = []
+    image_bases = {}
+    pdb_syms = None
+    if pdb:
+        try:
+            pdb_syms = PdbSymbols(pdb)
+        except Exception as e:
+            sys.stderr.write("warning: PDB parse failed: %s\n" % e)
     if exc:
         thread = next((t for t in dump.threads
                        if t["tid"] == exc["tid"]), None)
@@ -960,6 +1653,7 @@ def main():
                 try:
                     checkers[args.module.lower()] = \
                         make_return_address_checker(dll)
+                    image_bases[args.module.lower()] = pe["image_base"]
                 except Exception:
                     pass
             for img in args.image:
@@ -979,11 +1673,30 @@ def main():
                         "the dump (timestamp/SizeOfImage); skipping\n" % img)
                     continue
                 checkers[name] = make_return_address_checker(img)
-            stack_frames = scan_stack(dump, thread, esp, args.max_frames,
+                image_bases[name] = info["image_base"]
+            # Full-memory dumps carry every image: verify the rest in place.
+            # (Not their ImageBase: the loader rewrites it to the load
+            # address, so IDA addresses come only from --image files.)
+            for m in dump.modules:
+                name = m["name"].lower()
+                if name not in checkers:
+                    checker = make_memory_code_checker(dump, m)
+                    if checker:
+                        checkers[name] = checker
+            symbols = {}
+            if pdb_syms is not None:
+                symbols[args.module.lower()] = pdb_syms
+            report["unwind_info"] = bool(pdb_syms is not None and
+                                         pdb_syms.has_frame_data())
+            unwinder = Unwinder(dump, thread, symbols, checkers)
+            stack_frames = unwinder.walk(exc["registers"], args.max_frames)
+            for i, f in enumerate(stack_frames):
+                if f["module"] and f["module"].lower() == \
+                        args.module.lower() and i > 0:
+                    rvas.append(f["rva"] - 1)  # inside the call
+            if args.raw_scan:
+                raw_scan = scan_stack(dump, thread, esp, args.max_frames,
                                       checkers)
-            for f in stack_frames:
-                if f["module"].lower() == args.module.lower():
-                    rvas.append(f["rva"])
 
     symmap = {}
     backend = None
@@ -992,15 +1705,11 @@ def main():
         if symbolizer:
             backend = "llvm-symbolizer (%s)" % symbolizer
             symmap = llvm_symbolize(symbolizer, dll, sorted(set(rvas)))
-    if not symmap and pdb and rvas:
+    if not symmap and pdb_syms is not None and rvas:
         backend = "built-in PDB reader"
-        try:
-            syms = PdbSymbols(pdb)
-            for r in sorted(set(rvas)):
-                s = syms.symbolize(r)
-                symmap[r] = [(s, "")] if s else []
-        except Exception as e:
-            sys.stderr.write("warning: PDB parse failed: %s\n" % e)
+        for r in sorted(set(rvas)):
+            s = pdb_syms.symbolize(r)
+            symmap[r] = [(s, "")] if s else []
     report["symbol_backend"] = backend
 
     def fmt_sym(rva):
@@ -1016,12 +1725,44 @@ def main():
         report["crash_symbol"] = fmt_sym(crash_rva)
     report["extra_rvas"] = {
         "0x%X" % int(r, 16): fmt_sym(int(r, 16)) for r in args.rva}
-    report["stack"] = [
+    target = args.module.lower()
+    report["stack"] = []
+    for i, f in enumerate(stack_frames):
+        entry = {"frame": i, "trust": f["trust"],
+                 "eip": "0x%X" % f["eip"], "esp": "0x%X" % f["esp"],
+                 "target": ("%s+0x%x" % (f["module"], f["rva"])
+                            if f["module"] else "0x%X" % f["eip"])}
+        name = (f["module"] or "").lower()
+        if name in image_bases and name != target:
+            entry["image_va"] = "0x%X" % (image_bases[name] + f["rva"])
+        if name == target:
+            lookup = f["rva"] - (1 if i else 0)
+            if pdb_syms is not None:
+                entry["function"] = pdb_syms.symbolize(lookup, f["rva"])
+            loc = fmt_sym(lookup)
+            if loc and loc != entry.get("function"):
+                entry["location"] = loc
+        if f.get("info") and f["info"].get("type") == "fpo":
+            entry["note"] = "old FPO record"
+        if f.get("note"):
+            entry["note"] = f["note"]
+        if f.get("link"):
+            entry["link"] = f["link"]
+        if i and f["trust"] != "cfi" and f["code_missing"]:
+            entry["unverified"] = True
+        report["stack"].append(entry)
+    # Frames guessed (frame pointer / scan) in a module whose code is not
+    # in the dump could not be checked against a call instruction.
+    report["unverified_modules"] = sorted(set(
+        f["module"] for i, f in enumerate(stack_frames)
+        if i and f["trust"] != "cfi" and f["code_missing"]))
+    report["raw_scan"] = [
         {"addr": "0x%X" % f["stack_addr"],
          "target": "%s+0x%x" % (f["module"], f["rva"]),
-         "symbol": (fmt_sym(f["rva"])
-                    if f["module"].lower() == args.module.lower() else None)}
-        for f in stack_frames]
+         "symbol": (pdb_syms.symbolize(f["rva"] - 1, f["rva"])
+                    if pdb_syms is not None and
+                    f["module"].lower() == target else None)}
+        for f in raw_scan]
 
     if args.json:
         print(json.dumps(report, indent=2))
@@ -1155,10 +1896,49 @@ def print_report(report, dump, target_mod):
             print("%s: %s" % (rva, s or "(no symbol)"))
     stack = report.get("stack", [])
     if stack:
-        print("\n-- Stack scan (return-address candidates above ESP) --")
-        print("Note: x86 has no reliable unwind info; entries are candidate")
-        print("return addresses found by scanning, NOT a verified call chain.")
+        print("\n-- Call stack (crashed thread) --")
+        if not report.get("unwind_info"):
+            print("(no PDB unwind records for %s: its frames fall back to "
+                  "the frame pointer or a scan)" % (
+                      target_mod["name"] if target_mod else "the module"))
         for f in stack:
+            line = "#%02d %-13s %s" % (f["frame"], f["trust"], f["target"])
+            if f.get("image_va"):
+                line += " (IDA 0x%s)" % f["image_va"][2:]
+            if f.get("function"):
+                line += "  %s" % f["function"]
+            if f.get("unverified"):
+                line += "  [unverified]"
+            if f.get("link") in ("match", "weak") and f["trust"] == "scan":
+                line += "  [calls into #%02d]" % (f["frame"] - 1)
+            elif f.get("link") == "mismatch":
+                line += "  [call leads elsewhere: tail call or stale]"
+            if f.get("note"):
+                line += "  (%s)" % f["note"]
+            print(line)
+            if f.get("location"):
+                print("    %s" % f["location"])
+        print("Trust: context = exception registers; cfi = PDB unwind "
+              "record (exact);\nframe_pointer = EBP chain; call_to_null = "
+              "[esp] after a call to an invalid\naddress; scan = first "
+              "plausible return address (a guess -- frames after a\nscan "
+              "may be stale). Guessed frames are checked against the call "
+              "instruction\nbefore them when the module's code is available.")
+        unverified = report.get("unverified_modules") or []
+        if unverified:
+            print("WARNING: [unverified] frames in %s: the dump does not "
+                  "contain that code,\nso a stale value that merely points "
+                  "into the module could not be ruled out." %
+                  ", ".join(unverified))
+            exes = [m for m in unverified if m.lower().endswith(".exe")]
+            if exes:
+                print("Pass --image <path to %s> (the exact build the user "
+                      "ran) to verify\nthose frames; frames with PDB unwind "
+                      "records do not depend on it." % exes[0])
+    raw = report.get("raw_scan", [])
+    if raw:
+        print("\n-- Raw stack scan (diagnostic; includes stale frames) --")
+        for f in raw:
             line = "%s  %s" % (f["addr"], f["target"])
             if f["symbol"]:
                 line += "  %s" % f["symbol"]

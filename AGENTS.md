@@ -100,12 +100,22 @@ python3 scripts/analyze_minidump.py CvMiniDump_*.dmp \
   RVA via the DLL's .text raw->virtual delta (typically +0xC00).
 - Largest-free-block < a few MB in crashes.log = 32-bit address-space
   exhaustion (OOM class).
-- Stack-scan candidates for the target DLL (and any `--image` module, e.g.
-  the game exe from `/workspace/project/Sid Meier's Civilization V/`) are
-  verified as call return addresses (executable section + preceding call
-  insn); this removes most false positives (data pointers into module ranges).
+- The call stack is a real x86 unwind: the PDB's FrameData ("New FPO")
+  records cover every DLL function, /Oy Release code included, so DLL frames
+  are exact (trust `cfi`). Modules without a PDB fall back to the EBP chain
+  (`frame_pointer`; exact for /Oy- Debug builds) and then a scan (`scan`), whose
+  candidates must follow a call instruction whose target leads into the frame
+  below - this rejects stale return addresses. Pass `--image` with the exact
+  game exe (e.g. from `/workspace/project/Sid Meier's Civilization V/`) so EXE
+  frames can be verified; full-memory Debug dumps verify from the dump itself.
+  `--raw-scan` shows every candidate, stale ones included (never a chain).
 - crashes.log `???+0xfffffXXX` entries = EIP outside every module (call
-  through NULL/garbage pointer); no RVA fixup applies.
+  through NULL/garbage pointer); no RVA fixup applies. The dump still names
+  the caller: frame `call_to_null` = the return address the call left at [esp].
+- Dump-format pitfalls (fixed; keep any hand-written parser consistent):
+  MINIDUMP_THREAD's stack descriptor is DataSize @32 / Rva @36 (not 36/40);
+  full-memory dumps leave that Rva at 0 (bytes are in the Memory64 list);
+  addresses >= 2 GB are stored sign-extended in the 64-bit fields.
 - EXE address cross-reference (verified 2026-08-01): Windows exes have PE
   ImageBase 0x400000, so exe+RVA -> sub_(0x400000+RVA) in
   CivilizationV*.exe.c. The Civ5XP ELF loads at 0x08048000 (NOT 0x400000 --

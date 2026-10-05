@@ -126,7 +126,7 @@ This allows developers to immediately know:
 
 ### Using analyze_minidump.py (Linux/cross-platform)
 
-`scripts/analyze_minidump.py` analyzes crash dumps without any Windows tooling. It parses the dump (including Wine-generated dumps that strict parsers reject), auto-selects the matching DLL/PDB pair from an extracted `Release_Debug.zip`, symbolizes the faulting address (with file:line and inlined frames when `llvm-symbolizer` is available), scans the crashed thread's stack for return-address candidates, and cross-checks `crashes.log`.
+`scripts/analyze_minidump.py` analyzes crash dumps without any Windows tooling. It parses the dump (including Wine-generated dumps that strict parsers reject, and multi-GB full-memory Debug dumps), auto-selects the matching DLL/PDB pair from an extracted `Release_Debug.zip`, symbolizes the faulting address (with file:line and inlined frames when `llvm-symbolizer` is available), unwinds the crashed thread's call stack, and cross-checks `crashes.log`.
 
 **Requirements:** Python 3 only. For file:line symbolization, LLVM >= 19 (`llvm-symbolizer` found via `--llvm-path`, `$LLVM_PATH/bin`, or `$PATH`); without it, a built-in pure-Python PDB reader still resolves function names.
 
@@ -168,16 +168,37 @@ RAM: 32561 MB (17356 MB available)   System commit: 22191 / 34865 MB used (12673
 WorkingSet: 1365 MB   Commit (PagefileUsage): 1644 MB   Private: 1644 MB   VirtualSize: 2400 MB
 ```
 
+Call stack of an `eip=0` crash (a call through a NULL handler inside the game EXE), with `--image CivilizationV.exe`:
+
+```
+-- Call stack (crashed thread) --
+#00 context       0x0
+#01 call_to_null  CivilizationV.exe+0x20f75 (IDA 0x420F75)
+#02 scan          CivilizationV.exe+0x20233a (IDA 0x60233A)  [calls into #01]
+#03 scan          CivilizationV.exe+0x84823 (IDA 0x484823)  [calls into #02]
+#04 scan          CivilizationV.exe+0x426795 (IDA 0x826795)
+#05 scan          CivilizationV.exe+0xce947 (IDA 0x4CE947)  [calls into #04]
+#06 scan          CivilizationV.exe+0x4fccb5 (IDA 0x8FCCB5)  [calls into #05]
+```
+
 **Useful options:**
 - `--dll` / `--pdb` — explicit pair (e.g. a local `clang-output/Release` build); mismatches against the dump produce warnings instead of silently wrong symbols
 - `--rva 0xA57CF0` — symbolize additional addresses (repeatable)
-- `--image <CivilizationV_DX11.exe>` — provide additional module images on disk to filter their stack-scan entries down to verified call return addresses (repeatable)
+- `--image <CivilizationV_DX11.exe>` — the exact game executable the user ran (or another module image), repeatable. Optional: DLL frames come from the PDB and do not need it. It lets frames in that module be verified against its code (Release dumps do not include module code), prints IDA addresses for them, and converts crashes.log offsets for that module. The report warns when frames could not be verified and names the image to pass.
+- `--raw-scan` — additionally list every call-site-verified module address above ESP, including stale ones (diagnostic)
 - `--json` — machine-readable output for further scripting
 - `--module` — analyze a module other than `CvGameCore_Expansion2.dll`
 
 **Notes:**
-- `crashes.log` "Location (in file)" is a *file offset*, not an RVA; the tool converts it using the DLL's `.text` raw-to-virtual delta (typically `+0xC00`) and reports the true RVA. (`???+0xfffffXXX` entries mean EIP was outside every module — e.g. a call through a NULL pointer — and have no meaningful RVA.)
-- The stack listing is a conservative return-address *scan* (32-bit x86 has no unwind info), so treat entries as candidates, not a verified call chain. For the target DLL (and any `--image` module) candidates are additionally verified to land in an executable section directly after a call instruction, which removes most false positives — pointers into data sections that merely happen to fall inside a module's address range.
+- `crashes.log` "Location (in file)" is a *file offset*, not an RVA; the tool converts it using the DLL's `.text` raw-to-virtual delta (typically `+0xC00`) and reports the true RVA. (`???+0xfffffXXX` entries mean EIP was outside every module — e.g. a call through a NULL pointer — and have no meaningful RVA; the dump's call stack still identifies the caller, see `call_to_null` below.)
+- The call stack is a real x86 unwind. Our PDBs carry FrameData ("New FPO") unwind records for every function — clang-cl + lld emit them for frame-pointer-omitted Release code too — so frames inside `CvGameCore_Expansion2.dll` are exact, as in WinDbg. Each frame is labelled with how it was found:
+  - `context` — the exception's registers
+  - `cfi` — the PDB unwind record (exact)
+  - `frame_pointer` — the EBP chain (Debug builds use `/Oy-`, so this is exact for them even without the PDB)
+  - `call_to_null` — EIP was outside every module (typically 0): the call that jumped there left its return address at `[esp]`, which is the caller
+  - `scan` — no unwind data (the game EXE, drivers): the first plausible return address above ESP. A guess, but checked against the code: the value must follow a call instruction, and a direct call must lead into the function below (`[calls into #NN]`). Values left behind by earlier, deeper calls fail that check and are skipped.
+- `[unverified]` marks guessed frames in a module whose code is not in the dump. Pass `--image` for it if you have the exact build; otherwise treat those frames as hints.
+- `--raw-scan` lists every return-address-like value above ESP, stale ones included — useful to see what a frame-by-frame unwind skipped, never as a call chain.
 - A largest-free-block figure below a few MB flags memory exhaustion — see such crashes as OOM, not as bugs at the faulting instruction. The tool distinguishes **Sub2G (below-2GB) exhaustion** (large blocks still free above 2 GB — the process is LAA, so only allocations bound to below-2GB addresses fail, e.g. non-LAA-safe EXE/library code) from full 32-bit VA exhaustion.
 - Windows 8.1+/10+ dumps carry `SystemMemoryInfoStream` (21) and `ProcessVmCountersStream` (22); the tool prints system commit limit/usage and the process working set/commit from them. This rules commit-limit exhaustion in or out directly from the dump — crashes.log alone records only the VA scan (proven necessary by issue #13262).
 
