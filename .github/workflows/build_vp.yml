@@ -470,7 +470,9 @@ jobs:
           set SDKLibPath=C:\Program Files (x86)\Microsoft SDKs\Windows\v%SDKVersion%\Lib
           echo SDKLibPath is set to: %SDKLibPath%
           
-          call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars32.bat"
+          for /f "usebackq delims=" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath`) do set "VSINSTALL=%%i"
+          echo VS install: %VSINSTALL%
+          call "%VSINSTALL%\VC\Auxiliary\Build\vcvars32.bat"
           set INCLUDE=%IncludePath%;%INCLUDE%
           set LIB=%SDKLib%;%LIB%
           set LIBPATH=%SDKLibPath%;%LIBPATH%
@@ -507,7 +509,9 @@ jobs:
           set SDKLibPath=C:\Program Files (x86)\Microsoft SDKs\Windows\v%SDKVersion%\Lib
           echo SDKLibPath is set to: %SDKLibPath%
           
-          call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars32.bat"
+          for /f "usebackq delims=" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath`) do set "VSINSTALL=%%i"
+          echo VS install: %VSINSTALL%
+          call "%VSINSTALL%\VC\Auxiliary\Build\vcvars32.bat"
           set INCLUDE=%IncludePath%;%INCLUDE%
           set LIB=%SDKLib%;%LIB%
           set LIBPATH=%SDKLibPath%;%LIBPATH%
