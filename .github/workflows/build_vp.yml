@@ -494,8 +494,22 @@ jobs:
             type msvc_debug_build.log
           )
 
+      - name: Start link sampler
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force diag | Out-Null
+          Invoke-WebRequest -Uri https://download.sysinternals.com/files/Procdump.zip -OutFile diag\Procdump.zip
+          Expand-Archive diag\Procdump.zip -DestinationPath diag\procdump
+          $sa = @('-NoProfile', '-File', "$PWD\.github\ci_sampler.ps1", '-Csv', "$PWD\diag\samples.csv",
+                    '-DumpDir', "$PWD\diag\dumps", '-ProcDump', "$PWD\diag\procdump\procdump.exe",
+                    '-StopFile', "$PWD\diag\stop", '-IntervalS', '10', '-FlatS', '120')
+          $p = Start-Process pwsh -ArgumentList $sa -WindowStyle Hidden -PassThru
+          "sampler pid $($p.Id)"
+          [System.Environment]::OSVersion.VersionString
+          (Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion' | Select-Object ProductName, DisplayVersion, CurrentBuild, UBR | Format-List | Out-String)
+
       - name: Setup Visual Studio environment and build msvc release
-        timeout-minutes: 60
+        timeout-minutes: 15
         shell: cmd
         run: |
           set SDKVersion=7.1
@@ -532,6 +546,26 @@ jobs:
             devenv VoxPopuli_vs2013.sln /build Release /out msvc_release_build.log
             type msvc_release_build.log
           )
+
+      - name: Stop link sampler and print samples
+        if: always()
+        shell: pwsh
+        run: |
+          Get-Process -Name link, Tracker, MSBuild, cl, mspdbsrv -ErrorAction SilentlyContinue | Format-Table Id, Name, CPU, @{n='PrivMB';e={[math]::Round($_.PrivateMemorySize64/1MB,1)}} -AutoSize | Out-String
+          New-Item -ItemType File -Force diag\stop | Out-Null
+          Start-Sleep -Seconds 15
+          Get-Content diag\samples.csv
+          Get-ChildItem diag\dumps -ErrorAction SilentlyContinue | Format-Table Name, Length -AutoSize | Out-String
+
+      - name: Upload link diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: link-diag
+          path: |
+            diag/samples.csv
+            diag/dumps/
+            msvc_release_msbuild.log
 
       - name: Analyze build warnings and errors
         shell: pwsh
