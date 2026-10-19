@@ -16,7 +16,7 @@
   * Open the file `Community-Patch-DLL\CvGameCoreDLLUtil\include\CustomModsGlobal.h`
   * Remove everything **before** the `#` in this line: `// #define MOD_GLOBAL_MAX_MAJOR_CIVS (43)`
   * Save the file.
-* If building the Release version, Whole Program Optimization is enabled, which will cause a several minute delay at the end of pass 1, but the compiler is still functioning!
+* If building the Release version, Whole Program Optimization is enabled, which will cause a several minute delay at the end of pass 1, but the compiler is still functioning! (`link.exe` keeps one CPU core busy and grows to about 700 MB; see the [Build Toolchain Guide](docs/build-toolchain.md#build-hangs-at-end-of-pass-1-release-builds) if it sits idle instead.)
   * You can disable Whole Program Optimization locally under Project > VoxPopuli Properties > C/C++ > Optimization > Whole Program Optimization (set it to No)
 * If the compiler stops responding at the end of pass 2, try deleting the hidden .vs folder as well as the BuildOutput/BuildTemp folders in the project directory, then reopening the solution file.
 * There are also clang-based build scripts available (`build_vp_clang.py` for local dev, `build_vp_clang_sdk.py` for CI). See the [Build Toolchain Guide](docs/build-toolchain.md#alternative-clang-build) for details.

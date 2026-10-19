@@ -114,7 +114,9 @@ This typically means VS2010 SP1 is not installed. The MSBuild integration files 
 You have VS2008 installed but not SP1. The base VS2008 release lacks TR1 headers. Ensure you installed the "with SP1" version or apply the SP1 update.
 
 ### Build hangs at end of pass 1 (Release builds)
-This is normal when Whole Program Optimization is enabled. The compiler is still working—it can take several minutes. You can disable WPO locally under Project > Properties > C/C++ > Optimization.
+A pause after `Generating code` is normal when Whole Program Optimization is enabled: link-time code generation takes about 5 minutes on a recent CPU. During that time `link.exe` uses one CPU core (in Task Manager that is only 100 / number-of-cores percent) and its memory grows to about 700 MB.
+
+If `link.exe` instead sits at 0% CPU for more than a minute, it is not generating code. That is what `link.exe` looks like when it is blocked writing its output because nothing is reading it: at about 180-190 MB in pass 1 when `/VERBOSE` is on, or at about 650 MB after `Generating code`. Release builds no longer pass `/VERBOSE` to the linker (it printed about 40 MB of library-search and "Discarded" lines); if you have it enabled locally under Project > Properties > Linker > General > Show Progress, set that back to "Not Set". You can disable WPO locally under Project > Properties > C/C++ > Optimization.
 
 ### Build stops responding at end of pass 2
 Delete the hidden `.vs` folder and the `BuildOutput`/`BuildTemp` folders, then reopen the solution.
