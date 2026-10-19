@@ -384,7 +384,7 @@ jobs:
          needs.detect-changes.outputs.build-scripts == 'true' || 
          needs.detect-changes.outputs.workflow == 'true' || 
          needs.detect-changes.outputs.dependencies == 'true')))
-    runs-on: windows-2022
+    runs-on: windows-2025
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -493,6 +493,7 @@ jobs:
           )
 
       - name: Setup Visual Studio environment and build msvc release
+        timeout-minutes: 60
         shell: cmd
         run: |
           set SDKVersion=7.1
