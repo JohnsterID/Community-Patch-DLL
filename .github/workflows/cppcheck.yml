@@ -6,6 +6,10 @@ on:
 
 env:
   CPPCHECK_VERSION: "2.22.0"
+  # cppcheck commit applied on top of the release; also names the caches (CPPCHECK_BUILD)
+  # 7828b1be: #15132, build-dir results discarded on the second run when includes load out of order
+  CPPCHECK_FIX: "7828b1be8a8e71ddc1916894dc698c792cb47436"
+  CPPCHECK_BUILD: "2.22.0-15132"
 
 jobs:
   detect-changes:
@@ -53,7 +57,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: /tmp/cppcheck-build
-          key: cppcheck-${{ env.CPPCHECK_VERSION }}
+          key: cppcheck-${{ env.CPPCHECK_BUILD }}
 
       - name: Build cppcheck
         if: steps.cache-cppcheck.outputs.cache-hit != 'true'
@@ -62,6 +66,7 @@ jobs:
           git clone https://github.com/danmar/cppcheck.git
           cd cppcheck 
           git checkout ${{ env.CPPCHECK_VERSION }}
+          git diff ${{ env.CPPCHECK_FIX }}^ ${{ env.CPPCHECK_FIX }} -- lib/preprocessor.cpp | git apply
           make MATCHCOMPILER=yes FILESDIR=/usr/share/cppcheck HAVE_RULES=yes CXXFLAGS="-O2 -DNDEBUG -Wall -Wno-sign-compare -Wno-unused-function"
           mkdir -p ../cppcheck-build
           cp cppcheck ../cppcheck-build/
@@ -107,17 +112,17 @@ jobs:
       - name: Make build-dir
         run: mkdir build-dir
 
-      # cppcheck 2.22.0 only reuses a file's result from the second analysis on (the first
-      # one, into an empty build-dir, writes a hash computed without the include list), so the
-      # build-dir is saved after every job, timed out or not, and the next job picks it up.
+      # The build-dir is saved after every job, timed out or not, and the next job picks it up.
+      # Plain 2.22.0 never reuses a first analysis (headers hashed in load order, #15132);
+      # CPPCHECK_FIX makes the retry skip every file the analysis job finished.
       - name: Restore build-dir
         uses: actions/cache/restore@v4
         with:
           path: ./build-dir/
-          key: build-dir-${{ env.CPPCHECK_VERSION }}-release-${{ github.sha }}
+          key: build-dir-${{ env.CPPCHECK_BUILD }}-release-${{ github.sha }}
           restore-keys: |
-            build-dir-${{ env.CPPCHECK_VERSION }}-release-${{ github.sha }}-
-            build-dir-${{ env.CPPCHECK_VERSION }}-release-
+            build-dir-${{ env.CPPCHECK_BUILD }}-release-${{ github.sha }}-
+            build-dir-${{ env.CPPCHECK_BUILD }}-release-
 
       - name: Determine number of CPU threads
         id: cpu-info
@@ -146,7 +151,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: ./build-dir/
-          key: build-dir-${{ env.CPPCHECK_VERSION }}-release-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}
+          key: build-dir-${{ env.CPPCHECK_BUILD }}-release-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}
 
       - name: Check timeout status
         id: check-timeout
@@ -192,17 +197,17 @@ jobs:
       - name: Make build-dir
         run: mkdir build-dir
 
-      # cppcheck 2.22.0 only reuses a file's result from the second analysis on (the first
-      # one, into an empty build-dir, writes a hash computed without the include list), so the
-      # build-dir is saved after every job, timed out or not, and the next job picks it up.
+      # The build-dir is saved after every job, timed out or not, and the next job picks it up.
+      # Plain 2.22.0 never reuses a first analysis (headers hashed in load order, #15132);
+      # CPPCHECK_FIX makes the retry skip every file the analysis job finished.
       - name: Restore build-dir
         uses: actions/cache/restore@v4
         with:
           path: ./build-dir/
-          key: build-dir-${{ env.CPPCHECK_VERSION }}-release-${{ github.sha }}
+          key: build-dir-${{ env.CPPCHECK_BUILD }}-release-${{ github.sha }}
           restore-keys: |
-            build-dir-${{ env.CPPCHECK_VERSION }}-release-${{ github.sha }}-
-            build-dir-${{ env.CPPCHECK_VERSION }}-release-
+            build-dir-${{ env.CPPCHECK_BUILD }}-release-${{ github.sha }}-
+            build-dir-${{ env.CPPCHECK_BUILD }}-release-
 
       - name: Determine number of CPU threads
         id: cpu-info
@@ -231,7 +236,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: ./build-dir/
-          key: build-dir-${{ env.CPPCHECK_VERSION }}-release-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}
+          key: build-dir-${{ env.CPPCHECK_BUILD }}-release-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}
 
       - name: Upload analysis artifacts
         if: always()
