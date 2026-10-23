@@ -107,13 +107,17 @@ jobs:
       - name: Make build-dir
         run: mkdir build-dir
 
-      - uses: actions/cache@v4
-        id: cache-build-dir
+      # cppcheck 2.22.0 only reuses a file's result from the second analysis on (the first
+      # one, into an empty build-dir, writes a hash computed without the include list), so the
+      # build-dir is saved after every job, timed out or not, and the next job picks it up.
+      - name: Restore build-dir
+        uses: actions/cache/restore@v4
         with:
           path: ./build-dir/
-          key: build-dir-${{ hashFiles('**/*.*') }}
+          key: build-dir-${{ env.CPPCHECK_VERSION }}-release-${{ github.sha }}
           restore-keys: |
-            build-dir-
+            build-dir-${{ env.CPPCHECK_VERSION }}-release-${{ github.sha }}-
+            build-dir-${{ env.CPPCHECK_VERSION }}-release-
 
       - name: Determine number of CPU threads
         id: cpu-info
@@ -124,6 +128,7 @@ jobs:
         run: |
           timeout --signal=SIGTERM 350m cppcheck -j ${{ steps.cpu-info.outputs.cpu_count }} \
             --project=VoxPopuli_vs2013.sln \
+            --project-configuration="Release|Win32" \
             --check-level=exhaustive \
             --max-ctu-depth=10 \
             --cppcheck-build-dir=build-dir \
@@ -135,6 +140,13 @@ jobs:
             --platform=win32W \
             --xml 2> cppcheck.xml || exit_code=$?
           echo "exit_code=${exit_code:-0}" >> $GITHUB_ENV
+
+      - name: Save build-dir
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: ./build-dir/
+          key: build-dir-${{ env.CPPCHECK_VERSION }}-release-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}
 
       - name: Check timeout status
         id: check-timeout
@@ -180,13 +192,17 @@ jobs:
       - name: Make build-dir
         run: mkdir build-dir
 
-      - uses: actions/cache@v4
-        id: cache-build-dir
+      # cppcheck 2.22.0 only reuses a file's result from the second analysis on (the first
+      # one, into an empty build-dir, writes a hash computed without the include list), so the
+      # build-dir is saved after every job, timed out or not, and the next job picks it up.
+      - name: Restore build-dir
+        uses: actions/cache/restore@v4
         with:
           path: ./build-dir/
-          key: build-dir-${{ hashFiles('**/*.*') }}
+          key: build-dir-${{ env.CPPCHECK_VERSION }}-release-${{ github.sha }}
           restore-keys: |
-            build-dir-
+            build-dir-${{ env.CPPCHECK_VERSION }}-release-${{ github.sha }}-
+            build-dir-${{ env.CPPCHECK_VERSION }}-release-
 
       - name: Determine number of CPU threads
         id: cpu-info
@@ -198,6 +214,7 @@ jobs:
         run: |
           timeout --signal=SIGTERM 350m cppcheck -j ${{ steps.cpu-info.outputs.cpu_count }} \
             --project=VoxPopuli_vs2013.sln \
+            --project-configuration="Release|Win32" \
             --check-level=exhaustive \
             --max-ctu-depth=10 \
             --cppcheck-build-dir=build-dir \
@@ -208,6 +225,13 @@ jobs:
             --inline-suppr \
             --platform=win32W \
             --xml 2> cppcheck.xml || echo "cppcheck exit code: $?"
+
+      - name: Save build-dir
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: ./build-dir/
+          key: build-dir-${{ env.CPPCHECK_VERSION }}-release-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}
 
       - name: Upload analysis artifacts
         if: always()
