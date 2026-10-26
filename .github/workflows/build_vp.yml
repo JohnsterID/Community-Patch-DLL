@@ -159,23 +159,23 @@ jobs:
       - name: Install SDKs
         run: |
           echo "Installing SDKs..."
-          Start-Process -FilePath ".\SDK7\Setup\WinSDK\WinSDK_x86.msi" -ArgumentList "/qn" -Wait
-          Start-Process -FilePath ".\SDK7\Setup\WinSDKBuild\WinSDKBuild_x86.msi" -ArgumentList "/qn" -Wait
-          Start-Process -FilePath ".\SDK7\Setup\WinSDKInterop\WinSDKInterop_x86.msi" -ArgumentList "/qn" -Wait
-          Start-Process -FilePath ".\SDK7\Setup\WinSDKTools\WinSDKTools_x86.msi" -ArgumentList "/qn" -Wait
-          Start-Process -FilePath ".\SDK7\Setup\WinSDKWin32Tools\WinSDKWin32Tools_x86.msi" -ArgumentList "/qn" -Wait
-          Start-Process -FilePath ".\SDK7\Setup\vc_stdx86\vc_stdx86.msi" -ArgumentList "/qn" -Wait
-          Start-Process -FilePath ".\SDK7\Setup\vc_stdamd64\vc_stdamd64.msi" -ArgumentList "/qn" -Wait
-          Start-Process -FilePath ".\SDK7\Setup\winsdk_intellidocs\winsdk_intellidocs.msi" -ArgumentList "/qn" -Wait
-          Start-Process -FilePath ".\SDK7\Setup\WinSDKNetFxTools\WinSDK_nfxtoolsm_x86.msi" -ArgumentList "/qn" -Wait
-          Start-Process -FilePath ".\SDK7.1\Setup\WinSDK\WinSDK_x86.msi" -ArgumentList "/qn" -Wait
-          Start-Process -FilePath ".\SDK7.1\Setup\WinSDKBuild\WinSDKBuild_x86.msi" -ArgumentList "/qn" -Wait
-          Start-Process -FilePath ".\SDK7.1\Setup\WinSDKInterop\WinSDKInterop_x86.msi" -ArgumentList "/qn" -Wait
-          Start-Process -FilePath ".\SDK7.1\Setup\WinSDKTools\WinSDKTools_x86.msi" -ArgumentList "/qn" -Wait
-          Start-Process -FilePath ".\SDK7.1\Setup\WinSDKWin32Tools\WinSDKWin32Tools_x86.msi" -ArgumentList "/qn" -Wait
-          Start-Process -FilePath ".\SDK7.1\Setup\vc_stdx86\vc_stdx86.msi" -ArgumentList "/qn" -Wait
-          Start-Process -FilePath ".\SDK7.1\Setup\vc_stdamd64\vc_stdamd64.msi" -ArgumentList "/qn" -Wait
-          Start-Process -FilePath ".\SDK7.1\Setup\WinSDKNetFxTools\WinSDK_nfxtoolsm_x86.msi" -ArgumentList "/qn" -Wait
+          Start-Process -FilePath ".\SDK7\Setup\WinSDK\WinSDK_x86.msi" -ArgumentList "/qn" -Wait -PassThru | ForEach-Object { echo "exit $($_.ExitCode)" }
+          Start-Process -FilePath ".\SDK7\Setup\WinSDKBuild\WinSDKBuild_x86.msi" -ArgumentList "/qn" -Wait -PassThru | ForEach-Object { echo "exit $($_.ExitCode)" }
+          Start-Process -FilePath ".\SDK7\Setup\WinSDKInterop\WinSDKInterop_x86.msi" -ArgumentList "/qn" -Wait -PassThru | ForEach-Object { echo "exit $($_.ExitCode)" }
+          Start-Process -FilePath ".\SDK7\Setup\WinSDKTools\WinSDKTools_x86.msi" -ArgumentList "/qn" -Wait -PassThru | ForEach-Object { echo "exit $($_.ExitCode)" }
+          Start-Process -FilePath ".\SDK7\Setup\WinSDKWin32Tools\WinSDKWin32Tools_x86.msi" -ArgumentList "/qn" -Wait -PassThru | ForEach-Object { echo "exit $($_.ExitCode)" }
+          Start-Process -FilePath ".\SDK7\Setup\vc_stdx86\vc_stdx86.msi" -ArgumentList "/qn" -Wait -PassThru | ForEach-Object { echo "exit $($_.ExitCode)" }
+          Start-Process -FilePath ".\SDK7\Setup\vc_stdamd64\vc_stdamd64.msi" -ArgumentList "/qn" -Wait -PassThru | ForEach-Object { echo "exit $($_.ExitCode)" }
+          Start-Process -FilePath ".\SDK7\Setup\winsdk_intellidocs\winsdk_intellidocs.msi" -ArgumentList "/qn" -Wait -PassThru | ForEach-Object { echo "exit $($_.ExitCode)" }
+          Start-Process -FilePath ".\SDK7\Setup\WinSDKNetFxTools\WinSDK_nfxtoolsm_x86.msi" -ArgumentList "/qn" -Wait -PassThru | ForEach-Object { echo "exit $($_.ExitCode)" }
+          Start-Process -FilePath ".\SDK7.1\Setup\WinSDK\WinSDK_x86.msi" -ArgumentList "/qn" -Wait -PassThru | ForEach-Object { echo "exit $($_.ExitCode)" }
+          Start-Process -FilePath ".\SDK7.1\Setup\WinSDKBuild\WinSDKBuild_x86.msi" -ArgumentList "/qn" -Wait -PassThru | ForEach-Object { echo "exit $($_.ExitCode)" }
+          Start-Process -FilePath ".\SDK7.1\Setup\WinSDKInterop\WinSDKInterop_x86.msi" -ArgumentList "/qn" -Wait -PassThru | ForEach-Object { echo "exit $($_.ExitCode)" }
+          Start-Process -FilePath ".\SDK7.1\Setup\WinSDKTools\WinSDKTools_x86.msi" -ArgumentList "/qn" -Wait -PassThru | ForEach-Object { echo "exit $($_.ExitCode)" }
+          Start-Process -FilePath ".\SDK7.1\Setup\WinSDKWin32Tools\WinSDKWin32Tools_x86.msi" -ArgumentList "/qn" -Wait -PassThru | ForEach-Object { echo "exit $($_.ExitCode)" }
+          Start-Process -FilePath ".\SDK7.1\Setup\vc_stdx86\vc_stdx86.msi" -ArgumentList "/qn" -Wait -PassThru | ForEach-Object { echo "exit $($_.ExitCode)" }
+          Start-Process -FilePath ".\SDK7.1\Setup\vc_stdamd64\vc_stdamd64.msi" -ArgumentList "/qn" -Wait -PassThru | ForEach-Object { echo "exit $($_.ExitCode)" }
+          Start-Process -FilePath ".\SDK7.1\Setup\WinSDKNetFxTools\WinSDK_nfxtoolsm_x86.msi" -ArgumentList "/qn" -Wait -PassThru | ForEach-Object { echo "exit $($_.ExitCode)" }
           echo "SDKs installation complete."
 
       - name: Clang version check
@@ -390,23 +390,23 @@ jobs:
       - name: Install SDKs
         run: |
           echo "Installing SDKs..."
-          Start-Process -FilePath ".\SDK7\Setup\WinSDK\WinSDK_x86.msi" -ArgumentList "/qn" -Wait
-          Start-Process -FilePath ".\SDK7\Setup\WinSDKBuild\WinSDKBuild_x86.msi" -ArgumentList "/qn" -Wait
-          Start-Process -FilePath ".\SDK7\Setup\WinSDKInterop\WinSDKInterop_x86.msi" -ArgumentList "/qn" -Wait
-          Start-Process -FilePath ".\SDK7\Setup\WinSDKTools\WinSDKTools_x86.msi" -ArgumentList "/qn" -Wait
-          Start-Process -FilePath ".\SDK7\Setup\WinSDKWin32Tools\WinSDKWin32Tools_x86.msi" -ArgumentList "/qn" -Wait
-          Start-Process -FilePath ".\SDK7\Setup\vc_stdx86\vc_stdx86.msi" -ArgumentList "/qn" -Wait
-          Start-Process -FilePath ".\SDK7\Setup\vc_stdamd64\vc_stdamd64.msi" -ArgumentList "/qn" -Wait
-          Start-Process -FilePath ".\SDK7\Setup\winsdk_intellidocs\winsdk_intellidocs.msi" -ArgumentList "/qn" -Wait
-          Start-Process -FilePath ".\SDK7\Setup\WinSDKNetFxTools\WinSDK_nfxtoolsm_x86.msi" -ArgumentList "/qn" -Wait
-          Start-Process -FilePath ".\SDK7.1\Setup\WinSDK\WinSDK_x86.msi" -ArgumentList "/qn" -Wait
-          Start-Process -FilePath ".\SDK7.1\Setup\WinSDKBuild\WinSDKBuild_x86.msi" -ArgumentList "/qn" -Wait
-          Start-Process -FilePath ".\SDK7.1\Setup\WinSDKInterop\WinSDKInterop_x86.msi" -ArgumentList "/qn" -Wait
-          Start-Process -FilePath ".\SDK7.1\Setup\WinSDKTools\WinSDKTools_x86.msi" -ArgumentList "/qn" -Wait
-          Start-Process -FilePath ".\SDK7.1\Setup\WinSDKWin32Tools\WinSDKWin32Tools_x86.msi" -ArgumentList "/qn" -Wait
-          Start-Process -FilePath ".\SDK7.1\Setup\vc_stdx86\vc_stdx86.msi" -ArgumentList "/qn" -Wait
-          Start-Process -FilePath ".\SDK7.1\Setup\vc_stdamd64\vc_stdamd64.msi" -ArgumentList "/qn" -Wait
-          Start-Process -FilePath ".\SDK7.1\Setup\WinSDKNetFxTools\WinSDK_nfxtoolsm_x86.msi" -ArgumentList "/qn" -Wait
+          Start-Process -FilePath ".\SDK7\Setup\WinSDK\WinSDK_x86.msi" -ArgumentList "/qn" -Wait -PassThru | ForEach-Object { echo "exit $($_.ExitCode)" }
+          Start-Process -FilePath ".\SDK7\Setup\WinSDKBuild\WinSDKBuild_x86.msi" -ArgumentList "/qn" -Wait -PassThru | ForEach-Object { echo "exit $($_.ExitCode)" }
+          Start-Process -FilePath ".\SDK7\Setup\WinSDKInterop\WinSDKInterop_x86.msi" -ArgumentList "/qn" -Wait -PassThru | ForEach-Object { echo "exit $($_.ExitCode)" }
+          Start-Process -FilePath ".\SDK7\Setup\WinSDKTools\WinSDKTools_x86.msi" -ArgumentList "/qn" -Wait -PassThru | ForEach-Object { echo "exit $($_.ExitCode)" }
+          Start-Process -FilePath ".\SDK7\Setup\WinSDKWin32Tools\WinSDKWin32Tools_x86.msi" -ArgumentList "/qn" -Wait -PassThru | ForEach-Object { echo "exit $($_.ExitCode)" }
+          Start-Process -FilePath ".\SDK7\Setup\vc_stdx86\vc_stdx86.msi" -ArgumentList "/qn" -Wait -PassThru | ForEach-Object { echo "exit $($_.ExitCode)" }
+          Start-Process -FilePath ".\SDK7\Setup\vc_stdamd64\vc_stdamd64.msi" -ArgumentList "/qn" -Wait -PassThru | ForEach-Object { echo "exit $($_.ExitCode)" }
+          Start-Process -FilePath ".\SDK7\Setup\winsdk_intellidocs\winsdk_intellidocs.msi" -ArgumentList "/qn" -Wait -PassThru | ForEach-Object { echo "exit $($_.ExitCode)" }
+          Start-Process -FilePath ".\SDK7\Setup\WinSDKNetFxTools\WinSDK_nfxtoolsm_x86.msi" -ArgumentList "/qn" -Wait -PassThru | ForEach-Object { echo "exit $($_.ExitCode)" }
+          Start-Process -FilePath ".\SDK7.1\Setup\WinSDK\WinSDK_x86.msi" -ArgumentList "/qn" -Wait -PassThru | ForEach-Object { echo "exit $($_.ExitCode)" }
+          Start-Process -FilePath ".\SDK7.1\Setup\WinSDKBuild\WinSDKBuild_x86.msi" -ArgumentList "/qn" -Wait -PassThru | ForEach-Object { echo "exit $($_.ExitCode)" }
+          Start-Process -FilePath ".\SDK7.1\Setup\WinSDKInterop\WinSDKInterop_x86.msi" -ArgumentList "/qn" -Wait -PassThru | ForEach-Object { echo "exit $($_.ExitCode)" }
+          Start-Process -FilePath ".\SDK7.1\Setup\WinSDKTools\WinSDKTools_x86.msi" -ArgumentList "/qn" -Wait -PassThru | ForEach-Object { echo "exit $($_.ExitCode)" }
+          Start-Process -FilePath ".\SDK7.1\Setup\WinSDKWin32Tools\WinSDKWin32Tools_x86.msi" -ArgumentList "/qn" -Wait -PassThru | ForEach-Object { echo "exit $($_.ExitCode)" }
+          Start-Process -FilePath ".\SDK7.1\Setup\vc_stdx86\vc_stdx86.msi" -ArgumentList "/qn" -Wait -PassThru | ForEach-Object { echo "exit $($_.ExitCode)" }
+          Start-Process -FilePath ".\SDK7.1\Setup\vc_stdamd64\vc_stdamd64.msi" -ArgumentList "/qn" -Wait -PassThru | ForEach-Object { echo "exit $($_.ExitCode)" }
+          Start-Process -FilePath ".\SDK7.1\Setup\WinSDKNetFxTools\WinSDK_nfxtoolsm_x86.msi" -ArgumentList "/qn" -Wait -PassThru | ForEach-Object { echo "exit $($_.ExitCode)" }
           echo "SDKs installation complete."
 
       - name: Copy DLLs to v90 folders # Bypass Microsoft.Cpp.Win32.Targets(57,5): error MSB6006: "CL.exe" exited with code -1073741515.
