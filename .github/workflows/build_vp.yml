@@ -432,99 +432,27 @@ jobs:
         run: |
           # PowerShell script to set registry key
           $regPath32 = "HKLM:\SOFTWARE\Wow6432Node\Microsoft\Microsoft SDKs\Windows"
-          # Path to installed SDK
-          $newInstallFolder = "C:\Program Files (x86)\Microsoft SDKs\Windows\v7.1" # 7.1 is required to bypass error. 7.0 doesn't work.
+          # Path to installed SDK, with the trailing backslash: the v90 props append "lib" and "include" to it
+          $newInstallFolder = "C:\Program Files (x86)\Microsoft SDKs\Windows\v7.1\" # 7.1 is required to bypass error. 7.0 doesn't work.
           Set-ItemProperty -Path $regPath32 -Name "CurrentInstallFolder" -Value $newInstallFolder
           Write-Output "Registry key set successfully."
-
-      - name: Copy all SDK library files to source directory # TODO fix PATH
-        run: |
-          $SDKLib = "C:\Program Files (x86)\Microsoft SDKs\Windows\v7.1\Lib"
-          $SourceLib = Join-Path $env:GITHUB_WORKSPACE "CvGameCoreDLL_Expansion2"
-          Write-Output "SDKLib path: $SDKLib"
-          Write-Output "SourceLib path: $SourceLib"
-          
-          if (Test-Path $SDKLib) {
-            Copy-Item -Path "$SDKLib\*" -Destination $SourceLib -Recurse -Force
-            Write-Output "All SDK library files copied successfully."
-          } else {
-            Write-Output "SDK library path not found: $SDKLib"
-          }
-        shell: pwsh
 
       - name: Setup Visual Studio environment and build msvc debug
         shell: cmd
         run: |
-          set SDKVersion=7.1
-          echo SDKVersion is set to: %SDKVersion%
-          
-          set IncludePath=C:\Program Files (x86)\Microsoft SDKs\Windows\v%SDKVersion%\Include;C:\Program Files (x86)\Microsoft Visual Studio 9.0\VC\include
-          echo IncludePath is set to: %IncludePath%
-          
-          set SDKLib=C:\Program Files (x86)\Microsoft SDKs\Windows\v%SDKVersion%\Lib
-          echo SDKLib is set to: %SDKLib%
-          set SDKLibPath=C:\Program Files (x86)\Microsoft SDKs\Windows\v%SDKVersion%\Lib
-          echo SDKLibPath is set to: %SDKLibPath%
-          
-          call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars32.bat"
-          set INCLUDE=%IncludePath%;%INCLUDE%
-          set LIB=%SDKLib%;%LIB%
-          set LIBPATH=%SDKLibPath%;%LIBPATH%
-          
-          REM Display LIB for verification
-          echo LIB is set to: %LIB%
-          REM Display LIBPATH for verification
-          echo LIBPATH is set to: %LIBPATH%
-          
-          REM Try MSBuild first (with automatic GitHub problem matchers)
-          echo "Attempting MSBuild with automatic problem detection..."
+          for /f "usebackq delims=" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath`) do set "VSINSTALL=%%i"
+          call "%VSINSTALL%\VC\Auxiliary\Build\vcvars32.bat"
           msbuild VoxPopuli_vs2013.sln /p:Configuration=Debug /p:Platform=Win32 /v:normal /flp:logfile=msvc_debug_msbuild.log;verbosity=normal
-          if %ERRORLEVEL% EQU 0 (
-            echo "MSBuild succeeded! Using MSBuild output."
-            type msvc_debug_msbuild.log
-          ) else (
-            echo "MSBuild failed, falling back to devenv..."
-            devenv VoxPopuli_vs2013.sln /build Debug /out msvc_debug_build.log
-            type msvc_debug_build.log
-          )
 
       - name: Setup Visual Studio environment and build msvc release
         shell: cmd
         run: |
-          set SDKVersion=7.1
-          echo SDKVersion is set to: %SDKVersion%
-          
-          set IncludePath=C:\Program Files (x86)\Microsoft SDKs\Windows\v%SDKVersion%\Include;C:\Program Files (x86)\Microsoft Visual Studio 9.0\VC\include
-          echo IncludePath is set to: %IncludePath%
-          
-          set SDKLib=C:\Program Files (x86)\Microsoft SDKs\Windows\v%SDKVersion%\Lib
-          echo SDKLib is set to: %SDKLib%
-          set SDKLibPath=C:\Program Files (x86)\Microsoft SDKs\Windows\v%SDKVersion%\Lib
-          echo SDKLibPath is set to: %SDKLibPath%
-          
-          call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars32.bat"
-          set INCLUDE=%IncludePath%;%INCLUDE%
-          set LIB=%SDKLib%;%LIB%
-          set LIBPATH=%SDKLibPath%;%LIBPATH%
-          
-          REM Display LIB for verification
-          echo LIB is set to: %LIB%
-          REM Display LIBPATH for verification
-          echo LIBPATH is set to: %LIBPATH%
-          
-          REM Try MSBuild first (with automatic GitHub problem matchers)
-          echo "Attempting MSBuild with automatic problem detection..."
+          for /f "usebackq delims=" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath`) do set "VSINSTALL=%%i"
+          call "%VSINSTALL%\VC\Auxiliary\Build\vcvars32.bat"
           msbuild VoxPopuli_vs2013.sln /p:Configuration=Release /p:Platform=Win32 /v:normal /flp:logfile=msvc_release_msbuild.log;verbosity=normal
-          if %ERRORLEVEL% EQU 0 (
-            echo "MSBuild succeeded! Using MSBuild output."
-            type msvc_release_msbuild.log
-          ) else (
-            echo "MSBuild failed, falling back to devenv..."
-            devenv VoxPopuli_vs2013.sln /build Release /out msvc_release_build.log
-            type msvc_release_build.log
-          )
 
       - name: Analyze build warnings and errors
+        if: always()
         shell: pwsh
         run: |
           echo "Analyzing build logs for warnings and errors..."
