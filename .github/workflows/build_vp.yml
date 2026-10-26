@@ -112,15 +112,10 @@ jobs:
         id: cache
         with:
           path: |
-            ./wget
             ./SDK7
             ./SDK7.1
-          key: ${{ runner.os }}-sdks-wget-1.21.3-sdk7.0sp1-sdk7.1-v1
-          restore-keys: |
-            ${{ runner.os }}-sdks-wget-1.21.3-sdk7.0sp1-sdk7.1-
-            ${{ runner.os }}-sdks-
+          key: ${{ runner.os }}-sdks-sdk7.0sp1-sdk7.1-setup-v2
 
-      # Cache key and paths unchanged (./wget included) so the existing SDK cache still matches
       - name: Download Windows SDK 7.0 SP1 and 7.1
         if: steps.cache.outputs.cache-hit != 'true'
         timeout-minutes: 30
@@ -131,8 +126,9 @@ jobs:
           curl.exe -L --fail --retry 2 --retry-all-errors --connect-timeout 60 --speed-limit 1024 --speed-time 120 --no-progress-meter -o ./sdk71.iso https://download.microsoft.com/download/F/1/0/F10113F5-B750-4969-A255-274341AC6BCE/GRMSDK_EN_DVD.iso
           if ((Get-FileHash ./sdk7.iso).Hash -ne "65739FB0874CC17EA6962D8CE7915364C7161FA106ED1BF1C917924C18AC63CA") { throw "sdk7.iso: unexpected SHA-256" }
           if ((Get-FileHash ./sdk71.iso).Hash -ne "27CB38F76095C0ACB9B558109F8693B39CBCEB796856C15BD575F9E9D0B316C3") { throw "sdk71.iso: unexpected SHA-256" }
-          7z x ./sdk7.iso -y -o"./SDK7"
-          7z x ./sdk71.iso -y -o"./SDK7.1"
+          # Only the Setup folders that "Install SDKs" uses; the rest of the ISOs (docs, samples, ia64) is ~1.8 GB
+          7z x ./sdk7.iso -y -o"./SDK7" Setup\WinSDK Setup\WinSDKBuild Setup\WinSDKInterop Setup\WinSDKTools Setup\WinSDKWin32Tools Setup\vc_stdx86 Setup\vc_stdamd64 Setup\winsdk_intellidocs Setup\WinSDKNetFxTools
+          7z x ./sdk71.iso -y -o"./SDK7.1" Setup\WinSDK Setup\WinSDKBuild Setup\WinSDKInterop Setup\WinSDKTools Setup\WinSDKWin32Tools Setup\vc_stdx86 Setup\vc_stdamd64 Setup\WinSDKNetFxTools
           echo "SDKs downloaded and extracted."
 
   build-clang:
@@ -155,13 +151,10 @@ jobs:
         id: cache
         with:
           path: |
-            ./wget
             ./SDK7
             ./SDK7.1
-          key: ${{ runner.os }}-sdks-wget-1.21.3-sdk7.0sp1-sdk7.1-v1
-          restore-keys: |
-            ${{ runner.os }}-sdks-wget-1.21.3-sdk7.0sp1-sdk7.1-
-            ${{ runner.os }}-sdks-
+          key: ${{ runner.os }}-sdks-sdk7.0sp1-sdk7.1-setup-v2
+          fail-on-cache-miss: true
 
       - name: Install SDKs
         run: |
@@ -389,13 +382,10 @@ jobs:
         id: cache
         with:
           path: |
-            ./wget
             ./SDK7
             ./SDK7.1
-          key: ${{ runner.os }}-sdks-wget-1.21.3-sdk7.0sp1-sdk7.1-v1
-          restore-keys: |
-            ${{ runner.os }}-sdks-wget-1.21.3-sdk7.0sp1-sdk7.1-
-            ${{ runner.os }}-sdks-
+          key: ${{ runner.os }}-sdks-sdk7.0sp1-sdk7.1-setup-v2
+          fail-on-cache-miss: true
 
       - name: Install SDKs
         run: |
