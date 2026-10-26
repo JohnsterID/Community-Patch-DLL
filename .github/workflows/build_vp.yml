@@ -118,7 +118,7 @@ jobs:
 
       - name: Download Windows SDK 7.0 SP1 and 7.1
         if: steps.cache.outputs.cache-hit != 'true'
-        timeout-minutes: 30
+        timeout-minutes: 60
         run: |
           $PSNativeCommandUseErrorActionPreference = $true # pwsh only checks the last command's exit code
           echo "Downloading SDKs..."
