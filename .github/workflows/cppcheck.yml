@@ -8,7 +8,7 @@ env:
 jobs:
   detect-changes:
     name: Detect File Changes
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     outputs:
       cpp-files: ${{ steps.filter.outputs.cpp-files }}
@@ -44,14 +44,14 @@ jobs:
   build_cppcheck:
     needs: detect-changes
     if: ${{ github.event_name == 'workflow_dispatch' || needs.detect-changes.outputs.cpp-files == 'true' }}
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     steps:
       - name: Restore cached cppcheck
         id: cache-cppcheck
         uses: actions/cache@v4
         with:
           path: /tmp/cppcheck-build
-          key: cppcheck-${{ env.CPPCHECK_VERSION }}
+          key: cppcheck-${{ env.CPPCHECK_VERSION }}-ubuntu-24.04  # the binary links the runner's libraries
 
       - name: Build cppcheck
         if: steps.cache-cppcheck.outputs.cache-hit != 'true'
@@ -60,7 +60,7 @@ jobs:
           git clone https://github.com/danmar/cppcheck.git
           cd cppcheck 
           git checkout ${{ env.CPPCHECK_VERSION }}
-          make MATCHCOMPILER=yes FILESDIR=/usr/share/cppcheck HAVE_RULES=yes CXXFLAGS="-O2 -DNDEBUG -Wall -Wno-sign-compare -Wno-unused-function"
+          make MATCHCOMPILER=yes FILESDIR=/usr/share/cppcheck CXXFLAGS="-O2 -DNDEBUG -Wall -Wno-sign-compare -Wno-unused-function"
           mkdir -p ../cppcheck-build
           cp cppcheck ../cppcheck-build/
           cp -r cfg ../cppcheck-build/
@@ -77,7 +77,7 @@ jobs:
   analysis:
     needs: [detect-changes, build_cppcheck]
     if: ${{ github.event_name == 'workflow_dispatch' || needs.detect-changes.outputs.cpp-files == 'true' }}
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     continue-on-error: true
     outputs:
       timed_out: ${{ steps.check-timeout.outputs.timed_out }}
@@ -155,7 +155,7 @@ jobs:
 
   retry_analysis:
     needs: [detect-changes, build_cppcheck, analysis]
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     if: ${{ needs.analysis.outputs.timed_out == 'true' && (github.event_name == 'workflow_dispatch' || needs.detect-changes.outputs.cpp-files == 'true') }}
     steps:
       - name: Checkout
