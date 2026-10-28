@@ -29394,6 +29394,7 @@ void CvPlayer::DoSpawnGreatPerson(PlayerTypes eMinor, bool bIsFree)
 			if (!pNewGreatPeople->jumpToNearestValidPlot())
 			{
 				pNewGreatPeople->kill(false); // Could not find a spot!
+				return;
 			}
 		}
 

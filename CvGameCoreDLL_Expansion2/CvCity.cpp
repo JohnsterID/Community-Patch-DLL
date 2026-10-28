@@ -29864,10 +29864,13 @@ void CvCity::produce(UnitTypes eTrainUnit, UnitAITypes eTrainAIUnit, bool bCanOv
 					{
 						CvUnit* pFreeUnit = CreateUnit(eFreeUnit, NO_UNITAI, REASON_TRAIN);
 						if (!pFreeUnit->jumpToNearestValidPlot())
+						{
 							pFreeUnit->kill(false); // Could not find a valid spot!
+							pFreeUnit = NULL;
+						}
 
 						CvNotifications* pNotifications = kOwner.GetNotifications();
-						if (pNotifications)
+						if (pNotifications && pFreeUnit)
 						{
 							Localization::String strText = Localization::Lookup("TXT_KEY_NOTIFICATION_CONQUEST_OF_WORLD_UNIT");
 							strText << pFreeUnit->getNameKey() << getNameKey();

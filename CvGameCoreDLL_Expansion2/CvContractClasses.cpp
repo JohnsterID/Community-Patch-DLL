@@ -514,7 +514,10 @@ void CvPlayerContracts::InitContractUnits(ContractTypes eContract)
 							if (pUnit)
 							{
 								if (!pUnit->jumpToNearestValidPlotWithinRange(5))
+								{
 									pUnit->kill(false);		// Could not find a spot!
+									pUnit = NULL;
+								}
 
 								// Valid Promotion for this Unit?
 								PromotionTypes ePromotion = pContract->GetPromotionType();
