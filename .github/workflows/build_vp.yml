@@ -157,6 +157,9 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # tags for update_commit_id.bat (git describe), else the DLL says "No-Tag <hash>"
+          filter: tree:0  # commits and tags only; checkout fetches the trees it needs
 
       - uses: actions/cache@v4
         id: cache
@@ -391,6 +394,9 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # tags for update_commit_id.bat (git describe), else the DLL says "No-Tag <hash>"
+          filter: tree:0  # commits and tags only; checkout fetches the trees it needs
 
       - uses: actions/cache@v4
         id: cache
