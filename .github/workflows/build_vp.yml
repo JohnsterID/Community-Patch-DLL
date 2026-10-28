@@ -114,7 +114,7 @@ jobs:
 
       - name: Set up VC9 SP1 (v90)
         id: vc9
-        uses: JohnsterID/vc9-toolset@d4b434fe3585b9126168689fea0b4149b9851770
+        uses: JohnsterID/vc9-toolset@110ee7fb26d4202a6ab2657b23a646c0af60f96f
 
       - name: Clang version check
         run: clang --version
@@ -170,7 +170,7 @@ jobs:
 
       - name: Set up VC9 SP1 (v90)
         id: vc9
-        uses: JohnsterID/vc9-toolset@d4b434fe3585b9126168689fea0b4149b9851770
+        uses: JohnsterID/vc9-toolset@110ee7fb26d4202a6ab2657b23a646c0af60f96f
 
       - name: Setup Visual Studio environment and build msvc debug
         shell: cmd
