@@ -9695,7 +9695,7 @@ int CvReligionAI::ScoreBeliefForPlayer(CvBeliefEntry* pEntry, bool bReturnConque
 			{
 				iWarTemp += (pEntry->GetYieldFromConquest(iI) * iNumNeighbors) / 4;
 			}
-			if (pEntry->GetYieldFromConquest(iI) > 0)
+			if (pEntry->GetYieldFromRemoveHeresy((YieldTypes)iI) > 0)
 			{
 				iWarTemp += (pEntry->GetYieldFromRemoveHeresy((YieldTypes)iI) * iNumNeighbors);
 			}
