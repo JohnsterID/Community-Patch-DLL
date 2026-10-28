@@ -9866,12 +9866,12 @@ void CvPlot::setOwningCity(PlayerTypes ePlayer, int iCityID)
 
 	m_owningCity = IDInfo(ePlayer, iCityID);
 	
-	// change improvement ownership
+	// change improvement ownership: the improvement counts for the effective owning city
+	// with an override, setOwningCityOverride(NULL) below moves it from the override city to the new city
 	ImprovementTypes eImprovement = getImprovementType();
-	if (eImprovement != NO_IMPROVEMENT)
+	if (eImprovement != NO_IMPROVEMENT && !pOldCityOverride)
 	{
-		// improvement counts of override city are updated in setOwningCityOverride()
-		if (!pOldCityOverride && pOldCity)
+		if (pOldCity)
 			pOldCity->ChangeImprovementCount(eImprovement, -1);
 
 		if (pNewCity)
@@ -10009,6 +10009,9 @@ void CvPlot::setOwningCityOverride(CvCity* pNewValue)
 	CvCity* pCurrentCity = getOwningCityOverride();
 	if ( pNewValue != pCurrentCity )
 	{
+		// the improvement counts for the effective owning city: the override city, else the owning city
+		CvCity* pOldEffectiveCity = getEffectiveOwningCity();
+
 		if(pNewValue != NULL && pNewValue != getOwningCity())
 		{
 			m_owningCityOverride = pNewValue->GetIDInfo();
@@ -10019,17 +10022,13 @@ void CvPlot::setOwningCityOverride(CvCity* pNewValue)
 		}
 
 		ImprovementTypes eImprovement = getImprovementType();
-		if (eImprovement != NO_IMPROVEMENT)
+		CvCity* pNewEffectiveCity = getEffectiveOwningCity();
+		if (eImprovement != NO_IMPROVEMENT && pOldEffectiveCity != pNewEffectiveCity)
 		{
-			if (pCurrentCity != NULL)
-				pCurrentCity->ChangeImprovementCount(eImprovement, -1);
-			if (pNewValue != NULL)
-				pNewValue->ChangeImprovementCount(eImprovement, 1);
-			else if (getOwningCity())
-			{
-				// tile has been returned to the original owning city
-				getOwningCity()->ChangeImprovementCount(eImprovement, 1);
-			}
+			if (pOldEffectiveCity != NULL)
+				pOldEffectiveCity->ChangeImprovementCount(eImprovement, -1);
+			if (pNewEffectiveCity != NULL)
+				pNewEffectiveCity->ChangeImprovementCount(eImprovement, 1);
 		}
 
 		// Remove citizen from this plot if another city was using it
