@@ -9295,7 +9295,7 @@ int CvEspionageAI::GetMissionScore(CvCity* pCity, CityEventChoiceTypes eMission,
 		int iTotalScore = iScore - iIDOffset;
 		
 		// this could be negative at this point, in which case zero it
-		iTotalScore = max(0, iScore);
+		iTotalScore = max(0, iTotalScore);
 
 		// weight missions higher if you have already earned points towards them (otherwise spies might switch all the time)
 		if (iSpyIndex >= 0 && iScore > 0)
