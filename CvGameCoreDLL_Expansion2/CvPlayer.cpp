@@ -37551,10 +37551,14 @@ void CvPlayer::DoCivilianReturnLogic(bool bReturn, PlayerTypes eToPlayer, int iU
 		pUnit->kill(true);
 		CvUnit* pNewUnit = GET_PLAYER(eToPlayer).initUnit(eNewUnitType, iX, iY);
 		ASSERT(pNewUnit != NULL);
+		bool bSettler = pNewUnit ? pNewUnit->getUnitInfo().GetUnitAIType(UNITAI_SETTLE) : false;
 		if (pNewUnit)
 		{
 			if (!pNewUnit->jumpToNearestValidPlot())
+			{
 				pNewUnit->kill(false);	// Could not find a spot!
+				pNewUnit = NULL;
+			}
 		}
 
 		// Returned to a city-state
@@ -37576,7 +37580,6 @@ void CvPlayer::DoCivilianReturnLogic(bool bReturn, PlayerTypes eToPlayer, int iU
 		else if (!GET_PLAYER(eToPlayer).isHuman(ISHUMAN_AI_DIPLOMACY))
 		{
 			// Additional diplo bonus for returning civilians in the early game, especially Settlers
-			bool bSettler = pNewUnit ? pNewUnit->getUnitInfo().GetUnitAIType(UNITAI_SETTLE) : false;
 			int iTheirEra = GET_PLAYER(eToPlayer).GetCurrentEra();
 			if (iTheirEra <= GD_INT_GET(ANCIENT_ERA))
 				GET_PLAYER(eToPlayer).GetDiplomacyAI()->ChangeNumCiviliansReturnedToMe(GetID(), bSettler ? 5 : 3);
