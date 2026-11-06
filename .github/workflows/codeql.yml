@@ -1,0 +1,76 @@
+name: CodeQL
+
+# CodeQL (C/C++) on the game-core DLL, traced from a real build. Two databases, so a build CodeQL
+# cannot trace still leaves the other: the VC9 SP1 (v90) MSVC Debug build and the clang build.
+# Runs on a push to this branch or by hand; results go to the Security tab and to a SARIF artifact.
+on:
+  push:
+    branches: [ codeql-msvc ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.build }})
+    runs-on: windows-2022
+    timeout-minutes: 360
+    permissions:
+      security-events: write
+      contents: read
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        build: [ msvc, clang ]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0  # tags for update_commit_id.bat (git describe)
+          filter: tree:0
+
+      - name: Set up VC9 SP1 (v90)
+        id: vc9
+        uses: JohnsterID/vc9-toolset@48b240fe51f34b94ee1b48273967f67ad975030a # v1.0.0
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          languages: c-cpp
+          build-mode: manual
+          queries: security-and-quality
+
+      # Debug: no LTCG, and CodeQL only needs the compiler invocations
+      - name: Build msvc debug
+        if: matrix.build == 'msvc'
+        run: '& "${{ steps.vc9.outputs.msbuild }}" VoxPopuli_vs2013.sln /p:Configuration=Debug /p:Platform=Win32 /m:1 /v:normal "/flp:logfile=msvc_debug_msbuild.log;verbosity=normal"'
+
+      - name: Build clang debug
+        if: matrix.build == 'clang'
+        run: python build_vp_clang_sdk.py --config debug
+
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          category: /build:${{ matrix.build }}
+          output: sarif-results
+
+      - name: Upload SARIF
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: codeql-sarif-${{ matrix.build }}
+          path: sarif-results
+          if-no-files-found: warn
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: codeql-buildlog-${{ matrix.build }}
+          path: |
+            msvc_debug_msbuild.log
+            clang-output/Debug/build.log
+          if-no-files-found: ignore
