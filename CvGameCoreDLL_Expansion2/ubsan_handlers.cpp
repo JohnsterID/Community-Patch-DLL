@@ -1301,12 +1301,18 @@ static void appendSourceContext(char* buf, size_t bufSize, const char* filename,
         buf[used] = '\0';
     }
 
+    // A line longer than the buffer comes back in several chunks: count (and print) only its first chunk,
+    // or every later line is numbered too high.
+    bool atLineStart = true;
     while (fgets(srcLine, sizeof(srcLine), f) && curLine <= lastLine) {
+        size_t slen = strlen(srcLine);
+        bool startsLine = atLineStart;
+        atLineStart = (slen > 0 && srcLine[slen - 1] == '\n');
+        if (!startsLine) continue;
         ++curLine;
         if (curLine < firstLine) continue;
 
         // Strip trailing newline/carriage-return
-        size_t slen = strlen(srcLine);
         while (slen > 0 && (srcLine[slen - 1] == '\n' || srcLine[slen - 1] == '\r'))
             srcLine[--slen] = '\0';
 
