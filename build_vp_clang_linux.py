@@ -7,14 +7,26 @@ import time
 import tempfile
 from pathlib import Path
 import argparse
-from queue import Queue
 import json
+import shutil
 import sys
+
+IS_WINDOWS = os.name == 'nt'
+
+# Parsed before the path constants below are built; the full parser is further down.
+_early = argparse.ArgumentParser(add_help=False)
+_early.add_argument('--deps-dir')
+_early_args, _ = _early.parse_known_args()
+if _early_args.deps_dir:
+    os.environ['VP_DEPS_DIR'] = os.path.abspath(_early_args.deps_dir)
+DEPS_DIR = os.path.abspath(os.environ.get('VP_DEPS_DIR', 'Dependencies'))
 
 def ensure_headers_fixed():
     """Ensure fix_header_case_issues.py has been run (auto-run if needed)"""
+    if IS_WINDOWS:
+        return  # case-insensitive filesystem: nothing to fix
     # Check if case-insensitive symlinks exist (sentinel check)
-    sentinel = Path('Dependencies/v7.0a_include/windef.h')
+    sentinel = Path(DEPS_DIR, 'v7.0a_include', 'windef.h')
     
     if not sentinel.exists():
         print("=" * 70)
@@ -43,10 +55,10 @@ CORE_DLL = 'CvGameCore_Expansion2'
 PROJECT_DIR = Path().resolve()
 SDK_VERSION = '7.0A'
 # Resolve relative paths to absolute (Linux-style paths)
-relative_include_1 = os.path.abspath('./Dependencies/v7.0a_include')
-relative_include_2 = os.path.abspath('./Dependencies/vc9_include')
-relative_lib_1 = os.path.abspath('./Dependencies/v7.0a_lib')
-relative_lib_2 = os.path.abspath('./Dependencies/vc9_lib')
+relative_include_1 = os.path.join(DEPS_DIR, 'v7.0a_include')
+relative_include_2 = os.path.join(DEPS_DIR, 'vc9_include')
+relative_lib_1 = os.path.join(DEPS_DIR, 'v7.0a_lib')
+relative_lib_2 = os.path.join(DEPS_DIR, 'vc9_lib')
 INCLUDE_PATHS = [
     relative_include_1,
     relative_include_2
@@ -237,24 +249,42 @@ class Task:
         else:
             return None
 
+def default_jobs() -> int:
+    # Each clang -O2 TU can take well over 1 GB; starting all ~170 at once froze
+    # a 32 GB WSL VM (2026-11-08). Cap by default; raise with --jobs.
+    return max(1, min(6, (os.cpu_count() or 2) // 2))
+
 class TaskMan:
-    pending: Queue
-    def __init__(self):
-        self.pending = Queue()
+    """Runs at most max_jobs processes at a time; the rest wait their turn."""
+    def __init__(self, max_jobs: int = 0):
+        self.max_jobs = max(1, max_jobs or default_jobs())
+        self.queued: list = []
+        self.running: list[Task] = []
+        self.results: list[TaskResult] = []
 
     def spawn(self, commands: typing.Union[str, list[str]], env: typing.Optional[dict[str, str]]=None, shell: bool=False, log:any =None):
-        task = Task(commands, env=env, shell=shell, log=log)
-        self.pending.put(task)
+        self.queued.append((commands, env, shell, log))
+        self._fill()
+
+    def _fill(self):
+        while self.queued and len(self.running) < self.max_jobs:
+            commands, env, shell, log = self.queued.pop(0)
+            self.running.append(Task(commands, env=env, shell=shell, log=log))
 
     def wait(self) -> list[TaskResult]:
-        results: list[TaskResult] = []
-        while not self.pending.empty():
-            task = self.pending.get()
-            if result := task.poll():
-                results.append(result)
-            else:
-                self.pending.put(task)
-        return results
+        while self.running or self.queued:
+            still = []
+            for task in self.running:
+                result = task.poll()
+                if result is not None:
+                    self.results.append(result)
+                else:
+                    still.append(task)
+            self.running = still
+            self._fill()
+            if self.running:
+                time.sleep(0.05)
+        return self.results
         
 def set_environment(sdk_version: str):
     # For cross-compilation on Linux, we don't need to set Windows-specific environment
@@ -515,15 +545,29 @@ def build_pch(cl: str, cl_args: list[str], pch_path: Path, build_dir: Path, log:
     end_time = time.time()
     print(f'precompiled header build finished after {end_time - start_time} seconds')
 
-def build_cpps(cl: str, cl_args: list[str], pch_path: Path, build_dir: Path, log: typing.IO, analyze: bool = False, export_compile_commands: bool = False):
+def compile_command(cl: str, cl_args: list[str], cpp: str, build_dir: Path) -> list[str]:
+    out = build_dir.joinpath(cpp).with_suffix('.obj')
+    return [cl, str(PROJECT_DIR.joinpath(cpp)), '-o', str(out)] + cl_args
+
+def write_compile_commands(cl: str, cl_args: list[str], build_dir: Path, out_dir: Path):
+    """Write compile_commands.json straight from the command lines (nothing is compiled)."""
+    entries = [{'directory': str(PROJECT_DIR), 'file': str(PROJECT_DIR.joinpath(cpp)),
+                'arguments': compile_command(cl, cl_args, cpp, build_dir)} for cpp in CPP]
+    out_dir.mkdir(parents=True, exist_ok=True)
+    output_file = out_dir.joinpath('compile_commands.json')
+    with open(output_file, 'w', encoding='utf-8') as f:
+        json.dump(entries, f, indent=2)
+    print(f'Generated {output_file} with {len(entries)} entries')
+
+def build_cpps(cl: str, cl_args: list[str], pch_path: Path, build_dir: Path, log: typing.IO, analyze: bool = False, jobs: int = 0):
     if analyze:
         print('running static analysis on cpps...')
     else:
         print('building cpps...')
     start_time = time.time()
-    build_tasks = TaskMan()
+    build_tasks = TaskMan(jobs)
+    print(f'running at most {build_tasks.max_jobs} compiles at a time (--jobs)')
     logs: dict[Path, typing.IO] = {}
-    compile_commands = []
     try:
         for cpp in CPP:
             cpp_src = PROJECT_DIR.joinpath(cpp)
@@ -537,13 +581,7 @@ def build_cpps(cl: str, cl_args: list[str], pch_path: Path, build_dir: Path, log
                 command = [cl, '--analyze', '--analyzer-output', 'plist-multi-file', str(cpp_src), '-o', str(out)] + cl_args
             else:
                 # Regular compilation
-                out = build_dir.joinpath(cpp).with_suffix('.obj')
-                command = [cl, str(cpp_src), '-o', str(out)] + cl_args
-                
-                # Add -MJ flag for compile commands export if requested
-                if export_compile_commands:
-                    compile_db_entry = build_dir.joinpath(f'{Path(cpp).stem}.json')
-                    command.extend(['-MJ', str(compile_db_entry)])
+                command = compile_command(cl, cl_args, cpp, build_dir)
             
             build_tasks.spawn(command, log=cpp_log)
         build_results = build_tasks.wait()
@@ -570,51 +608,8 @@ def build_cpps(cl: str, cl_args: list[str], pch_path: Path, build_dir: Path, log
         else:
             print(f'cpps build finished after {end_time - start_time} seconds')
             
-        # Combine individual JSON files into compile_commands.json if requested
-        if export_compile_commands and not analyze:
-            combine_compile_commands(build_dir)
-            
     finally:
        del logs
-
-def combine_compile_commands(build_dir: Path):
-    """Combine individual -MJ JSON files into a single compile_commands.json"""
-    print('generating compile_commands.json...')
-    compile_commands = []
-    
-    # Find all .json files generated by -MJ
-    json_files = list(build_dir.glob('*.json'))
-    
-    for json_file in json_files:
-        try:
-            with open(json_file, 'r') as f:
-                content = f.read().strip()
-                # -MJ generates JSON objects with trailing commas, one per line
-                # Split by lines and parse each JSON object
-                for line in content.split('\n'):
-                    line = line.strip()
-                    if line:
-                        # Remove trailing comma if present
-                        if line.endswith(','):
-                            line = line[:-1]
-                        try:
-                            entry = json.loads(line)
-                            compile_commands.append(entry)
-                        except json.JSONDecodeError as e:
-                            print(f'Warning: Could not parse line in {json_file}: {line[:100]}... Error: {e}')
-        except FileNotFoundError as e:
-            print(f'Warning: Could not read {json_file}: {e}')
-    
-    # Write combined compile_commands.json to project root
-    output_file = PROJECT_DIR.joinpath('compile_commands.json')
-    with open(output_file, 'w') as f:
-        json.dump(compile_commands, f, indent=2)
-    
-    print(f'Generated {output_file} with {len(compile_commands)} entries')
-    
-    # Clean up individual JSON files
-    for json_file in json_files:
-        json_file.unlink()
 
 def link_dll(link: str, link_args: list[str], build_dir: Path, out_dir: Path, log: typing.IO):
     print('linking dll...')
@@ -664,7 +659,11 @@ print_environment()
 arg_parser = argparse.ArgumentParser(description='Build VP.')
 arg_parser.add_argument('--config', type=str, default='debug', choices=['release', 'debug'])
 arg_parser.add_argument('--analyze', action='store_true', help='Run static analysis with clang --analyze')
-arg_parser.add_argument('--export-compile-commands', action='store_true', help='Generate compile_commands.json for clang-tidy')
+arg_parser.add_argument('--export-compile-commands', action='store_true', help='Also write compile_commands.json (for clang-tidy/IDEs), then build')
+arg_parser.add_argument('--compile-commands-only', action='store_true', help='Only write compile_commands.json: no compile, no link (works on Windows too)')
+arg_parser.add_argument('--compile-commands-dir', default=None, help='Folder for compile_commands.json (default: repository root)')
+arg_parser.add_argument('-j', '--jobs', type=int, default=default_jobs(), help=f'Concurrent compiles (default {default_jobs()})')
+arg_parser.add_argument('--deps-dir', default=None, help='VC9/SDK 7.0A Dependencies folder (default: VP_DEPS_DIR or ./Dependencies)')
 args = arg_parser.parse_args()
 config = Config.Release if args.config == 'release' else Config.Debug
 
@@ -674,11 +673,15 @@ def resolve_toolchain():
     Order: $LLVM_PATH/bin if set, else whatever is on PATH (works with distro
     packages, e.g. apt clang+lld). Fails with actionable instructions instead
     of an obscure exec error mid-build."""
-    import shutil
     llvm_path = os.environ.get('LLVM_PATH')
+    exe = '.exe' if IS_WINDOWS else ''
+    if not llvm_path and IS_WINDOWS and not shutil.which('clang'):
+        default = os.path.join(os.environ.get('ProgramFiles', r'C:\Program Files'), 'LLVM')
+        if os.path.isfile(os.path.join(default, 'bin', 'clang.exe')):
+            llvm_path = default
     if llvm_path:
-        cl = os.path.join(llvm_path, 'bin', 'clang')
-        link = os.path.join(llvm_path, 'bin', 'lld-link')
+        cl = os.path.join(llvm_path, 'bin', 'clang' + exe)
+        link = os.path.join(llvm_path, 'bin', 'lld-link' + exe)
         if not os.path.isfile(cl):
             print(f'ERROR: LLVM_PATH is set but {cl} does not exist.')
             sys.exit(1)
@@ -687,7 +690,7 @@ def resolve_toolchain():
     else:
         cl = shutil.which('clang')
         link = shutil.which('lld-link')
-        if not cl or not link:
+        if not cl or (not link and not args.compile_commands_only):
             print('ERROR: clang and/or lld-link not found.')
             print('Install them (e.g. apt-get install clang lld) or set LLVM_PATH')
             print('to an LLVM distribution root containing bin/clang and bin/lld-link.')
@@ -703,7 +706,8 @@ def resolve_toolchain():
 def check_dependencies():
     """Verify the VC9/WinSDK cross-compile headers and libs are present, with
     bootstrap instructions if not."""
-    missing = [p for p in INCLUDE_PATHS + LIB_PATHS if not os.path.isdir(p)]
+    needed = INCLUDE_PATHS if args.compile_commands_only else INCLUDE_PATHS + LIB_PATHS
+    missing = [p for p in needed if not os.path.isdir(p)]
     if missing:
         print('ERROR: cross-compile dependencies are missing:')
         for p in missing:
@@ -715,7 +719,7 @@ Provide the VC9 SP1 + Windows SDK 7.0 headers/libs under Dependencies/:
   Dependencies/vc9_include    (VC9 include)
   Dependencies/vc9_lib        (VC9 lib)
 
-Either extract v90-dependencies.zip here, or bootstrap from the official
+Either extract v90-dependencies.zip here (or point --deps-dir / VP_DEPS_DIR at it), or bootstrap from the official
 SDK 7.0 ISO with extract-vc9.sh from https://github.com/JohnsterID/vc9-toolset
 (needs p7zip-full + msitools), then symlink/move its output:
   VC/include -> vc9_include,  VC/lib -> vc9_lib
@@ -733,6 +737,16 @@ out_dir = PROJECT_DIR.joinpath(PROJECT_DIR, OUT_DIR[config])
 cl_args = build_cl_config_args(config)
 link_args = build_link_config_args(config)
 pch_path = os.path.join(build_dir, PCH)
+compile_db_dir = Path(args.compile_commands_dir).resolve() if args.compile_commands_dir else PROJECT_DIR
+
+if args.compile_commands_only:
+    # commit_id.inc is #included by the sources, so clang-tidy needs it to exist.
+    with open(os.devnull, 'wb') as devnull:
+        update_commit_id(devnull)
+    write_compile_commands(cl, cl_args, build_dir, compile_db_dir)
+    sys.exit(0)
+if args.export_compile_commands:
+    write_compile_commands(cl, cl_args, build_dir, compile_db_dir)
 prepare_dirs(build_dir, out_dir)
 
 log = open(out_dir.joinpath('build.log'), mode='w+b')
@@ -744,7 +758,7 @@ try:
         build_pch(cl, cl_args, pch_path, build_dir, log)
     
     # Run compilation or analysis
-    build_cpps(cl, cl_args, pch_path, build_dir, log, analyze=args.analyze, export_compile_commands=args.export_compile_commands)
+    build_cpps(cl, cl_args, pch_path, build_dir, log, analyze=args.analyze, jobs=args.jobs)
     
     if not args.analyze:
         link_dll(link, link_args, build_dir, out_dir, log)

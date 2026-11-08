@@ -6,13 +6,16 @@ Combines specific case mappings with automatic lowercase symlink creation
 import os
 from pathlib import Path
 
+# Base folder of the VC9/SDK headers and libs (build_vp_clang_linux.py --deps-dir sets this).
+DEPS_DIR = Path(os.environ.get('VP_DEPS_DIR', 'Dependencies'))
+
 def fix_header_case_issues():
     """Fix case sensitivity issues for Windows headers on Linux"""
     
     # Directories to fix
     dirs_to_fix = [
-        Path('Dependencies/v7.0a_include'),
-        Path('Dependencies/vc9_include')
+        DEPS_DIR / 'v7.0a_include',
+        DEPS_DIR / 'vc9_include'
     ]
     
     # Specific case mappings for commonly problematic headers
@@ -126,8 +129,8 @@ def fix_library_case_issues():
     
     # Directories to fix
     lib_dirs_to_fix = [
-        Path('Dependencies/v7.0a_lib'),
-        Path('Dependencies/vc9_lib')
+        DEPS_DIR / 'v7.0a_lib',
+        DEPS_DIR / 'vc9_lib'
     ]
     
     # Specific library case mappings for commonly problematic libraries
