@@ -194,6 +194,10 @@ python3 build_vp_clang_linux.py --config debug
 python3 build_vp_clang_linux.py --config release
 ```
 
+At most `--jobs` TUs compile at a time (default min(6, CPUs/2)). Starting all of
+them at once exhausted a 32 GB WSL VM with a Release build; raise `-j` only with
+memory to spare.
+
 ### First-Time Setup
 
 On first run, the build system automatically:
@@ -241,18 +245,15 @@ Community-Patch-DLL/
 
 ### 1. Export compile_commands.json
 
-Generate a compilation database for IDE integration and clang-tidy:
+Write a compilation database for clang-tidy, clangd and IDEs. Nothing is compiled,
+and it works on Windows too:
 
 ```bash
-python3 build_vp_clang_linux.py --config release --export-compile-commands
+python3 build_vp_clang_linux.py --compile-commands-only [--config debug|release] [--deps-dir DIR] [--compile-commands-dir DIR]
 ```
 
-**Output:** `compile_commands.json` (in project root)
-
-**Use with:**
-- CLion, VS Code, etc. (IDE integration)
-- clang-tidy (code analysis)
-- clangd (language server)
+**Output:** `compile_commands.json` (project root unless `--compile-commands-dir`).
+`--export-compile-commands` writes the same file and then builds as usual.
 
 ### 2. Static Analysis
 
@@ -264,29 +265,32 @@ python3 build_vp_clang_linux.py --config debug --analyze
 
 **Output:** `.plist` files in `clang-build/Debug/CvGameCoreDLL_Expansion2/`
 
-**Analyze results:**
-```bash
-python3 collate_plist_results.py    # Aggregate warnings
-python3 final_analysis_summary.py   # Generate summary
-```
-
 ### 3. Clang-Tidy Automation
 
-Run automated code quality checks:
+Same script on Linux (`python3`) and Windows (`py`). It generates the compile
+database if it is missing.
 
 ```bash
-# First, export compile_commands.json
-python3 build_vp_clang_linux.py --config release --export-compile-commands
-
-# Run clang-tidy with VS2008/C++03 compatibility
-python3 run_clang_tidy.py
+python3 run_clang_tidy.py --list-checks                          # proven / planned / blacklisted
+python3 run_clang_tidy.py --report-only --files CvDealAI.cpp     # analyse only
+python3 run_clang_tidy.py --files "CvDeal*.cpp"                  # fix a few TUs
+python3 run_clang_tidy.py                                        # fix all TUs
+python3 run_clang_tidy.py --checks performance-faster-string-find --report-only   # evaluate a planned check
 ```
 
 **Features:**
-- 14 proven code quality checks
-- VS2008/C++03 compatibility filtering
-- C++11 -> C++03 automatic conversion
-- Overlapping fix resolution
+- 14 proven checks by default; blacklisted checks are refused (globs run with them switched off)
+- One clang-tidy per TU, at most `-j` at a time (default min(6, CPUs/2))
+- VS2008/C++03 filtering (va_list, NAN, aggregate `= 0`, C++11 keywords) and nullptr -> NULL
+- Byte-exact edits: CRLF and UTF-8 kept; nothing is converted to LF
+- Header fixes reported by several TUs applied once; overlapping fixes skipped whole and
+  picked up by the next pass (`--passes`, default 2)
+- Re-check with `clang -fsyntax-only` of every TU a change can affect; all changes are
+  restored if one fails. Build with MSVC v90 before committing.
+- Reports in `.clang-tidy-outputs/`: `diagnostics.txt`, `summary.json`, per-TU logs and fixes
+
+Tool lookup: `--clang-tidy`, `CLANG_TIDY`, `LLVM_PATH`, else the newest clang-tidy on PATH
+or in `Program Files\LLVM`. Unit tests: `python3 tests/test_clang_tidy_tools.py`.
 
 ---
 

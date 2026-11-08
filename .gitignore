@@ -61,6 +61,7 @@ Output/
 clang-build/
 clang-output/
 .clang-tidy-outputs/
+compile_commands.json
 
 #ignore output from any other IDEs/tools
 .idea/

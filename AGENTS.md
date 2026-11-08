@@ -52,6 +52,28 @@ python3 build_vp_clang_linux.py --config release
 
 ### WARNING Do NOT run both configs in parallel -- causes OOM/session crash
 
+The real cause: each run started every TU compile at once (~170 clang processes).
+A Release `-O2` run froze a 32 GB WSL VM on 2026-11-08. The script now runs at most
+`--jobs` compiles at a time (default min(6, CPUs/2)); keep the default inside WSL.
+
+## clang-tidy (`run_clang_tidy.py`, Linux and Windows)
+
+- Never build to get `compile_commands.json`: `python3 build_vp_clang_linux.py
+  --compile-commands-only [--deps-dir DIR]` writes it in under a second without
+  compiling. `run_clang_tidy.py` does this itself when the file is missing.
+- Same database and script on Windows (`py run_clang_tidy.py ...`, LLVM from
+  `C:\Program Files\LLVM` or PATH; the newest clang-tidy found is used) and on
+  Linux (distro clang-tidy or `LLVM_PATH`). `--deps-dir` / `VP_DEPS_DIR` points at
+  the VC9/SDK 7.0A `Dependencies` folder (e.g. an extracted v90-dependencies).
+- Start small: `--report-only --files CvDealAI.cpp`. Each clang-tidy holds a TU AST
+  (~0.5 GB); `-j` defaults to min(6, CPUs/2).
+- Fix mode changes files byte-exactly (CRLF and UTF-8 kept), skips overlapping
+  fixes whole (picked up by `--passes`), never applies compiler fix-its, refuses
+  to apply while a TU has compile errors, then re-checks every affected TU with
+  `clang -fsyntax-only` and restores all changed files if one fails. That is clang,
+  not VS2008: build with MSVC v90 before committing.
+- Unit tests (no clang-tidy needed): `python3 tests/test_clang_tidy_tools.py`.
+
 ---
 
 ## Known Build Warnings (clang-linux, as of 2026-05-01)
