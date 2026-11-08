@@ -168,5 +168,23 @@ class CheckSelectionTests(unittest.TestCase):
         self.assertEqual(rct.resolve_checks(self.A()), rct.PROVEN_CHECKS)
 
 
+class MsvcLogTests(unittest.TestCase):
+    def test_error_line_parsed(self):
+        line = r"  1>c:\users\user\cpd\CvGameCoreDLL_Expansion2\CustomMods.cpp(41) : error C2552: 'args' : non-aggregates cannot be initialized with initializer list"
+        m = rct.MSVC_ERROR.match(line)
+        self.assertIsNotNone(m)
+        self.assertTrue(m.group("file").endswith("CustomMods.cpp"))
+        self.assertEqual((m.group("line"), m.group("code")), ("41", "C2552"))
+
+    def test_warning_and_linker_lines_ignored(self):
+        for line in [r"c:\x\a.cpp(3) : warning C4100: 'p' : unreferenced formal parameter",
+                     r"LINK : fatal error LNK1104: cannot open file 'x.lib'"]:
+            self.assertIsNone(rct.MSVC_ERROR.match(line))
+
+    def test_msvc_unavailable_off_windows(self):
+        if not rct.IS_WINDOWS:
+            self.assertFalse(rct.msvc_available()[0])
+
+
 if __name__ == "__main__":
     unittest.main()

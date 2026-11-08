@@ -70,8 +70,19 @@ A Release `-O2` run froze a 32 GB WSL VM on 2026-11-08. The script now runs at m
 - Fix mode changes files byte-exactly (CRLF and UTF-8 kept), skips overlapping
   fixes whole (picked up by `--passes`), never applies compiler fix-its, refuses
   to apply while a TU has compile errors, then re-checks every affected TU with
-  `clang -fsyntax-only` and restores all changed files if one fails. That is clang,
-  not VS2008: build with MSVC v90 before committing.
+  `clang -fsyntax-only` and restores all changed files if one fails.
+- MSVC v90 is part of fix mode on Windows: after the last pass it builds the DLL with
+  VS2008 (MSBuild 4.0 + VoxPopuli_vs2013.sln, `--msvc-configs`, default Debug,Release).
+  Files MSVC errors point at are restored and the build repeated; if errors remain,
+  every change is restored. Rejected fixes go to `msvc-rejected.txt` (use them to
+  extend the VS2008 filters). `--no-msvc` skips it; on Linux the run ends with
+  "NOT VERIFIED" and the v90 build must be done on Windows before committing.
+  First full run (2026-11-09, master 59c50bc00, 172 TUs): 437 fixes in 71 files,
+  v90 Debug + Release passed with the same warnings as master; the filters had kept
+  out 7 va_list, 4 NAN and 2 math-header fixes.
+- Warning surveys: `build_vp_clang_linux.py --extra-flags "-Wimplicit-fallthrough
+  -Wreorder-ctor -Wshadow -Wduplicate-enum"` (appended last, so they override the
+  -Wno- defaults).
 - Unit tests (no clang-tidy needed): `python3 tests/test_clang_tidy_tools.py`.
 
 ---

@@ -664,6 +664,7 @@ arg_parser.add_argument('--compile-commands-only', action='store_true', help='On
 arg_parser.add_argument('--compile-commands-dir', default=None, help='Folder for compile_commands.json (default: repository root)')
 arg_parser.add_argument('-j', '--jobs', type=int, default=default_jobs(), help=f'Concurrent compiles (default {default_jobs()})')
 arg_parser.add_argument('--deps-dir', default=None, help='VC9/SDK 7.0A Dependencies folder (default: VP_DEPS_DIR or ./Dependencies)')
+arg_parser.add_argument('--extra-flags', default='', help='Extra compiler flags appended last, e.g. "-Wimplicit-fallthrough -Wshadow" (later flags win over the -Wno- defaults)')
 args = arg_parser.parse_args()
 config = Config.Release if args.config == 'release' else Config.Debug
 
@@ -735,6 +736,9 @@ cl, link = resolve_toolchain()
 build_dir = PROJECT_DIR.joinpath(BUILD_DIR[config])
 out_dir = PROJECT_DIR.joinpath(PROJECT_DIR, OUT_DIR[config])
 cl_args = build_cl_config_args(config)
+if args.extra_flags:
+    import shlex
+    cl_args += shlex.split(args.extra_flags)
 link_args = build_link_config_args(config)
 pch_path = os.path.join(build_dir, PCH)
 compile_db_dir = Path(args.compile_commands_dir).resolve() if args.compile_commands_dir else PROJECT_DIR

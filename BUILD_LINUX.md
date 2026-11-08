@@ -255,6 +255,12 @@ python3 build_vp_clang_linux.py --compile-commands-only [--config debug|release]
 **Output:** `compile_commands.json` (project root unless `--compile-commands-dir`).
 `--export-compile-commands` writes the same file and then builds as usual.
 
+Extra warnings for a survey (appended last, so they override the default `-Wno-` list):
+
+```bash
+python3 build_vp_clang_linux.py --config debug --extra-flags "-Wimplicit-fallthrough -Wreorder-ctor -Wshadow -Wduplicate-enum"
+```
+
 ### 2. Static Analysis
 
 Run Clang static analyzer:
@@ -286,7 +292,10 @@ python3 run_clang_tidy.py --checks performance-faster-string-find --report-only 
 - Header fixes reported by several TUs applied once; overlapping fixes skipped whole and
   picked up by the next pass (`--passes`, default 2)
 - Re-check with `clang -fsyntax-only` of every TU a change can affect; all changes are
-  restored if one fails. Build with MSVC v90 before committing.
+  restored if one fails
+- On Windows, then a real MSVC v90 (VS2008) build, Debug and Release (`--msvc-configs`,
+  `--no-msvc`): files with MSVC errors are restored and rebuilt, rejected fixes listed in
+  `msvc-rejected.txt`. On Linux the v90 build is reported as not verified: do it on Windows.
 - Reports in `.clang-tidy-outputs/`: `diagnostics.txt`, `summary.json`, per-TU logs and fixes
 
 Tool lookup: `--clang-tidy`, `CLANG_TIDY`, `LLVM_PATH`, else the newest clang-tidy on PATH

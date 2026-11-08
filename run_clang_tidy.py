@@ -27,7 +27,10 @@ What it does:
     the file as it is (CRLF and UTF-8), so nothing is converted to LF.
  5. Every TU that includes a changed file is re-checked with clang
     -fsyntax-only. If one fails, every changed file is restored.
-    This is clang, not the VS2008 compiler: build with MSVC v90 before
+ 6. On Windows with VS2008: a real MSVC v90 build (Debug and Release).
+    Files MSVC errors point at are restored and the build repeated; if errors
+    remain, everything is restored (msvc-rejected.txt lists them). On Linux
+    the v90 check is reported as NOT VERIFIED: build on Windows before
     committing.
 
 Reports go to .clang-tidy-outputs/ (diagnostics.txt, summary.json, per-TU logs
@@ -387,6 +390,93 @@ def vs2008_filter(diags, cache):
     return kept, filtered, converted
 
 
+# --------------------------------------------------------------------------- MSVC v90
+
+MSBUILD40 = os.path.join(os.environ.get("WINDIR", r"C:\Windows"), "Microsoft.NET", "Framework",
+                         "v4.0.30319", "MSBuild.exe")
+MSVC_ERROR = re.compile(r"^\s*(?:\d+>)?\s*(?P<file>[A-Za-z]:[^(]+?)\((?P<line>\d+)\)\s*:\s*"
+                        r"(?:fatal )?error (?P<code>C\d+)\s*:\s*(?P<msg>.*)$")
+
+
+def msvc_available():
+    """VS2008 (v90) plus the MSBuild 4.0 the solution is built with (as in CI)."""
+    if not IS_WINDOWS:
+        return False, "not Windows"
+    if not os.environ.get("VS90COMNTOOLS"):
+        return False, "VS2008 not installed (VS90COMNTOOLS unset)"
+    if not os.path.isfile(MSBUILD40):
+        return False, "MSBuild 4.0 not found at %s" % MSBUILD40
+    return True, ""
+
+
+def msvc_build(config, out_dir, attempt):
+    """Incremental v90 build of the DLL. Returns (ok, errors[(path, line, code, msg)], log path, seconds)."""
+    log_path = out_dir / "logs" / "msvc" / ("%s-%d.log" % (config, attempt))
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    cmd = [MSBUILD40, str(SCRIPT_DIR / "VoxPopuli_vs2013.sln"), "/t:Build",
+           "/p:Configuration=%s" % config, "/p:Platform=Win32", "/m:1", "/nr:false", "/v:minimal",
+           "/flp:logfile=%s;verbosity=normal" % log_path]
+    t0 = time.time()
+    rc = subprocess.run(cmd, cwd=str(SCRIPT_DIR), stdout=subprocess.DEVNULL,
+                        stderr=subprocess.STDOUT).returncode
+    errors = []
+    try:
+        with open(log_path, "r", encoding="utf-8", errors="replace") as fh:
+            for line in fh:
+                m = MSVC_ERROR.match(line)
+                if m:
+                    e = (m.group("file").strip(), int(m.group("line")), m.group("code"), m.group("msg").strip())
+                    if e not in errors:
+                        errors.append(e)
+    except OSError:
+        pass
+    return rc == 0, errors, log_path, time.time() - t0
+
+
+def verify_msvc(configs, backup, out_dir, summary):
+    """Build with VS2008 (v90) after the fixes. Files that MSVC errors point at are restored and the
+    build repeated; if errors remain in files we did not change (or after 3 rounds), everything is
+    restored. Rejected fixes are listed in msvc-rejected.txt. Returns True if the build passes."""
+    rejected_lines = []
+    result = {"configs": configs, "reverted_files": [], "builds": []}
+    summary["msvc"] = result
+    ok_all = True
+    for config in configs:
+        for attempt in range(1, 4):
+            log("\n== MSVC v90 %s build (attempt %d)" % (config, attempt))
+            ok, errors, log_path, secs = msvc_build(config, out_dir, attempt)
+            result["builds"].append({"config": config, "attempt": attempt, "ok": ok,
+                                     "errors": len(errors), "seconds": round(secs, 1), "log": str(log_path)})
+            if ok:
+                log("  passed in %.0f s" % secs)
+                break
+            log("  FAILED in %.0f s with %d error(s); log %s" % (secs, len(errors), log_path))
+            for e in errors[:10]:
+                log("    %s(%d): %s: %s" % e)
+            ours = sorted({ayf.norm_path(e[0]) for e in errors} & set(backup))
+            for e in errors:
+                rejected_lines.append("%s %s(%d): %s: %s" % ((config,) + e))
+            if not errors or not ours:
+                # Link errors, or errors only in files we did not change: no file to give back.
+                ok_all = False
+                break
+            log("  restoring %d changed file(s) MSVC rejected and rebuilding: %s"
+                % (len(ours), ", ".join(os.path.basename(f) for f in ours)))
+            restore({f: backup[f] for f in ours})
+            for f in ours:
+                del backup[f]
+                result["reverted_files"].append(f)
+        else:
+            ok_all = False
+        if not ok_all:
+            break
+    if rejected_lines:
+        with open(out_dir / "msvc-rejected.txt", "w", encoding="utf-8") as fh:
+            fh.write("\n".join(rejected_lines) + "\n")
+    result["ok"] = ok_all
+    return ok_all
+
+
 # --------------------------------------------------------------------------- main
 
 def parse_args():
@@ -404,6 +494,10 @@ def parse_args():
     ap.add_argument("--no-verify", action="store_true", help="skip the clang -fsyntax-only re-check")
     ap.add_argument("--verify-selected-only", action="store_true",
                     help="after a header fix, re-check only the selected TUs instead of every TU in the database")
+    ap.add_argument("--no-msvc", action="store_true",
+                    help="skip the MSVC v90 (VS2008) build check that follows a fix run on Windows")
+    ap.add_argument("--msvc-configs", default="Debug,Release",
+                    help="configurations for the MSVC v90 check (default Debug,Release)")
     ap.add_argument("--allow-errors", action="store_true",
                     help="apply fixes even if some TUs had compile errors (their AST is partial)")
     ap.add_argument("-j", "--jobs", type=int, default=default_jobs(),
@@ -557,6 +651,29 @@ def main():
             restore(backup)
         raise
 
+    msvc_state = "not run"
+    if backup and exit_code == 0 and not args.report_only:
+        avail, why = msvc_available()
+        if args.no_msvc:
+            msvc_state = "skipped (--no-msvc)"
+        elif not avail:
+            msvc_state = "NOT VERIFIED: %s" % why
+        else:
+            configs = [c.strip() for c in args.msvc_configs.split(",") if c.strip()]
+            try:
+                if verify_msvc(configs, backup, out_dir, summary):
+                    msvc_state = "passed (%s)" % ", ".join(configs)
+                else:
+                    log("\nMSVC v90 build still fails: restoring all %d changed file(s)." % len(backup))
+                    restore(backup)
+                    backup.clear()
+                    msvc_state = "FAILED: all fixes restored (see msvc-rejected.txt)"
+                    exit_code = 4
+            except KeyboardInterrupt:
+                log("\nInterrupted: restoring %d changed file(s)." % len(backup))
+                restore(backup)
+                return 130
+    summary["msvc_state"] = msvc_state
     summary["files_changed"] = 0 if exit_code == 3 else len(backup)
     with open(out_dir / "summary.json", "w", encoding="utf-8") as fh:
         json.dump(summary, fh, indent=2)
@@ -564,8 +681,9 @@ def main():
         fh.write("\n".join(diag_lines) + "\n")
     log("\nReports: %s (diagnostics.txt, summary.json, logs/, fixes/)" % out_dir)
     if backup and exit_code == 0:
-        log("Changed %d file(s). Review with git diff, then build with MSVC v90 (VS2008) before committing."
-            % len(backup))
+        log("Changed %d file(s). MSVC v90 check: %s." % (len(backup), msvc_state))
+        if not msvc_state.startswith("passed"):
+            log("Build with MSVC v90 (VS2008) on Windows before committing.")
         if any(d in MANUAL_REVIEW_CHECKS for d in checks):
             log("readability-simplify-boolean-expr fixes are marked [fix: review] in diagnostics.txt.")
     return exit_code
