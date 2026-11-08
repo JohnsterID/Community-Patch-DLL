@@ -1,90 +1,69 @@
 #!/usr/bin/env python3
 """
-Automated Clang-Tidy Script for VS2008/C++03 Compatibility with CRLF Workaround
+Run clang-tidy over the DLL with the checks proven safe for VS2008 / C++03,
+filter the fixes for VS2008, apply them, and re-check that the changed code
+still compiles. Works on Linux and on Windows (same compile database, made by
+build_vp_clang_linux.py --compile-commands-only, which compiles nothing).
 
-IMPORTANT: cppcoreguidelines-init-variables RULES
-==================================================
+Quick start (repository root):
+    python3 run_clang_tidy.py --report-only --files CvDealAI.cpp   # look only
+    python3 run_clang_tidy.py --files "CvDeal*.cpp"                # fix a few TUs
+    python3 run_clang_tidy.py                                      # all TUs
+  Windows: the same with "py" instead of "python3".
 
-This check tries to initialize ALL uninitialized variables, but VS2008/C++03 has special cases:
+What it does:
+ 1. compile_commands.json: generated on first use (no compile, no build) by
+    build_vp_clang_linux.py --compile-commands-only. Needs the VC9 + SDK 7.0A
+    headers under Dependencies/ or --deps-dir / VP_DEPS_DIR.
+ 2. One clang-tidy process per translation unit, at most --jobs at a time
+    (default min(6, CPUs/2): each clang-tidy holds a full TU AST in memory).
+    Only the selected checks run ("-*," first, and --config replaces any
+    .clang-tidy file found above the tree).
+ 3. Fixes are filtered for VS2008 (va_list / NAN / std::to_string / aggregate
+    "= 0" / nullptr -> NULL), compiler fix-its are never applied, identical
+    header fixes reported by several TUs are applied once, and overlapping
+    fixes are skipped whole (picked up by the next pass, --passes).
+ 4. Files are changed byte-exactly: clang-tidy's offsets are byte offsets into
+    the file as it is (CRLF and UTF-8), so nothing is converted to LF.
+ 5. Every TU that includes a changed file is re-checked with clang
+    -fsyntax-only. If one fails, every changed file is restored.
+    This is clang, not the VS2008 compiler: build with MSVC v90 before
+    committing.
 
-1. va_list variables - CANNOT be initialized in VS2008!
-   FAILED: va_list args = NULL;  // Compilation error C2552
-   SUCCESS: va_list args;          // Correct - use va_start() to initialize
-   
-   Why: va_list is an aggregate type in VS2008 that requires va_start() for initialization.
-        Any attempt to initialize it directly causes C2552 error.
-
-2. Pointers get nullptr -> NULL conversion
-   int* ptr = nullptr;  ->  int* ptr = NULL;  // Auto-converted by this script
-
-3. Function parameters - Skip initialization
-   Already initialized by caller, don't add "= 0"
-
-4. Variables immediately assigned - May skip
-   int x;
-   x = getValue();  // Initialization would be redundant
-
-5. Loop counters - May skip 
-   for (int i = 0; ...)  // Already initialized in loop
-
-6. Static variables - Usually skip
-   Have default zero-initialization already
-
-7. const variables - Must initialize anyway
-   const int x = 5;  // Already required by C++
-
-8. Arrays - Special initialization syntax
-   int arr[10] = {0};  // OK in VS2008
-
-9. Structs/classes - May need {}
-   struct Point p = {0, 0};  // OK in C++03
-   NOT: Point p = {};        // C++11 only
-
-10. Member variables - Use initializer lists
-    Class() : member(0) {}   // Preferred in C++03
-    NOT: int member = 0;     // C++11 inline member initialization
-
-FILTERING APPLIED BY THIS SCRIPT:
-- Filters va_list initialization attempts (compilation error)
-- Converts nullptr to NULL (C++03 compatibility)
-- Filters NAN usage (not standard in VS2008)
-- Filters std::to_string (not available in VS2008)
-- Filters va_arg corruption patterns
-- Detects and filters corruption patterns
-
-CRLF WORKAROUND:
-- Converts CRLF -> LF before running clang-tidy (offset compatibility)
-- Runs analysis with proper byte offsets
-- Converts LF -> CRLF after applying fixes (restores original format)
+Reports go to .clang-tidy-outputs/ (diagnostics.txt, summary.json, per-TU logs
+and fix files).
 """
 
+import argparse
+import concurrent.futures
+import fnmatch
+import json
+import os
+import re
+import shlex
+import shutil
 import subprocess
 import sys
 import time
-import re
-import shutil
+from collections import Counter, defaultdict
 from pathlib import Path
-from collections import defaultdict
 
-try:
-    import yaml
-except ImportError:
-    print("Error: PyYAML is required but not installed")
-    print("Install it with: pip3 install pyyaml")
-    print("Or: pip3 install -r requirements.txt")
-    sys.exit(1)
+SCRIPT_DIR = Path(__file__).resolve().parent
+sys.path.insert(0, str(SCRIPT_DIR))
+import apply_yaml_fixes as ayf  # noqa: E402  (needs PyYAML; exits with a message if missing)
 
-# LLVM tools paths
-CLANG_TIDY = "/tmp/LLVM-21.1.8-Linux-X64/bin/clang-tidy"
-CLANG_APPLY_REPLACEMENTS = "/tmp/LLVM-21.1.8-Linux-X64/bin/clang-apply-replacements"
+IS_WINDOWS = os.name == "nt"
+SOURCE_DIR = "CvGameCoreDLL_Expansion2"
 
-# Proven checks from clang-tidy_notes.txt
+# Proven checks (Documents/clang-tidy notes, section 2). Order is informational:
+# all run in one pass; fixes that collide (e.g. isolate-declaration and
+# init-variables on the same declaration) are applied over successive passes.
 PROVEN_CHECKS = [
-    "readability-isolate-declaration",  # REQUIRED FIRST
-    "cppcoreguidelines-init-variables",  # WITH VS2008 CONVERSION
+    "readability-isolate-declaration",
+    "cppcoreguidelines-init-variables",
     "readability-inconsistent-declaration-parameter-name",
     "modernize-use-bool-literals",
-    "readability-simplify-boolean-expr",  # REQUIRES MANUAL REVIEW
+    "readability-simplify-boolean-expr",  # review each change
     "readability-container-size-empty",
     "readability-string-compare",
     "readability-avoid-return-with-void-value",
@@ -93,624 +72,510 @@ PROVEN_CHECKS = [
     "readability-redundant-smartptr-get",
     "readability-redundant-string-cstr",
     "readability-redundant-string-init",
-    "readability-static-accessed-through-instance"
+    "readability-static-accessed-through-instance",
+]
+MANUAL_REVIEW_CHECKS = {"readability-simplify-boolean-expr"}
+
+# Planned, untested (notes section 6). Run with --checks to evaluate, --report-only first.
+PLANNED_CHECKS = [
+    "performance-faster-string-find",
+    "performance-inefficient-algorithm",
+    "performance-unnecessary-copy-initialization",
+    "performance-inefficient-string-concatenation",
+    "performance-inefficient-vector-operation",
+    "performance-type-promotion-in-math-fn",
+    "performance-for-range-copy",
+    "performance-unnecessary-value-param",
+    "performance-implicit-conversion-in-loop",
+    "portability-simd-intrinsics",
+    "portability-std-allocator-const",
 ]
 
-# PLANNED: Performance & Portability checks
-# UNTESTED - Requires Windows SDK dependencies to validate
-# See TDD_PLAN.md for testing methodology
-PLANNED_PERFORMANCE_CHECKS = [
-    # Phase 1: Low-risk performance checks
-    # "performance-faster-string-find",  # UNTESTED
-    # "performance-inefficient-algorithm",  # UNTESTED
-    # "performance-unnecessary-copy-initialization",  # UNTESTED
-    # "performance-inefficient-string-concatenation",  # UNTESTED
-    # "performance-inefficient-vector-operation",  # UNTESTED
-    # "performance-type-promotion-in-math-fn",  # UNTESTED
-    
-    # Phase 2: Medium-risk performance checks (may suggest C++11)
-    # "performance-for-range-copy",  # UNTESTED - May suggest auto
-    # "performance-unnecessary-value-param",  # UNTESTED
-    # "performance-implicit-conversion-in-loop",  # UNTESTED
+# Never run (notes section 3): C++11 output, breaks the build, or rejected upstream.
+BLACKLISTED_CHECKS = {
+    "modernize-deprecated-headers",
+    "modernize-use-auto",
+    "modernize-redundant-void-arg",
+    "readability-implicit-bool-conversion",
+    "readability-math-missing-parentheses",
+    "cppcoreguidelines-pro-type-member-init",
+    "modernize-replace-auto-ptr",
+    "modernize-loop-convert",
+    "modernize-use-equals-delete",
+    "performance-move-const-arg",
+    "performance-move-constructor-init",
+    "performance-no-automatic-move",
+    "performance-noexcept-move-constructor",
+}
+
+# Checked against the changed source line (line text with the replacement in place).
+VS2008_LINE_PATTERNS = [
+    (re.compile(r"\bva_list\b[^;]*=\s*(NULL|nullptr|0|\{\})"), "va_list cannot be initialised (C2552)"),
+    (re.compile(r"=\s*NAN\b"), "NAN is not defined by VS2008"),
+    (re.compile(r"\bstd::to_string\b"), "std::to_string is not in VS2008"),
+    (re.compile(r"=\s*\{\s*\}"), "empty brace initialiser is C++11"),
+    (re.compile(r"\bConnections\s+\w+\s*=\s*0\b"), "aggregate initialised with 0"),
+    (re.compile(r"\bVoteCommitmentList\s+\w+\s*=\s*0\b"), "aggregate initialised with 0"),
+    (re.compile(r"\bIDInfoVector\s+\w+\s*=\s*0\b"), "aggregate initialised with 0"),
+    (re.compile(r"\bLookupTable\s+\w+\s*=\s*0\b"), "aggregate initialised with 0"),
+    (re.compile(r"\bTurnData\s+\w+\s*=\s*0\b"), "aggregate initialised with 0"),
+    (re.compile(r"\bPlotStatePerTurn\s+\w+\s*=\s*0\b"), "aggregate initialised with 0"),
+]
+# Checked against the replacement text alone.
+VS2008_TEXT_PATTERNS = [
+    (re.compile(r"#\s*include\s*<(c?math(\.h)?)>"), "adds a math header"),
+    (re.compile(r"\b(auto|constexpr|override|final|noexcept|decltype|static_assert)\b"), "C++11 keyword"),
 ]
 
-PLANNED_PORTABILITY_CHECKS = [
-    # Phase 4: Portability checks
-    # "portability-simd-intrinsics",  # UNTESTED - Likely no findings
-    # "portability-std-allocator-const",  # UNTESTED
-]
 
-PLANNED_MODERNIZE_CHECKS = [
-    # Phase 5: Requires nullptr -> NULL conversion
-    # "modernize-use-nullptr",  # UNTESTED - Requires post-processing
-]
+def default_jobs():
+    return max(1, min(6, (os.cpu_count() or 2) // 2))
 
-# Checks to NEVER add (from clang-tidy-notes.txt)
-BLACKLISTED_CHECKS = [
-    # "modernize-deprecated-headers",  # Breaks compile
-    # "modernize-use-auto",  # Readability confusion
-    # "modernize-redundant-void-arg",  # Explicit void preferred
-    # "readability-implicit-bool-conversion",  # Too many false positives
-    # "readability-math-missing-parentheses",  # Dev preference
-    # "performance-move-const-arg",  # C++11 move semantics
-    # "performance-move-constructor-init",  # C++11 move semantics
-    # "performance-no-automatic-move",  # C++11 move semantics
-    # "performance-noexcept-move-constructor",  # C++11 noexcept
-]
 
-def check_prerequisites():
-    """Check if all required tools are available"""
-    print("Checking prerequisites...")
-    
-    # Check clang-tidy
-    if not Path(CLANG_TIDY).exists():
-        print(f"FAILED: clang-tidy not found at {CLANG_TIDY}")
-        return False
-    
-    # Check clang-apply-replacements
-    if not Path(CLANG_APPLY_REPLACEMENTS).exists():
-        print(f"FAILED: clang-apply-replacements not found at {CLANG_APPLY_REPLACEMENTS}")
-        return False
-    
-    # Check compile_commands.json
-    if not Path("compile_commands.json").exists():
-        print("FAILED: compile_commands.json not found")
-        return False
-    
-    print("SUCCESS: All prerequisites satisfied")
-    return True
+def log(msg=""):
+    print(msg, flush=True)
 
-def find_source_files():
-    """Find all C++ source files"""
-    cpp_files = list(Path("CvGameCoreDLL_Expansion2").glob("*.cpp"))
-    print(f"Found {len(cpp_files)} C++ source files")
-    return cpp_files
 
-def convert_cpp11_to_cpp03(replacement_text, context=""):
-    """Convert C++11 constructs to VS2008/C++03 compatible equivalents"""
-    if not replacement_text:
-        return replacement_text
-    
-    # Convert nullptr to appropriate C++03 equivalent
-    if "= nullptr" in replacement_text:
-        # For pointers, use = NULL
-        return replacement_text.replace("= nullptr", " = NULL")
-    
-    # Convert other C++11 constructs as needed
-    # Add more conversions here as discovered
-    
-    return replacement_text
+# --------------------------------------------------------------------------- tools
 
-def is_problematic_for_vs2008(replacement_text, file_path="", context=""):
-    """Check if a replacement is problematic for VS2008/C++03"""
-    if not replacement_text:
-        return False
-    
-    # Check replacement text for problematic patterns
-    problematic_patterns = [
-        r'#include <math\.h>',  # math.h additions can cause issues
-        r'= NAN',  # NAN is not standard in VS2008
-        r'std::to_string',  # std::to_string not available in VS2008
-        r'va_arg\([^,]+\s*=\s*[^,]+,',  # va_arg with assignment inside - VS2008 incompatible
-        r'\)\);$',  # Double closing parentheses - syntax error
-        # CORRUPTION DETECTION - clang-tidy bugs that insert "= NULL" in wrong places
-        r'= NULL[a-z]',  # Detect NULL insertion corruption like "strle = NULLn"
-        r'[a-z]= NULL[a-z]',  # Detect NULL insertion in middle of words
-        r'\w+\(\)\);',  # Detect extra closing parentheses in function calls
-        r'strle\s*=',  # Detect strlen corruption specifically
-        r'p\s*=\s*NULL\w+',  # Detect "p = NULLrocessing" type corruptions
-        r'argum\s*=\s*NULL',  # Detect "argum = NULLent" type corruptions
-        r'va\s*=\s*NULL\w+',  # Detect "va = NULLriable" type corruptions
-        r'va_arg\([^,]+\s*=\s*NULL',  # Detect va_arg(vl = NULL, ...) corruption
-        r'\w+\(\)\);$',  # Detect function calls with extra closing parenthesis
-        # Add specific problematic initializations from notes
-        r'Connections\s*=\s*0',
-        r'VoteCommitmentList\s+\w+\s*=\s*0',
-        r'IDInfoVector\s+\w+\s*=\s*0',
-        r'LookupTable\s+\w+\s*=\s*0',
-        r'TurnData\s+\w+\s*=\s*0',
-        r'PlotStatePerTurn\s+\w+\s*=\s*0',
-    ]
-    
-    for pattern in problematic_patterns:
-        if re.search(pattern, replacement_text):
-            return True
-    
-    # Check context for va_list initialization - VS2008 incompatible
-    if context and re.search(r'=\s*(NULL|nullptr|\{\})$', replacement_text.strip()):
-        if re.search(r'va_list\s+\w+', context):
-            return True
-    
-    # Additional check for va_arg corruption
-    if context and 'va_arg' in context:
-        if re.search(r'va_arg\([^,]+\s*=', replacement_text):
-            return True
-    
-    # Check for function name corruptions in context
-    if context:
-        # Look for patterns where function names might be corrupted
-        if re.search(r'strlen\s*\(', context) and 'strle' in replacement_text:
-            return True
-        if re.search(r'processing', context) and 'p = NULL' in replacement_text:
-            return True
-        if re.search(r'argument', context) and 'argum = NULL' in replacement_text:
-            return True
-        if re.search(r'variable', context) and 'va = NULL' in replacement_text:
-            return True
-    
-    # Check for suspicious patterns that suggest corruption
-    if re.search(r'\w+\s*=\s*NULL\w+', replacement_text):
-        return True
-    
-    return False
-
-def merge_overlapping_replacements(replacements):
-    """Merge or resolve overlapping replacements to prevent corruption"""
-    if not replacements:
-        return replacements
-    
-    # Sort by offset
-    sorted_replacements = sorted(replacements, key=lambda r: r.get('Offset', 0))
-    
-    merged = []
-    for replacement in sorted_replacements:
-        offset = replacement.get('Offset', 0)
-        length = replacement.get('Length', 0)
-        
-        # Check for overlap with previous replacement
-        if merged:
-            prev = merged[-1]
-            prev_end = prev.get('Offset', 0) + prev.get('Length', 0)
-            
-            # If overlapping, skip this replacement (keep first one)
-            if offset < prev_end:
-                print(f"  Skipping overlapping replacement at offset {offset}")
-                continue
-        
-        merged.append(replacement)
-    
-    return merged
-
-def process_and_filter_fixes(fixes_file):
-    """Process fixes with VS2008 compatibility and overlap resolution"""
-    if not fixes_file.exists():
-        print(f"Fixes file not found: {fixes_file}")
-        return None
-    
-    print("Processing and filtering fixes for VS2008/C++03 compatibility...")
-    
+def tool_version(path):
     try:
-        with open(fixes_file, 'r') as f:
-            data = yaml.safe_load(f)
-        
-        if not data:
-            print("No data in fixes file")
-            return None
-        
-        # Group replacements by file to handle overlaps
-        files_replacements = defaultdict(list)
-        
-        # Process each diagnostic
-        if isinstance(data, list):
-            # Handle list of diagnostics
-            diagnostics = data
-        elif isinstance(data, dict) and 'Diagnostics' in data:
-            # Handle single file format
-            diagnostics = data['Diagnostics']
-        else:
-            # Handle direct diagnostic format
-            diagnostics = [data] if 'DiagnosticMessage' in data else []
-        
-        processed_diagnostics = []
-        filtered_count = 0
-        converted_count = 0
-        
-        for diagnostic in diagnostics:
-            if 'DiagnosticMessage' not in diagnostic:
-                processed_diagnostics.append(diagnostic)
-                continue
-            
-            message = diagnostic['DiagnosticMessage']
-            if 'Replacements' not in message:
-                processed_diagnostics.append(diagnostic)
-                continue
-            
-            replacements = message['Replacements']
-            if not replacements:
-                processed_diagnostics.append(diagnostic)
-                continue
-            
-            # Process replacements for this diagnostic
-            processed_replacements = []
-            
-            for replacement in replacements:
-                file_path = replacement.get('FilePath', '')
-                replacement_text = replacement.get('ReplacementText', '')
-                offset = replacement.get('Offset', 0)
-                
-                # Read context around replacement for better decisions
-                context = ""
-                try:
-                    if file_path and Path(file_path).exists():
-                        with open(file_path, 'r') as f:
-                            content = f.read()
-                            start = max(0, offset - 100)
-                            end = min(len(content), offset + 100)
-                            context = content[start:end]
-                except:
-                    pass
-                
-                # Check if problematic for VS2008
-                if is_problematic_for_vs2008(replacement_text, file_path, context):
-                    print(f"  Filtered problematic: '{replacement_text.strip()}' in {Path(file_path).name}")
-                    filtered_count += 1
-                    continue
-                
-                # Convert C++11 to C++03
-                original_text = replacement_text
-                converted_text = convert_cpp11_to_cpp03(replacement_text, context)
-                
-                if converted_text != original_text:
-                    print(f"  Converted: '{original_text.strip()}' -> '{converted_text.strip()}' in {Path(file_path).name}")
-                    replacement['ReplacementText'] = converted_text
-                    converted_count += 1
-                
-                processed_replacements.append(replacement)
-            
-            # Group by file for overlap resolution
-            for replacement in processed_replacements:
-                file_path = replacement.get('FilePath', '')
-                files_replacements[file_path].append(replacement)
-            
-            # Update diagnostic with processed replacements
-            message['Replacements'] = processed_replacements
-            processed_diagnostics.append(diagnostic)
-        
-        # Resolve overlaps within each file
-        overlap_resolved_count = 0
-        for file_path, replacements in files_replacements.items():
-            original_count = len(replacements)
-            merged = merge_overlapping_replacements(replacements)
-            if len(merged) < original_count:
-                overlap_resolved_count += original_count - len(merged)
-                print(f"  Resolved {original_count - len(merged)} overlapping replacements in {Path(file_path).name}")
-        
-        # Update data structure
-        if isinstance(data, list):
-            result_data = processed_diagnostics
-        elif isinstance(data, dict) and 'Diagnostics' in data:
-            data['Diagnostics'] = processed_diagnostics
-            result_data = data
-        else:
-            result_data = processed_diagnostics[0] if processed_diagnostics else {}
-        
-        # Write processed fixes
-        processed_file = fixes_file.with_suffix('.processed.yaml')
-        with open(processed_file, 'w') as f:
-            yaml.dump(result_data, f, default_flow_style=False)
-        
-        print(f"Filtered {filtered_count} problematic fixes")
-        print(f"Converted {converted_count} C++11 to C++03 fixes")
-        print(f"Resolved {overlap_resolved_count} overlapping replacements")
-        print(f"Processed fixes saved to: {processed_file}")
-        
-        return processed_file
-        
-    except Exception as e:
-        print(f"Error processing fixes: {e}")
-        import traceback
-        traceback.print_exc()
+        out = subprocess.run([path, "--version"], capture_output=True, text=True, timeout=60).stdout
+    except (OSError, subprocess.SubprocessError):
         return None
+    m = re.search(r"version (\d+[.\d]*)", out)
+    return m.group(1) if m else "unknown"
 
-def validate_applied_fixes():
-    """Validate that applied fixes don't contain corruption patterns"""
-    corruption_patterns = [
-        r'va_arg\([^,]+\s*=\s*NULL',  # va_arg(vl = NULL, ...)
-        r'= NULL[a-z]',  # strle = NULLn
-        r'[a-z]= NULL[a-z]',  # p = NULLrocessing
-        r'\w+\(\)\);',  # function()) - extra parenthesis
-    ]
-    
-    source_files = find_source_files()
-    corruption_found = False
-    
-    for file_path in source_files:
-        try:
-            with open(file_path, 'r') as f:
-                content = f.read()
-                
-            for pattern in corruption_patterns:
-                matches = re.findall(pattern, content)
-                if matches:
-                    print(f"FAILED: Corruption found in {file_path}: {matches}")
-                    corruption_found = True
-        except Exception as e:
-            print(f"Warning: Could not validate {file_path}: {e}")
-    
-    return corruption_found
 
-def run_combined_analysis():
-    """Run all proven checks in a single clang-tidy invocation"""
-    print("\n" + "="*60)
-    print("Running All Proven Checks Combined (VS2008 Compatible)")
-    print("="*60)
-    
-    source_files = find_source_files()
-    if not source_files:
-        print("No source files found")
-        return False
-    
-    checks = ",".join(PROVEN_CHECKS)
-    results_file = "clang-tidy-combined-results.txt"
-    fixes_file = Path("clang-tidy-combined-fixes.yaml")
-    
-    print(f"Checks: {checks}")
-    print(f"Source files: {len(source_files)}")
-    print(f"Results: {results_file}")
-    print(f"Fixes: {fixes_file}")
-    
-    # Build command
-    cmd = [
-        CLANG_TIDY,
-        f"--checks={checks}",
-        "--export-fixes=" + str(fixes_file),
-        "--format-style=file",
-        "-p", ".",
-    ] + [str(f) for f in source_files]
-    
-    start_time = time.time()
-    
-    try:
-        with open(results_file, 'w') as f:
-            result = subprocess.run(cmd, stdout=f, stderr=subprocess.STDOUT, text=True)
-        
-        duration = time.time() - start_time
-        print(f"clang-tidy completed in {duration:.1f} seconds ({duration/60:.1f} minutes) (exit code: {result.returncode})")
-        
-        # TDD: Check file size after clang-tidy runs
-        test_file = Path("CvGameCoreDLL_Expansion2/CvGame.cpp")
-        if test_file.exists():
-            size_after_tidy = len(test_file.read_bytes())
-            print(f" TDD: CvGame.cpp size after clang-tidy: {size_after_tidy} bytes")
-        
-        if fixes_file.exists():
-            # Process and filter fixes
-            processed_file = process_and_filter_fixes(fixes_file)
-            
-            if processed_file:
-                print(f"Applying processed fixes from {processed_file}")
-                
-                # TDD: Check file size before applicator runs
-                test_file = Path("CvGameCoreDLL_Expansion2/CvGame.cpp")
-                if test_file.exists():
-                    size_before_apply = len(test_file.read_bytes())
-                    print(f" TDD: CvGame.cpp size before applicator: {size_before_apply} bytes")
-                
-                # Use custom YAML applicator instead of buggy clang-apply-replacements
-                try:
-                    from apply_yaml_fixes import YAMLFixApplicator
-                    
-                    applicator = YAMLFixApplicator(processed_file, dry_run=False, verbose=False)
-                    
-                    if not applicator.load_yaml():
-                        print("FAILED: Failed to load YAML")
-                        return False
-                    
-                    if not applicator.apply_all():
-                        print("FAILED: Failed to apply fixes")
-                        return False
-                    
-                    print("SUCCESS: Custom applicator successfully applied fixes")
-                    
-                    # Validate applied fixes for corruption
-                    corruption_found = validate_applied_fixes()
-                    if corruption_found:
-                        print("FAILED: Corruption detected in applied fixes!")
-                        return False
-                    
-                except ImportError as e:
-                    print(f"FAILED: Could not import apply_yaml_fixes: {e}")
-                    print("Make sure apply_yaml_fixes.py is in the same directory")
-                    return False
-                except Exception as e:
-                    print(f"FAILED: Error applying fixes: {e}")
-                    return False
-            else:
-                print("FAILED: Failed to process fixes")
-                return False
-        else:
-            print("No fixes file generated")
-        
-        print("\n" + "="*60)
-        print("SUMMARY")
-        print("="*60)
-        print(f"Total time: {duration:.1f} seconds ({duration/60:.1f} minutes)")
-        print(f"Checks processed: {len(PROVEN_CHECKS)}")
-        print(f"Results saved in: {results_file}")
-        print(f"Processed fixes applied with VS2008/C++03 compatibility")
-        
-        return True
-        
-    except Exception as e:
-        print(f"Error running clang-tidy: {e}")
-        return False
-
-def convert_files_to_lf():
-    """Convert all source files from CRLF to LF for clang-tidy compatibility"""
-    print("=" * 80)
-    print("STEP 1: Converting CRLF -> LF (required for clang-tidy offset compatibility)")
-    print("=" * 80)
-    
-    source_dir = Path("CvGameCoreDLL_Expansion2")
-    crlf_files = []
-    
-    for cpp_file in source_dir.glob("*.cpp"):
-        try:
-            content = cpp_file.read_bytes()
-            if b'\r\n' in content:
-                crlf_files.append(str(cpp_file))
-                # Convert CRLF to LF
-                content_lf = content.decode('utf-8').replace('\r\n', '\n').encode('utf-8')
-                cpp_file.write_bytes(content_lf)
-        except Exception as e:
-            print(f"Warning: Could not process {cpp_file}: {e}")
-    
-    print(f"SUCCESS: Converted {len(crlf_files)} files from CRLF to LF")
-    print(f"  (CRLF causes byte offset mismatches in clang-tidy)\n")
-    
-    return crlf_files
-
-def convert_files_to_crlf(crlf_files):
-    """Convert source files back from LF to CRLF"""
-    print("\n" + "=" * 80)
-    print("FINAL STEP: Converting LF -> CRLF (restoring original line endings)")
-    print("=" * 80)
-    
-    for file_path in crlf_files:
-        try:
-            cpp_file = Path(file_path)
-            if cpp_file.exists():
-                content = cpp_file.read_bytes()
-                # Convert LF to CRLF
-                content_crlf = content.decode('utf-8').replace('\n', '\r\n').encode('utf-8')
-                cpp_file.write_bytes(content_crlf)
-        except Exception as e:
-            print(f"Warning: Could not restore {file_path}: {e}")
-    
-    print(f"SUCCESS: Restored CRLF line endings in {len(crlf_files)} files\n")
-
-def backup_files(file_list):
-    """Create .bak copies before modifying"""
-    print("Creating backup files...")
-    backed_up = 0
-    for file_path in file_list:
-        try:
-            backup_path = Path(f"{file_path}.bak")
-            shutil.copy2(file_path, backup_path)
-            backed_up += 1
-        except Exception as e:
-            print(f"Warning: Could not backup {file_path}: {e}")
-    print(f"SUCCESS: Created {backed_up} backup files\n")
-
-def restore_from_backup(file_list):
-    """Restore from .bak files"""
-    print("\n" + "=" * 80)
-    print("RESTORING FILES FROM BACKUP")
-    print("=" * 80)
-    
-    restored = 0
-    for file_path in file_list:
-        try:
-            backup_path = Path(f"{file_path}.bak")
-            if backup_path.exists():
-                shutil.copy2(backup_path, file_path)
-                backup_path.unlink()
-                restored += 1
-        except Exception as e:
-            print(f"Warning: Could not restore {file_path}: {e}")
-    
-    print(f"SUCCESS: Restored {restored} files from backup\n")
-
-def cleanup_backups(file_list):
-    """Remove backup files after successful completion"""
-    for file_path in file_list:
-        backup_path = Path(f"{file_path}.bak")
-        if backup_path.exists():
+def find_clang_tidy(explicit):
+    exe = "clang-tidy.exe" if IS_WINDOWS else "clang-tidy"
+    # An explicit choice wins as given.
+    for chosen in (explicit, os.environ.get("CLANG_TIDY"),
+                   os.path.join(os.environ["LLVM_PATH"], "bin", exe) if os.environ.get("LLVM_PATH") else None):
+        if chosen:
+            v = tool_version(chosen) if os.path.isfile(chosen) else None
+            if not v:
+                log("ERROR: clang-tidy %s does not exist or does not run." % chosen)
+                sys.exit(1)
+            return chosen, v
+    # Otherwise the newest one found (several LLVM installs are common on Windows).
+    candidates = []
+    w = shutil.which("clang-tidy")
+    if w:
+        candidates.append(w)
+    if IS_WINDOWS:
+        for env in ("ProgramFiles", "ProgramW6432", "ProgramFiles(x86)"):
+            if os.environ.get(env):
+                candidates.append(os.path.join(os.environ[env], "LLVM", "bin", exe))
+    else:
+        versioned = []
+        for d in os.environ.get("PATH", "").split(os.pathsep):
             try:
-                backup_path.unlink()
-            except:
+                for name in os.listdir(d):
+                    m = re.fullmatch(r"clang-tidy-(\d+)", name)
+                    if m:
+                        versioned.append((int(m.group(1)), os.path.join(d, name)))
+            except OSError:
                 pass
+        candidates += [p for _, p in sorted(versioned, reverse=True)]
+    found = {}
+    for c in candidates:
+        if c and os.path.isfile(c) and ayf.norm_path(c) not in found:
+            v = tool_version(c)
+            if v:
+                found[ayf.norm_path(c)] = (c, v)
+    if found:
+        def vkey(item):
+            return tuple(int(x) for x in re.findall(r"\d+", item[1])[:3])
+        return max(found.values(), key=vkey)
+    log("ERROR: clang-tidy not found. Install LLVM (Windows: C:\\Program Files\\LLVM; Linux: "
+        "apt install clang-tidy) or pass --clang-tidy / set CLANG_TIDY or LLVM_PATH.")
+    sys.exit(1)
 
-def rollback_to_git(file_paths):
-    """Restore files to git HEAD state"""
-    print("\n" + "=" * 80)
-    print("ROLLING BACK CHANGES VIA GIT")
-    print("=" * 80)
-    
-    try:
-        # Restore all modified files in CvGameCoreDLL_Expansion2
-        result = subprocess.run(
-            ['git', 'checkout', '--', 'CvGameCoreDLL_Expansion2/'],
-            capture_output=True,
-            text=True
-        )
-        
-        if result.returncode == 0:
-            print(f"SUCCESS: Restored files from git HEAD")
-            return True
+
+# --------------------------------------------------------------------------- compile database
+
+def ensure_compile_db(args):
+    db = Path(args.p).resolve() / "compile_commands.json"
+    if db.exists() and not args.regenerate_db:
+        return db
+    if args.no_generate_db:
+        log("ERROR: %s not found (and --no-generate-db given)." % db)
+        sys.exit(1)
+    cmd = [sys.executable, str(SCRIPT_DIR / "build_vp_clang_linux.py"), "--compile-commands-only",
+           "--config", args.config, "--compile-commands-dir", str(db.parent)]
+    if args.deps_dir:
+        cmd += ["--deps-dir", args.deps_dir]
+    log("Generating %s (no compile): %s" % (db, " ".join(cmd)))
+    if subprocess.run(cmd, cwd=str(SCRIPT_DIR)).returncode != 0 or not db.exists():
+        log("ERROR: could not generate the compile database.")
+        sys.exit(1)
+    return db
+
+
+def entry_args(entry):
+    if "arguments" in entry:
+        return list(entry["arguments"])
+    return shlex.split(entry["command"], posix=not IS_WINDOWS)
+
+
+def entry_file(entry):
+    f = Path(entry["file"])
+    if not f.is_absolute():
+        f = Path(entry.get("directory", ".")) / f
+    return f.resolve()
+
+
+def select_tus(db_path, patterns):
+    with open(db_path, "r", encoding="utf-8") as fh:
+        entries = json.load(fh)
+    src_root = (SCRIPT_DIR / SOURCE_DIR).resolve()
+    tus = {}
+    for e in entries:
+        f = entry_file(e)
+        try:
+            rel = f.relative_to(src_root)
+        except ValueError:
+            continue
+        tus[ayf.norm_path(f)] = (f, rel.as_posix(), e)
+    if not patterns:
+        return list(tus.values()), list(tus.values())
+    chosen = []
+    for f, rel, e in tus.values():
+        for pat in patterns:
+            pat = pat.replace("\\", "/")
+            if pat.startswith(SOURCE_DIR + "/"):
+                pat = pat[len(SOURCE_DIR) + 1:]
+            if fnmatch.fnmatch(rel.lower(), pat.lower()) or fnmatch.fnmatch(f.name.lower(), pat.lower()):
+                chosen.append((f, rel, e))
+                break
+    if not chosen:
+        log("ERROR: no translation unit in the compile database matches %s" % patterns)
+        sys.exit(1)
+    return chosen, list(tus.values())
+
+
+# --------------------------------------------------------------------------- running
+
+def run_parallel(func, items, jobs):
+    results = []
+    with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as pool:
+        futures = [pool.submit(func, it) for it in items]
+        done = 0
+        for fut in concurrent.futures.as_completed(futures):
+            results.append(fut.result())
+            done += 1
+            if done % 10 == 0 or done == len(items):
+                log("  %d/%d" % (done, len(items)))
+    return results
+
+
+def tidy_one(tu, args, tidy, checks, out_dir, pass_no):
+    f, rel, _ = tu
+    stem = rel.replace("/", "__")
+    fix_path = out_dir / "fixes" / ("pass%d" % pass_no) / (stem + ".yaml")
+    log_path = out_dir / "logs" / ("pass%d" % pass_no) / (stem + ".txt")
+    fix_path.parent.mkdir(parents=True, exist_ok=True)
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    if fix_path.exists():
+        fix_path.unlink()
+    config = "{Checks: '-*,%s', WarningsAsErrors: ''}" % ",".join(checks)
+    cmd = [tidy, "--config=" + config, "--header-filter=" + args.header_filter,
+           "--format-style=none", "--quiet", "-p", str(Path(args.p).resolve()),
+           "--export-fixes=" + str(fix_path), str(f)]
+    t0 = time.time()
+    with open(log_path, "wb") as lf:
+        rc = subprocess.run(cmd, stdout=lf, stderr=subprocess.STDOUT, cwd=str(SCRIPT_DIR)).returncode
+    return {"tu": tu, "rc": rc, "fixes": fix_path if fix_path.exists() else None,
+            "log": log_path, "secs": time.time() - t0}
+
+
+def syntax_check_one(tu, out_dir, folder="verify"):
+    f, rel, entry = tu
+    cmd = entry_args(entry)
+    # Drop the object output; -fsyntax-only parses and type-checks only.
+    cleaned = []
+    skip = False
+    for a in cmd:
+        if skip:
+            skip = False
+            continue
+        if a == "-o":
+            skip = True
+            continue
+        if a.startswith("-o") and len(a) > 2 and not a.startswith("-object"):
+            continue
+        if a in ("-MJ",):
+            skip = True
+            continue
+        cleaned.append(a)
+    cleaned.append("-fsyntax-only")
+    log_path = out_dir / "logs" / folder / (rel.replace("/", "__") + ".txt")
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(log_path, "wb") as lf:
+        rc = subprocess.run(cleaned, stdout=lf, stderr=subprocess.STDOUT,
+                            cwd=entry.get("directory", str(SCRIPT_DIR))).returncode
+    return {"tu": tu, "rc": rc, "log": log_path}
+
+
+# --------------------------------------------------------------------------- filtering
+
+class FileCache(object):
+    def __init__(self):
+        self.data = {}
+
+    def get(self, path):
+        k = ayf.norm_path(path)
+        if k not in self.data:
+            try:
+                with open(path, "rb") as fh:
+                    self.data[k] = fh.read()
+            except OSError:
+                self.data[k] = b""
+        return self.data[k]
+
+    def drop(self, paths):
+        for p in paths:
+            self.data.pop(ayf.norm_path(p), None)
+
+    def line_col(self, path, offset):
+        d = self.get(path)
+        return d.count(b"\n", 0, offset) + 1, offset - (d.rfind(b"\n", 0, offset) + 1) + 1
+
+    def preview(self, r):
+        """The source line(s) touched by r with r applied, as text."""
+        d = self.get(r.path)
+        start = d.rfind(b"\n", 0, r.offset) + 1
+        end = d.find(b"\n", r.end)
+        end = len(d) if end < 0 else end
+        new = d[start:r.offset] + r.text.encode("utf-8") + d[r.end:end]
+        return new.decode("utf-8", "replace")
+
+
+def vs2008_filter(diags, cache):
+    """Returns (kept, filtered[(diag, reason)], converted_count). Mutates nullptr -> NULL."""
+    kept, filtered, converted = [], [], 0
+    for d in diags:
+        if not d.replacements:
+            kept.append(d)
+            continue
+        if d.check.startswith("clang-diagnostic"):
+            filtered.append((d, "compiler fix-it (never applied)"))
+            continue
+        reason = None
+        for r in d.replacements:
+            if "nullptr" in r.text:
+                r.text = re.sub(r"\bnullptr\b", "NULL", r.text)
+                converted += 1
+            for pat, why in VS2008_TEXT_PATTERNS:
+                if pat.search(r.text):
+                    reason = why
+                    break
+            if reason:
+                break
+            line = cache.preview(r)
+            for pat, why in VS2008_LINE_PATTERNS:
+                if pat.search(line):
+                    reason = why
+                    break
+            if reason:
+                break
+        if reason:
+            filtered.append((d, reason))
         else:
-            print(f"FAILED: Git rollback failed: {result.stderr}")
-            return False
-    except Exception as e:
-        print(f"FAILED: Git rollback error: {e}")
-        return False
+            kept.append(d)
+    return kept, filtered, converted
+
+
+# --------------------------------------------------------------------------- main
+
+def parse_args():
+    ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0],
+                                 formatter_class=argparse.RawDescriptionHelpFormatter,
+                                 epilog=__doc__[__doc__.index("What it does"):])
+    ap.add_argument("--files", nargs="+", metavar="PATTERN",
+                    help="TUs to analyse: names or globs, e.g. CvDealAI.cpp 'CvDeal*.cpp' (default: all)")
+    ap.add_argument("--checks", help="comma-separated checks to run instead of the proven list")
+    ap.add_argument("--add-checks", help="comma-separated checks to run in addition to --checks/proven")
+    ap.add_argument("--list-checks", action="store_true", help="print the check lists and exit")
+    ap.add_argument("--report-only", action="store_true", help="analyse and report; change no file")
+    ap.add_argument("--passes", type=int, default=2,
+                    help="analyse/apply rounds; later rounds pick up fixes skipped as overlapping (default 2)")
+    ap.add_argument("--no-verify", action="store_true", help="skip the clang -fsyntax-only re-check")
+    ap.add_argument("--verify-selected-only", action="store_true",
+                    help="after a header fix, re-check only the selected TUs instead of every TU in the database")
+    ap.add_argument("--allow-errors", action="store_true",
+                    help="apply fixes even if some TUs had compile errors (their AST is partial)")
+    ap.add_argument("-j", "--jobs", type=int, default=default_jobs(),
+                    help="concurrent clang-tidy/clang processes (default %d)" % default_jobs())
+    ap.add_argument("--header-filter", default=r".*[/\\]%s[/\\][^/\\]*\.h$" % SOURCE_DIR,
+                    help="headers whose diagnostics are reported/fixed (default: the DLL's own headers)")
+    ap.add_argument("--clang-tidy", help="clang-tidy executable (default: CLANG_TIDY, LLVM_PATH, PATH, Program Files\\LLVM)")
+    ap.add_argument("-p", default=str(SCRIPT_DIR), help="directory holding compile_commands.json (default: repo root)")
+    ap.add_argument("--config", default="debug", choices=["debug", "release"],
+                    help="configuration for a generated compile database (default debug)")
+    ap.add_argument("--deps-dir", help="VC9/SDK Dependencies folder for database generation (else VP_DEPS_DIR or ./Dependencies)")
+    ap.add_argument("--regenerate-db", action="store_true", help="regenerate compile_commands.json first")
+    ap.add_argument("--no-generate-db", action="store_true", help="fail instead of generating a missing database")
+    ap.add_argument("--out-dir", default=str(SCRIPT_DIR / ".clang-tidy-outputs"), help="report folder")
+    return ap.parse_args()
+
+
+def resolve_checks(args):
+    checks = [c.strip() for c in (args.checks.split(",") if args.checks else PROVEN_CHECKS) if c.strip()]
+    if args.add_checks:
+        checks += [c.strip() for c in args.add_checks.split(",") if c.strip()]
+    bad = [c for c in checks if c in BLACKLISTED_CHECKS]
+    if bad:
+        log("ERROR: blacklisted check(s) requested (see the notes, section 3): %s" % ", ".join(bad))
+        sys.exit(1)
+    # A glob (e.g. readability-*) runs with the blacklisted checks it covers switched off.
+    excluded = sorted(b for b in BLACKLISTED_CHECKS
+                      if any("*" in c and not c.startswith("-") and fnmatch.fnmatch(b, c) for c in checks))
+    return checks + ["-" + b for b in excluded]
+
 
 def main():
-    """Main function with CRLF workaround"""
-    print("=" * 80)
-    print("CLANG-TIDY AUTOMATED ANALYSIS WITH CRLF WORKAROUND")
-    print("=" * 80)
-    print()
-    print("This script runs all 14 proven safe checks with:")
-    print("  - CRLF->LF conversion (fixes byte offset issues)")
-    print("  - C++11->C++03 conversion (nullptr -> NULL)")
-    print("  - VS2008 compatibility filtering (va_list, NAN, etc.)")
-    print()
-    
-    if not check_prerequisites():
-        sys.exit(1)
-    
-    # Step 1: Convert to LF
-    crlf_files = convert_files_to_lf()
-    
-    # TDD: Verify file sizes after conversion
-    test_file = Path("CvGameCoreDLL_Expansion2/CvGame.cpp")
-    if test_file.exists():
-        size_after_conv = len(test_file.read_bytes())
-        print(f" TDD: CvGame.cpp size after conversion: {size_after_conv} bytes")
-    
-    # Step 2: Create backups
-    backup_files(crlf_files)
-    
-    # TDD: Verify file sizes after backup
-    if test_file.exists():
-        size_after_backup = len(test_file.read_bytes())
-        print(f" TDD: CvGame.cpp size after backup: {size_after_backup} bytes")
-    
+    args = parse_args()
+    if args.list_checks:
+        log("Proven (default):\n  " + "\n  ".join(PROVEN_CHECKS))
+        log("Planned, untested (use --checks ... --report-only):\n  " + "\n  ".join(PLANNED_CHECKS))
+        log("Blacklisted (refused):\n  " + "\n  ".join(sorted(BLACKLISTED_CHECKS)))
+        return 0
+    os.chdir(str(SCRIPT_DIR))
+    checks = resolve_checks(args)
+    tidy, tidy_ver = find_clang_tidy(args.clang_tidy)
+    db = ensure_compile_db(args)
+    tus, db_tus = select_tus(db, args.files)
+    out_dir = Path(args.out_dir).resolve()
+    out_dir.mkdir(parents=True, exist_ok=True)
+    jobs = max(1, args.jobs)
+    log("clang-tidy %s: %s" % (tidy_ver, tidy))
+    log("database: %s; TUs: %d; jobs: %d; checks: %d; mode: %s"
+        % (db, len(tus), jobs, len(checks), "report only" if args.report_only else "fix"))
+
+    cache = FileCache()
+    backup = {}
+    summary = {"clang_tidy": tidy, "version": tidy_ver, "checks": checks, "tus": len(tus),
+               "jobs": jobs, "passes": []}
+    diag_lines = []
+    all_tus = list(tus)
+    exit_code = 0
     try:
-        # Step 3: Run clang-tidy analysis
-        if not run_combined_analysis():
-            print("\nWARNING:  Analysis failed, restoring from backup...")
-            restore_from_backup(crlf_files)
-            convert_files_to_crlf(crlf_files)
-            sys.exit(1)
-        
-        # Step 4: Convert back to CRLF
-        convert_files_to_crlf(crlf_files)
-        
-        # Step 5: Clean up backups
-        cleanup_backups(crlf_files)
-        
-        print("\n" + "=" * 80)
-        print("SUCCESS: CLANG-TIDY ANALYSIS COMPLETED SUCCESSFULLY!")
-        print("=" * 80)
-        print()
-        print("Next steps:")
-        print("  1. Review changes: git diff")
-        print("  2. Build and test: python3 build_vp_clang_linux.py")
-        print("  3. Commit if satisfied: git commit -am 'Apply clang-tidy fixes'")
-        print()
-        
+        for pass_no in range(1, max(1, args.passes) + 1):
+            log("\n== pass %d: clang-tidy on %d TU(s)" % (pass_no, len(tus)))
+            t0 = time.time()
+            results = run_parallel(lambda tu: tidy_one(tu, args, tidy, checks, out_dir, pass_no), tus, jobs)
+            secs = time.time() - t0
+            yamls = sorted(r["fixes"] for r in results if r["fixes"])
+            diags, dups = ayf.load_diagnostics(yamls)
+            errors = [d for d in diags if d.check == "clang-diagnostic-error"]
+            error_tus = sorted({str(r["log"]) for r in results if r["rc"] != 0})
+            kept, filtered, converted = vs2008_filter(diags, cache)
+            accepted, conflicting = ayf.select_non_conflicting(kept)
+            per_check = Counter(d.check for d in diags)
+            accepted_ids = {id(d) for d in accepted}
+            p = {"pass": pass_no, "seconds": round(secs, 1), "diagnostics": len(diags),
+                 "duplicates_dropped": dups, "compile_errors": len(errors),
+                 "fixable": sum(1 for d in kept if d.replacements), "filtered_vs2008": len(filtered),
+                 "nullptr_converted": converted, "overlapping_skipped": len(conflicting),
+                 "accepted": len(accepted), "per_check": dict(per_check.most_common())}
+            for d in diags:
+                if d.path:
+                    ln, col = cache.line_col(d.path, d.offset)
+                    tag = ""
+                    if id(d) in accepted_ids:
+                        tag = " [fix%s]" % (": review" if d.check in MANUAL_REVIEW_CHECKS else "")
+                    diag_lines.append("pass%d %s:%d:%d: %s: %s%s"
+                                      % (pass_no, d.path, ln, col, d.check, d.message, tag))
+            for d, why in filtered:
+                if d.path:
+                    ln, _ = cache.line_col(d.path, d.offset)
+                    diag_lines.append("pass%d %s:%d: %s: FILTERED (%s)" % (pass_no, d.path, ln, d.check, why))
+            log("  %.0f s; diagnostics %d (%d duplicate header reports dropped); fixes: %d accepted, "
+                "%d filtered for VS2008, %d overlapping (next pass); nullptr->NULL %d"
+                % (secs, len(diags), dups, len(accepted), len(filtered), len(conflicting), converted))
+            for check, n in per_check.most_common():
+                log("    %5d %s" % (n, check))
+            if errors or error_tus:
+                log("  WARNING: %d compile error(s); clang-tidy exited non-zero for %d TU(s). Logs:"
+                    % (len(errors), len(error_tus)))
+                for e in error_tus[:10]:
+                    log("    " + e)
+            summary["passes"].append(p)
+
+            if args.report_only or not accepted:
+                break
+            if (errors or error_tus) and not args.allow_errors:
+                log("  NOT applying: fix the compile errors first (or --allow-errors).")
+                exit_code = 2
+                break
+            changed = ayf.apply_diagnostics(accepted, backup=backup)
+            cache.drop(changed.keys())
+            p["files_changed"] = len(changed)
+            log("  applied %d fixes to %d file(s)" % (len(accepted), len(changed)))
+
+            changed_headers = any(not k.endswith(".cpp") for k in changed)
+            scope = all_tus if (args.verify_selected_only or not changed_headers) else db_tus
+            affected = [tu for tu in scope if changed_headers or ayf.norm_path(tu[0]) in changed]
+            if not args.no_verify and affected:
+                log("  verify: clang -fsyntax-only on %d TU(s)" % len(affected))
+                vres = run_parallel(lambda tu: syntax_check_one(tu, out_dir), affected, jobs)
+                bad = [v for v in vres if v["rc"] != 0]
+                p["verify_failed"] = len(bad)
+                if bad:
+                    log("  VERIFY FAILED in %d TU(s); restoring all %d changed file(s). Logs:"
+                        % (len(bad), len(backup)))
+                    for v in bad[:10]:
+                        log("    " + str(v["log"]))
+                    restore(backup)
+                    # Tell fix-caused failures from ones the unchanged tree already has.
+                    again = run_parallel(lambda v: syntax_check_one(v["tu"], out_dir, "verify-unchanged"), bad, jobs)
+                    pre = sorted(a["tu"][1] for a in again if a["rc"] != 0)
+                    if pre:
+                        log("  %d of these also fail on the unchanged files (not caused by the fixes): %s"
+                            % (len(pre), ", ".join(pre[:10])))
+                        log("  Fix the build first, or use --no-verify.")
+                    p["verify_preexisting"] = len(pre)
+                    exit_code = 3
+                    break
+            if not conflicting:
+                break
+            # Next pass: only the TUs that can still have the skipped fixes.
+            if changed_headers or any(not ayf.norm_path(d.path).endswith(".cpp") for d in conflicting if d.path):
+                tus = all_tus
+            else:
+                want = {ayf.norm_path(d.path) for d in conflicting if d.path}
+                tus = [tu for tu in all_tus if ayf.norm_path(tu[0]) in want]
     except KeyboardInterrupt:
-        print("\n\nWARNING:  Interrupted by user, restoring from backup...")
-        restore_from_backup(crlf_files)
-        convert_files_to_crlf(crlf_files)
-        sys.exit(130)
-    except Exception as e:
-        print(f"\nFAILED: Error: {e}")
-        print("Restoring original line endings...")
-        convert_files_to_crlf(crlf_files)
-        sys.exit(1)
+        log("\nInterrupted: restoring %d changed file(s)." % len(backup))
+        restore(backup)
+        return 130
+    except Exception:
+        if backup:
+            log("\nError: restoring %d changed file(s)." % len(backup))
+            restore(backup)
+        raise
+
+    summary["files_changed"] = 0 if exit_code == 3 else len(backup)
+    with open(out_dir / "summary.json", "w", encoding="utf-8") as fh:
+        json.dump(summary, fh, indent=2)
+    with open(out_dir / "diagnostics.txt", "w", encoding="utf-8") as fh:
+        fh.write("\n".join(diag_lines) + "\n")
+    log("\nReports: %s (diagnostics.txt, summary.json, logs/, fixes/)" % out_dir)
+    if backup and exit_code == 0:
+        log("Changed %d file(s). Review with git diff, then build with MSVC v90 (VS2008) before committing."
+            % len(backup))
+        if any(d in MANUAL_REVIEW_CHECKS for d in checks):
+            log("readability-simplify-boolean-expr fixes are marked [fix: review] in diagnostics.txt.")
+    return exit_code
+
+
+def restore(backup):
+    for path, data in backup.items():
+        with open(path, "wb") as fh:
+            fh.write(data)
+
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
