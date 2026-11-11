@@ -54,6 +54,7 @@ from pathlib import Path
 SCRIPT_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPT_DIR))
 import apply_yaml_fixes as ayf  # noqa: E402  (needs PyYAML; exits with a message if missing)
+import tidy_style  # noqa: E402
 
 IS_WINDOWS = os.name == "nt"
 SOURCE_DIR = "CvGameCoreDLL_Expansion2"
@@ -76,8 +77,11 @@ PROVEN_CHECKS = [
     "readability-redundant-string-cstr",
     "readability-redundant-string-init",
     "readability-static-accessed-through-instance",
+    # clang-tidy 23+. Their fix-its are rewritten to the code base's brace style by tidy_style.py.
+    "readability-inconsistent-ifelse-braces",
+    "readability-redundant-nested-if",  # review each change
 ]
-MANUAL_REVIEW_CHECKS = {"readability-simplify-boolean-expr"}
+MANUAL_REVIEW_CHECKS = {"readability-simplify-boolean-expr", "readability-redundant-nested-if"}
 
 # Planned, untested (notes section 6). Run with --checks to evaluate, --report-only first.
 PLANNED_CHECKS = [
@@ -515,6 +519,18 @@ def parse_args():
     return ap.parse_args()
 
 
+def unknown_checks(tidy, checks):
+    """Checks this clang-tidy doesn't have (an older one ignores unknown names silently)."""
+    wanted = [c for c in checks if not c.startswith("-") and "*" not in c]
+    try:
+        out = subprocess.run([tidy, "--list-checks", "-checks=-*," + ",".join(wanted)],
+                             capture_output=True, text=True).stdout
+    except OSError:
+        return []
+    known = {l.strip() for l in out.splitlines()}
+    return [c for c in wanted if c not in known]
+
+
 def resolve_checks(args):
     checks = [c.strip() for c in (args.checks.split(",") if args.checks else PROVEN_CHECKS) if c.strip()]
     if args.add_checks:
@@ -545,6 +561,9 @@ def main():
     out_dir.mkdir(parents=True, exist_ok=True)
     jobs = max(1, args.jobs)
     log("clang-tidy %s: %s" % (tidy_ver, tidy))
+    missing = unknown_checks(tidy, checks)
+    if missing:
+        log("NOTE: this clang-tidy doesn't have (skipped): %s" % ", ".join(missing))
     log("database: %s; TUs: %d; jobs: %d; checks: %d; mode: %s"
         % (db, len(tus), jobs, len(checks), "report only" if args.report_only else "fix"))
 
@@ -566,13 +585,16 @@ def main():
             errors = [d for d in diags if d.check == "clang-diagnostic-error"]
             error_tus = sorted({str(r["log"]) for r in results if r["rc"] != 0})
             kept, filtered, converted = vs2008_filter(diags, cache)
+            kept, styled_out = tidy_style.restyle(kept, cache, ayf.Replacement)
+            filtered += styled_out
             accepted, conflicting = ayf.select_non_conflicting(kept)
             per_check = Counter(d.check for d in diags)
             accepted_ids = {id(d) for d in accepted}
             p = {"pass": pass_no, "seconds": round(secs, 1), "diagnostics": len(diags),
                  "duplicates_dropped": dups, "compile_errors": len(errors),
-                 "fixable": sum(1 for d in kept if d.replacements), "filtered_vs2008": len(filtered),
-                 "nullptr_converted": converted, "overlapping_skipped": len(conflicting),
+                 "fixable": sum(1 for d in kept if d.replacements), "filtered_vs2008": len(filtered) - len(styled_out),
+                 "nullptr_converted": converted, "style_dropped": len(styled_out),
+                 "overlapping_skipped": len(conflicting),
                  "accepted": len(accepted), "per_check": dict(per_check.most_common())}
             for d in diags:
                 if d.path:
@@ -587,8 +609,10 @@ def main():
                     ln, _ = cache.line_col(d.path, d.offset)
                     diag_lines.append("pass%d %s:%d: %s: FILTERED (%s)" % (pass_no, d.path, ln, d.check, why))
             log("  %.0f s; diagnostics %d (%d duplicate header reports dropped); fixes: %d accepted, "
-                "%d filtered for VS2008, %d overlapping (next pass); nullptr->NULL %d"
-                % (secs, len(diags), dups, len(accepted), len(filtered), len(conflicting), converted))
+                "%d filtered for VS2008, %d dropped by the brace style, %d overlapping (next pass); "
+                "nullptr->NULL %d"
+                % (secs, len(diags), dups, len(accepted), len(filtered) - len(styled_out), len(styled_out),
+                   len(conflicting), converted))
             for check, n in per_check.most_common():
                 log("    %5d %s" % (n, check))
             if errors or error_tus:

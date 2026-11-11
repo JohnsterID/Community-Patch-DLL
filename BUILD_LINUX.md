@@ -285,9 +285,15 @@ python3 run_clang_tidy.py --checks performance-faster-string-find --report-only 
 ```
 
 **Features:**
-- 14 proven checks by default; blacklisted checks are refused (globs run with them switched off)
+- 16 proven checks by default; blacklisted checks are refused (globs run with them switched off).
+  `readability-inconsistent-ifelse-braces` and `readability-redundant-nested-if` need clang-tidy 23;
+  an older clang-tidy skips them (logged as a NOTE)
 - One clang-tidy per TU, at most `-j` at a time (default min(6, CPUs/2))
 - VS2008/C++03 filtering (va_list, NAN, aggregate `= 0`, C++11 keywords) and nullptr -> NULL
+- Brace style (`tidy_style.py`): the fix-its of those two checks are rewritten to Allman braces with
+  tab indentation (merged `if`s: emptied lines removed, body moved left). A fix that can't be
+  rewritten safely (a comment between the `if`s or on a removed line, a multi-line inner condition,
+  K&R braces, a body on the `if` line) is left out and listed as `FILTERED (style: ...)`
 - Byte-exact edits: CRLF and UTF-8 kept; nothing is converted to LF
 - Header fixes reported by several TUs applied once; overlapping fixes skipped whole and
   picked up by the next pass (`--passes`, default 2)

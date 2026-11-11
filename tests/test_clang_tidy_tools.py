@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Unit tests for apply_yaml_fixes.py and run_clang_tidy.py's VS2008 filter.
+"""Unit tests for apply_yaml_fixes.py, run_clang_tidy.py's VS2008 filter and tidy_style.py.
 
 No clang-tidy needed. Run from the repository root on Linux or Windows:
     python3 tests/test_clang_tidy_tools.py      (Windows: py tests\test_clang_tidy_tools.py)
@@ -184,6 +184,104 @@ class MsvcLogTests(unittest.TestCase):
     def test_msvc_unavailable_off_windows(self):
         if not rct.IS_WINDOWS:
             self.assertFalse(rct.msvc_available()[0])
+
+
+import tidy_style as ts  # noqa: E402
+
+
+def _apply(data, reps):
+    for o, n, t in sorted(reps, reverse=True):
+        t = t if isinstance(t, bytes) else t.encode()
+        data = data[:o] + t + data[o + n:]
+    return data
+
+
+class BraceStyleTests(unittest.TestCase):
+    def test_unbraced_if_before_braced_else(self):
+        src = b"\tif (a)\r\n\t\tx = 1;\r\n\telse\r\n\t{\r\n\t\ty();\r\n\t}\r\n"
+        reps = [(src.index(b"(a)") + 3, 0, " {"), (src.index(b"else"), 0, "} ")]
+        self.assertEqual(_apply(src, ts.restyle_braces(src, reps)),
+                         b"\tif (a)\r\n\t{\r\n\t\tx = 1;\r\n\t}\r\n\telse\r\n\t{\r\n\t\ty();\r\n\t}\r\n")
+
+    def test_closing_brace_after_trailing_comment(self):
+        src = b"\telse if (b)\r\n\t\ty(); // why\r\n\tz();\r\n"
+        reps = [(src.index(b"(b)") + 3, 0, " {"), (src.index(b"y();") + 4, 0, "\n}")]
+        self.assertEqual(_apply(src, ts.restyle_braces(src, reps)),
+                         b"\telse if (b)\r\n\t{\r\n\t\ty(); // why\r\n\t}\r\n\tz();\r\n")
+
+    def test_multiline_condition_uses_if_indent(self):
+        src = b"\tif (a &&\r\n\t    b)\r\n\t\tx();\r\n\telse\r\n\t{\r\n\t}\r\n"
+        reps = [(src.index(b"b)") + 2, 0, " {"), (src.index(b"else"), 0, "} ")]
+        out = _apply(src, ts.restyle_braces(src, reps))
+        self.assertIn(b"\t    b)\r\n\t{\r\n\t\tx();\r\n\t}\r\n\telse", out)
+
+    def test_body_on_if_line_dropped(self):
+        src = b"\tif (a) x(); else\r\n\t{\r\n\t}\r\n"
+        reps = [(src.index(b"(a)") + 3, 0, " {"), (src.index(b"else"), 0, "} ")]
+        with self.assertRaises(ts.StyleError):
+            ts.restyle_braces(src, reps)
+
+    def test_string_with_parens_in_condition(self):
+        src = b'\tif (s == ")" || t == "(")\r\n\t\tx();\r\n\telse\r\n\t{\r\n\t}\r\n'
+        reps = [(src.index(b'"(")') + 4, 0, " {"), (src.index(b"else"), 0, "} ")]
+        self.assertEqual(_apply(src, ts.restyle_braces(src, reps)),
+                         b'\tif (s == ")" || t == "(")\r\n\t{\r\n\t\tx();\r\n\t}\r\n\telse\r\n\t{\r\n\t}\r\n')
+
+    def test_unmatched_condition_dropped(self):
+        src = b'\tx = (a)\r\n\t\ty();\r\n\telse\r\n\t{\r\n\t}\r\n'
+        reps = [(src.index(b"(a)") + 3, 0, " {"), (src.index(b"else"), 0, "} ")]
+        with self.assertRaises(ts.StyleError):
+            ts.restyle_braces(src, reps)
+
+
+class NestedIfStyleTests(unittest.TestCase):
+    def _reps(self, src):
+        return [(src.index(b"a)"), 1, "(a) && (b)"), (src.index(b"\t{") + 1, 1, ""),
+                (src.index(b"if (b)"), 6, ""), (src.rindex(b"}"), 1, "")]
+
+    def test_braced_body_dedented(self):
+        src = b"\tif (a)\r\n\t{\r\n\t\tif (b)\r\n\t\t{\r\n\t\t\tx();\r\n\t\t}\r\n\t}\r\n"
+        reps = [(src.index(b"a)"), 1, "(a) && (b)"), (src.index(b"\t{") + 1, 1, ""),
+                (src.index(b"if (b)"), 6, ""), (src.rindex(b"\t}") + 1, 1, "")]
+        self.assertEqual(_apply(src, ts.restyle_nested_if(src, reps)),
+                         b"\tif ((a) && (b))\r\n\t{\r\n\t\tx();\r\n\t}\r\n")
+
+    def test_single_statement_body(self):
+        src = b"\tif (a)\r\n\t{\r\n\t\tif (b)\r\n\t\t\tx();\r\n\t}\r\n"
+        self.assertEqual(_apply(src, ts.restyle_nested_if(src, self._reps(src))),
+                         b"\tif ((a) && (b))\r\n\t\tx();\r\n")
+
+    def test_comment_between_ifs_dropped(self):
+        src = b"\tif (a)\r\n\t{\r\n\t\t// note\r\n\t\tif (b)\r\n\t\t\tx();\r\n\t}\r\n"
+        with self.assertRaises(ts.StyleError):
+            ts.restyle_nested_if(src, self._reps(src))
+
+    def test_comment_on_inner_if_line_dropped(self):
+        src = b"\tif (a)\r\n\t{\r\n\t\tif (b) // why\r\n\t\t\tx();\r\n\t}\r\n"
+        with self.assertRaises(ts.StyleError):
+            ts.restyle_nested_if(src, self._reps(src))
+
+    def test_three_levels_middle_if_and_brace_in_one_deletion(self):
+        src = (b"\tif (a)\r\n\t{\r\n\t\tif (b)\r\n\t\t{\r\n\t\t\tif (c)\r\n\t\t\t{\r\n\t\t\t\tx();\r\n"
+               b"\t\t\t}\r\n\t\t}\r\n\t}\r\n")
+        mid = src.index(b"if (b)")
+        reps = [(src.index(b"a)"), 1, "(a) && (b) && (c)"), (src.index(b"\t{") + 1, 1, ""),
+                (mid, src.index(b"{", mid) + 1 - mid, ""), (src.index(b"if (c)"), 6, ""),
+                (src.rindex(b"\t\t}") + 2, 1, ""), (src.rindex(b"\t}") + 1, 1, "")]
+        self.assertEqual(_apply(src, ts.restyle_nested_if(src, reps)),
+                         b"\tif ((a) && (b) && (c))\r\n\t{\r\n\t\tx();\r\n\t}\r\n")
+
+    def test_multiline_inner_condition_dropped(self):
+        src = b"\tif (a)\r\n\t{\r\n\t\tif (b &&\r\n\t\t\tc)\r\n\t\t\tx();\r\n\t}\r\n"
+        reps = [(src.index(b"a)"), 1, "(a) && (b && c)"), (src.index(b"\t{") + 1, 1, ""),
+                (src.index(b"if (b"), src.index(b"c)") + 2 - src.index(b"if (b"), ""), (src.rindex(b"}"), 1, "")]
+        with self.assertRaises(ts.StyleError):
+            ts.restyle_nested_if(src, reps)
+
+    def test_spaces_indent_dropped(self):
+        src = b"\tif (a)\r\n\t{\r\n\t\tif (b)\r\n            x();\r\n\t}\r\n"
+        with self.assertRaises(ts.StyleError):
+            ts.restyle_nested_if(src, self._reps(src))
 
 
 if __name__ == "__main__":
