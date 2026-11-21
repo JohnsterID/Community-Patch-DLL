@@ -286,7 +286,8 @@ def tidy_one(tu, args, tidy, checks, out_dir, pass_no):
     log_path.parent.mkdir(parents=True, exist_ok=True)
     if fix_path.exists():
         fix_path.unlink()
-    config = "{Checks: '-*,%s', WarningsAsErrors: ''}" % ",".join(checks)
+    opts = "".join(", {key: %s, value: '%s'}" % tuple(o.split("=", 1)) for o in args.check_option)
+    config = "{Checks: '-*,%s', WarningsAsErrors: '', CheckOptions: [%s]}" % (",".join(checks), opts[2:])
     cmd = [tidy, "--config=" + config, "--header-filter=" + args.header_filter,
            "--format-style=none", "--quiet", "-p", str(Path(args.p).resolve()),
            "--export-fixes=" + str(fix_path), str(f)]
@@ -492,10 +493,16 @@ def parse_args():
     ap.add_argument("--checks", help="comma-separated checks to run instead of the proven list")
     ap.add_argument("--add-checks", help="comma-separated checks to run in addition to --checks/proven")
     ap.add_argument("--list-checks", action="store_true", help="print the check lists and exit")
-    ap.add_argument("--report-only", action="store_true", help="analyse and report; change no file")
+    ap.add_argument("--report-only", action="store_true",
+                    help="analyse and report; change no file (also allows the blacklisted checks)")
+    ap.add_argument("--check-option", action="append", default=[], metavar="KEY=VALUE",
+                    help="clang-tidy CheckOptions entry, e.g. "
+                         "clang-analyzer-optin.cplusplus.UninitializedObject:Pedantic=true (repeatable)")
     ap.add_argument("--passes", type=int, default=2,
                     help="analyse/apply rounds; later rounds pick up fixes skipped as overlapping (default 2)")
     ap.add_argument("--no-verify", action="store_true", help="skip the clang -fsyntax-only re-check")
+    ap.add_argument("--no-style", action="store_true",
+                    help="apply clang-tidy's own fix-its for the brace checks (no tidy_style.py rewrite)")
     ap.add_argument("--verify-selected-only", action="store_true",
                     help="after a header fix, re-check only the selected TUs instead of every TU in the database")
     ap.add_argument("--no-msvc", action="store_true",
@@ -516,7 +523,12 @@ def parse_args():
     ap.add_argument("--regenerate-db", action="store_true", help="regenerate compile_commands.json first")
     ap.add_argument("--no-generate-db", action="store_true", help="fail instead of generating a missing database")
     ap.add_argument("--out-dir", default=str(SCRIPT_DIR / ".clang-tidy-outputs"), help="report folder")
-    return ap.parse_args()
+    args = ap.parse_args()
+    for opt in args.check_option:
+        key, sep, value = opt.partition("=")
+        if not sep or not key or "'" in opt:
+            ap.error("--check-option needs KEY=VALUE without quotes: %r" % opt)
+    return args
 
 
 def unknown_checks(tidy, checks):
@@ -536,6 +548,10 @@ def resolve_checks(args):
     if args.add_checks:
         checks += [c.strip() for c in args.add_checks.split(",") if c.strip()]
     bad = [c for c in checks if c in BLACKLISTED_CHECKS]
+    if bad and args.report_only:
+        # Blacklisted only for their fix-its (C++11, wrong code, ...): their diagnostics are still useful.
+        log("NOTE: blacklisted check(s) run report-only: %s" % ", ".join(bad))
+        bad = []
     if bad:
         log("ERROR: blacklisted check(s) requested (see the notes, section 3): %s" % ", ".join(bad))
         sys.exit(1)
@@ -585,7 +601,7 @@ def main():
             errors = [d for d in diags if d.check == "clang-diagnostic-error"]
             error_tus = sorted({str(r["log"]) for r in results if r["rc"] != 0})
             kept, filtered, converted = vs2008_filter(diags, cache)
-            kept, styled_out = tidy_style.restyle(kept, cache, ayf.Replacement)
+            kept, styled_out = (kept, []) if args.no_style else tidy_style.restyle(kept, cache, ayf.Replacement)
             filtered += styled_out
             accepted, conflicting = ayf.select_non_conflicting(kept)
             per_check = Counter(d.check for d in diags)

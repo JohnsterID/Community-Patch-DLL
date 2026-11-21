@@ -282,6 +282,10 @@ python3 run_clang_tidy.py --report-only --files CvDealAI.cpp     # analyse only
 python3 run_clang_tidy.py --files "CvDeal*.cpp"                  # fix a few TUs
 python3 run_clang_tidy.py                                        # fix all TUs
 python3 run_clang_tidy.py --checks performance-faster-string-find --report-only   # evaluate a planned check
+python3 run_clang_tidy.py --checks cppcoreguidelines-pro-type-member-init --report-only   # blacklisted: report only
+python3 run_clang_tidy.py --checks clang-analyzer-optin.cplusplus.UninitializedObject --report-only \
+    --check-option clang-analyzer-optin.cplusplus.UninitializedObject:Pedantic=true   # CheckOptions entry
+python3 run_clang_tidy.py --checks readability-inconsistent-ifelse-braces --no-style   # raw fix-its, no restyle
 ```
 
 **Features:**

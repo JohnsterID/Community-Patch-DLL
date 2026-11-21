@@ -9,6 +9,7 @@ import shutil
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -150,12 +151,27 @@ class CheckSelectionTests(unittest.TestCase):
     class A(object):
         checks = None
         add_checks = None
+        report_only = False
 
     def test_blacklisted_exact_refused(self):
         a = self.A()
         a.checks = "modernize-use-auto"
         with self.assertRaises(SystemExit):
             rct.resolve_checks(a)
+
+    def test_blacklisted_allowed_report_only(self):
+        a = self.A()
+        a.checks = "modernize-use-auto"
+        a.report_only = True
+        self.assertEqual(rct.resolve_checks(a), ["modernize-use-auto"])
+
+    def test_check_option_needs_key_value(self):
+        for bad in ("noequals", "=v", "k='v'"):
+            with self.assertRaises(SystemExit):
+                with mock.patch.object(sys, "argv", ["run_clang_tidy.py", "--check-option", bad]):
+                    rct.parse_args()
+        with mock.patch.object(sys, "argv", ["run_clang_tidy.py", "--check-option", "a.b:c=true"]):
+            self.assertEqual(rct.parse_args().check_option, ["a.b:c=true"])
 
     def test_glob_excludes_blacklisted(self):
         a = self.A()
